@@ -106,18 +106,19 @@ const SUIT_ES: Record<Suit, string> = {
 
 // === Nombres de archivos EXACTOS (R2) ===
 const FILES_WANDS = [
-  'AsdeBastos.png', 'Dosdebastos.png', 'Tresdebastos.png', 'Cuatrodebastos.png',
-  'Cincodebastos.png', 'Seisdebastos.png', 'Sietedebastos.png', 'Ochodebastos.png',
-  'Nuevedebastos.png', /* 'Diezdebastos.png', */ 'Pagedebastos.png',
-  'Caballerode bsatos.png', 'Reinadebastos.png', 'Reydebastos.png',
+  'AsdeBastos.webp', 'Dosdebastos.webp', 'Tresdebastos.webp', 'Cuatrodebastos.webp',
+  'Cincodebastos.webp', 'Seisdebastos.webp', 'Sietedebastos.webp', 'Ochodebastos.webp',
+  'Nuevedebastos.webp', 'Diezdebastos.webp', 'Pagedebastos.webp',
+  'Caballerode bsatos.webp', 'Reinadebastos.webp', 'Reydebastos.webp',
 ] as const;
 
 const FILES_SWORDS = [
-  'asdeespadas.png', 'dosdeespadas.png', 'tresdeespadas.png', 'cuatrodeespadas.png',
-  'cincodeespadas.png', 'seisdeespadas.png', 'sietedeespadas.png', 'ochodeespadas.png',
-  'nuevedeespadas.png', 'diezdeespadas.png', 'Pagedeespadas.png',
-  'Caballerodeespadas.png', 'Reinadeespadas.png', 'Reydeespadas.png',
+  'asdeespadas.webp', 'dosdeespadas.webp', 'tresdeespadas.webp', 'cuatrodeespadas.webp',
+  'cincodeespadas.webp', 'seisdeespadas.webp', 'sietedeespadas.webp', 'ochodeespadas.webp',
+  'nuevedeespadas.webp', 'diezdeespadas.webp', 'Pagedeespadas.webp',
+  'Caballerodeespadas.webp', 'Reinadeespadas.webp', 'Reydeespadas.webp',
 ] as const;
+
 
 // === Parse helpers ===
 function stripAccentsLower(s: string) {

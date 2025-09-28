@@ -1,35 +1,57 @@
 <div class="layout">
   <!-- Rail izquierdo -->
-  <aside class="rail">
-    <div class="rail-dot"></div>
-    <div class="rail-title">{{ spreadLabel }}</div>
-
-    <div class="rail-status" aria-live="polite">
-      @if (loadingDeck) {
-        <span class="dot"></span> Cargando mazo…
-      } @else if (!loadingDeck && deckError) {
-        <span class="error">{{ deckError }}</span>
-        <button type="button" (click)="loadDeckFirst()">Reintentar</button>
-      } @else if (!loadingDeck && deckReady) {
-        <span class="ok">Mazo cargado ({{ deckCount }})</span>
-      }
+  <aside class="rail rail--beige">
+    <div class="rail-title-chip">
+      {{ spreadLabel }} <span class="caret">▾</span>
     </div>
 
-    <div class="rail-controls">
-      <select [(ngModel)]="spreadId"
-              (ngModelChange)="onSpreadChange()"
-              [disabled]="!canDeal">
-        <option value="celtic-cross-10">Cruz Celta (10)</option>
-        <option value="ppf-3">Pasado · Presente · Futuro</option>
-        <option value="free">Libre (9+)</option>
-      </select>
+    <!-- Estado de mazo: puntito + barra de fill -->
+    <div class="rail-status-min" aria-live="polite">
+      <div class="shuffle-dot" [class.spin]="deckShuffling || loadingDeck"></div>
+      <div class="status-text">
+        @if (loadingDeck) { Cargando mazo… }
+        @else if (deckError) {
+          <span class="error">{{ deckError }}</span>
+          <button type="button" (click)="loadDeckFirst()">Reintentar</button>
+        }
+        @else { Mazo cargado ({{ deckCount }}) }
+      </div>
 
-      <button type="button"
-              (click)="hacerTirada()"
-              [disabled]="!canDeal"
-              [attr.aria-busy]="dealing ? 'true' : 'false'">
-        {{ dealing ? 'Repartiendo…' : (isFree ? 'Añadir 10' : 'Hacer tirada') }}
-      </button>
+      <div class="fillbar">
+        <div class="fill" [style.height.%]="deckProgress"></div>
+      </div>
+    </div>
+
+    <!-- Placeholders -->
+    <div class="rail-ghosts">
+      <!-- 1) Barajar -->
+      <button class="ghost-btn spin" (click)="toggleShuffle()" [disabled]="!deckReady" title="Barajar"></button>
+      <!-- 2) Historial -->
+      <button class="ghost-btn" (click)="openHistory()" [disabled]="!deckReady" title="Historial"></button>
+      <!-- 3) Placeholder -->
+      <button class="ghost-btn" disabled></button>
+    </div>
+
+    <!-- Controles de Cruz (completa / paso a paso) -->
+    <div class="rail-controls">
+      @if (spreadId === 'celtic-cross-10') {
+        <div class="seg">
+          <button type="button" [class.active]="!stepMode" (click)="stepMode=false">Completa</button>
+          <button type="button" [class.active]="stepMode"  (click)="prepararCruzPasoAPaso()">Una por una</button>
+        </div>
+
+        <button type="button"
+                (click)="repartirCruzCompleta()"
+                [disabled]="!deckReady || dealing || stepMode">
+          Repartir Cruz
+        </button>
+
+        <button type="button"
+                (click)="colocarSiguientePosicion()"
+                [disabled]="!deckReady || dealing || !stepMode">
+          Siguiente posición
+        </button>
+      }
 
       @if (isFree) {
         <div class="free-controls">
@@ -53,12 +75,26 @@
   <!-- Tablero -->
   <main class="board"
         [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : 'none'">
-    <!-- overlay de capa nueva -->
+
+    <!-- Selector de tipo de tirada (arriba-izquierda, sobre el mantel) -->
+    <div class="spread-select">
+      <label class="label">Tipo de tirada</label>
+      <div class="select-wrap">
+        <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()">
+          <option value="celtic-cross-10">Cruz Celta (10)</option>
+          <option value="ppf-3">Pasado · Presente · Futuro</option>
+          <option value="free">Libre (9+)</option>
+        </select>
+        <span class="caret">▾</span>
+      </div>
+    </div>
+
+    <!-- overlay de capa nueva (solo Libre cuando se crea otra capa) -->
     @if (layerOverlay) {
       <div class="layer-overlay"></div>
     }
 
-    <!-- Tabs de capas (solo en Libre si hay >1) -->
+    <!-- Tabs de capas (solo Libre con >1) -->
     @if (isFree && layers.length > 1) {
       <div class="layer-tabs">
         @for (l of layers; track l.id; let i = $index) {
@@ -72,7 +108,7 @@
       </div>
     }
 
-    <!-- Slots guía (solo en no libre) -->
+    <!-- Slots guía (no Libre) -->
     @if (!isFree) {
       @for (s of slots; track s.position) {
         <div class="slot"
@@ -105,13 +141,53 @@
         <span class="pos-badge">#{{ pc.position }}</span>
       </div>
     }
+
+    <!-- MAZO (al final para que quede encima de todo) -->
+    <div class="deck-pile" [class.shuffle]="deckShuffling" (click)="onDeckClick()">
+      <img *ngFor="let i of [0,1,2,3,4]" [src]="backUrl" alt="mazo" />
+      <div class="deck-label">MAZO</div>
+    </div>
+
+    <!-- Historial (modal) -->
+    @if (showHistory) {
+      <div class="history-modal">
+        <div class="history-card">
+          <header>
+            <h4>Historial</h4>
+            <button type="button" class="close" (click)="closeHistory()">×</button>
+          </header>
+
+          @if (!historyList.length) {
+            <p class="muted">Aún no hay tiradas guardadas.</p>
+          } @else {
+            <ul class="history-list">
+              @for (h of historyList; track h.id) {
+                <li>
+                  <div class="meta">
+                    <strong>{{ h.spreadLabel }}</strong>
+                    <small *ngIf="h.ts">· {{ formatTs(h.ts!) }}</small>
+                  </div>
+                  <div class="actions">
+                    <button type="button" (click)="loadHistory(h)">Cargar</button>
+                    <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+
+          <footer>
+            <button type="button" (click)="closeHistory()">Cerrar</button>
+          </footer>
+        </div>
+      </div>
+    }
   </main>
 
   <!-- Panel derecho -->
   <aside class="panel">
-    <h3>
-      + <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
-    </h3>
+    <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
+
     <div class="panel-body">
       @if (!activeCards.length) {
         <p class="muted">Aún no hay cartas. {{ isFree ? 'Añade algunas.' : 'Haz una tirada.' }}</p>
@@ -126,9 +202,11 @@
         </ul>
       }
     </div>
+
     <div class="panel-footer">
       <button type="button" (click)="prevCard()" [disabled]="!activeCards.length">Anterior</button>
       <button type="button" (click)="nextCard()" [disabled]="!activeCards.length">Siguiente</button>
+      <button type="button" (click)="saveToHistory()" [disabled]="!activeCards.length">Guardar</button>
     </div>
   </aside>
 </div>
