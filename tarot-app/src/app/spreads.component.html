@@ -1,0 +1,134 @@
+<div class="layout">
+  <!-- Rail izquierdo -->
+  <aside class="rail">
+    <div class="rail-dot"></div>
+    <div class="rail-title">{{ spreadLabel }}</div>
+
+    <div class="rail-status" aria-live="polite">
+      @if (loadingDeck) {
+        <span class="dot"></span> Cargando mazo…
+      } @else if (!loadingDeck && deckError) {
+        <span class="error">{{ deckError }}</span>
+        <button type="button" (click)="loadDeckFirst()">Reintentar</button>
+      } @else if (!loadingDeck && deckReady) {
+        <span class="ok">Mazo cargado ({{ deckCount }})</span>
+      }
+    </div>
+
+    <div class="rail-controls">
+      <select [(ngModel)]="spreadId"
+              (ngModelChange)="onSpreadChange()"
+              [disabled]="!canDeal">
+        <option value="celtic-cross-10">Cruz Celta (10)</option>
+        <option value="ppf-3">Pasado · Presente · Futuro</option>
+        <option value="free">Libre (9+)</option>
+      </select>
+
+      <button type="button"
+              (click)="hacerTirada()"
+              [disabled]="!canDeal"
+              [attr.aria-busy]="dealing ? 'true' : 'false'">
+        {{ dealing ? 'Repartiendo…' : (isFree ? 'Añadir 10' : 'Hacer tirada') }}
+      </button>
+
+      @if (isFree) {
+        <div class="free-controls">
+          <div class="seg">
+            <button type="button" (click)="agregarCartaLibre(1)">+1</button>
+            <button type="button" (click)="agregarCartaLibre(3)">+3</button>
+            <button type="button" (click)="agregarCartaLibre(10)">+10</button>
+          </div>
+          <label>Layout:
+            <select [(ngModel)]="freeLayout">
+              <option value="pile">Pila</option>
+              <option value="grid">Grilla</option>
+              <option value="fan">Abanico</option>
+            </select>
+          </label>
+        </div>
+      }
+    </div>
+  </aside>
+
+  <!-- Tablero -->
+  <main class="board"
+        [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : 'none'">
+    <!-- overlay de capa nueva -->
+    @if (layerOverlay) {
+      <div class="layer-overlay"></div>
+    }
+
+    <!-- Tabs de capas (solo en Libre si hay >1) -->
+    @if (isFree && layers.length > 1) {
+      <div class="layer-tabs">
+        @for (l of layers; track l.id; let i = $index) {
+          <button type="button"
+                  class="layer-chip"
+                  [class.active]="i === activeLayer"
+                  (click)="switchLayer(i)">
+            Capa {{ l.id }}
+          </button>
+        }
+      </div>
+    }
+
+    <!-- Slots guía (solo en no libre) -->
+    @if (!isFree) {
+      @for (s of slots; track s.position) {
+        <div class="slot"
+             [style.--x]="s.x + '%'"
+             [style.--y]="s.y + '%'"
+             [style.--r]="s.r + 'deg'"
+             [style.zIndex]="s.z"
+             [attr.data-pos]="s.position">
+        </div>
+      }
+    }
+
+    <!-- Cartas -->
+    @for (pc of activeCards; track pc.position) {
+      <div class="card"
+           cdkDrag
+           cdkDragBoundary=".board"
+           (cdkDragEnded)="onDragEnd(pc, $event)"
+           [style.--x]="pc.x + '%'"
+           [style.--y]="pc.y + '%'"
+           [style.--r]="pc.r + 'deg'"
+           [style.zIndex]="pc.z"
+           [style.--delay-ms]="pc.delay + 'ms'"
+           [class.dealt]="pc.dealt"
+           [class.faceup]="pc.faceup"
+           [class.reversed]="pc.reversed"
+           (click)="onCardClick(pc, $event)">
+        <img class="front" [src]="getFrontUrl(pc.cardId)" alt="carta" />
+        <img class="back"  [src]="backUrl" alt="reverso" />
+        <span class="pos-badge">#{{ pc.position }}</span>
+      </div>
+    }
+  </main>
+
+  <!-- Panel derecho -->
+  <aside class="panel">
+    <h3>
+      + <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
+    </h3>
+    <div class="panel-body">
+      @if (!activeCards.length) {
+        <p class="muted">Aún no hay cartas. {{ isFree ? 'Añade algunas.' : 'Haz una tirada.' }}</p>
+      } @else {
+        <ul>
+          @for (pc of activeCards; track pc.position) {
+            <li>
+              <strong>#{{ pc.position }}</strong> — {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
+              @if (pc.reversed) { <span class="rev"> (invertida)</span> }
+            </li>
+          }
+        </ul>
+      }
+    </div>
+    <div class="panel-footer">
+      <button type="button" (click)="prevCard()" [disabled]="!activeCards.length">Anterior</button>
+      <button type="button" (click)="nextCard()" [disabled]="!activeCards.length">Siguiente</button>
+    </div>
+  </aside>
+</div>

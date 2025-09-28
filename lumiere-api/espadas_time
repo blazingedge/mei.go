@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ======= CONFIGURA ESTO =======
+BUCKET="lumiereapi"                                   # tu bucket R2
+PREFIX="assets/v1/cards"                              # prefijo destino
+FOLDER="/c/Users/Luis/OneDrive/Documents/CarpetaCartas/espadas"  # carpeta local (formato Git Bash)
+CACHE_HDR="public, max-age=31536000, immutable"
+MODE="canonical"    # canonical = sube como swords-01..14 ; keep = mantiene nombres
+DRY_RUN=true        # ponlo en false para subir de verdad
+# ==============================
+
+mime_of() {
+  local f="$1"; local ext="${f##*.}"; ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+  case "$ext" in
+    png) echo "image/png" ;;
+    webp) echo "image/webp" ;;
+    jpg|jpeg) echo "image/jpeg" ;;
+    gif) echo "image/gif" ;;
+    svg) echo "image/svg+xml" ;;
+    *) echo "application/octet-stream" ;;
+  esac
+}
+
+# Obtén y ordena archivos de imagen
+mapfile -t FILES < <(find "$FOLDER" -maxdepth 1 -type f \
+  \( -iname '*.png' -o -iname '*.webp' -o -iname '*.jpg' -o -iname '*.jpeg' \) | sort -V)
+
+if [ ${#FILES[@]} -eq 0 ]; then
+  echo "No se encontraron imágenes en: $FOLDER"
+  exit 1
+fi
+
+echo "Modo: $MODE   |  Bucket: $BUCKET  |  Prefijo: $PREFIX"
+echo "Archivos encontrados: ${#FILES[@]}"
+
+idx=0
+for f in "${FILES[@]}"; do
+  fname="$(basename "$f")"
+  ct="$(mime_of "$fname")"
+  ext="${fname##*.}"; ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+
+  if [ "$MODE" = "canonical" ]; then
+    idx=$((idx+1))
+    if [ $idx -gt 14 ]; then
+      echo "⚠️  Ya mapeaste 14 cartas. Omite extra: $fname"
+      continue
+    fi
+    nn=$(printf "%02d" "$idx")
+    key="$PREFIX/swords-$nn.$ext"   # -> assets/v1/cards/swords-01.png|webp|jpg
+  else
+    # Mantener nombres originales
+    key="$PREFIX/$fname"
+  fi
+
+  echo "→ Subiendo: $fname  →  $BUCKET/$key  (ct=$ct)"
+  if [ "$DRY_RUN" = false ]; then
+    wrangler r2 object put "$BUCKET/$key" \
+      --file "$f" \
+      --content-type "$ct" \
+      --cache-control "$CACHE_HDR" \
+      --remote
+  fi
+done
+
+echo "✅ Fin. DRY_RUN=$DRY_RUN"
+if [ "$DRY_RUN" = true ]; then
+  echo "Pasa DRY_RUN=false para subir realmente."
+fi
+
+echo "Tip: prueba una URL luego de subir (ej.):"
+echo "https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/swords-01.png"

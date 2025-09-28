@@ -1,0 +1,28 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+
+# Node / build
+node_modules/
+dist/
+build/
+.tmp/
+coverage/
+
+# Angular
+.angular/
+
+# Cloudflare Wrangler
+.wrangler/
+.wrangler/state/
+wrangler.toml.local
+
+# Env / secrets
+.env
+.env.*
+*.local
+
+# Editors
+.vscode/
+.idea/

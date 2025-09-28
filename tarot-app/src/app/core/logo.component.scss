@@ -1,0 +1,30 @@
+.logo {
+  display: flexbox;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 2rem;
+  border-radius: 1rem;
+
+  /* halo dorado tenue */
+  background: radial-gradient(circle at center, rgba(255, 215, 0, 0.05), transparent 70%);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.15);
+
+  img {
+    max-width: 550px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    /* brillo más sutil */
+    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.2));
+  }
+
+  p {
+    margin-top: 1rem;
+    font-family: 'Cinzel', serif;
+    font-size: 1.2rem;
+    color: #d4af37; /* dorado tenue */
+    text-shadow: 0 0 4px rgba(255, 215, 0, 0.2);
+  }
+}

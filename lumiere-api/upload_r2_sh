@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# === Configura esto ===
+BUCKET="lumiereapi"
+PREFIX="assets/v1/cards"   # destino dentro del bucket
+FOLDER="/c/Users/Luis/OneDrive/Documents/CarpetaCartas/espadas"  # carpeta local
+CACHE_HDR="public, max-age=31536000, immutable"
+DRY_RUN=false   # ponlo en true para probar sin subir
+
+# === Función para detectar Content-Type según extensión ===
+mime_of() {
+  local f="$1"
+  local ext="${f##*.}"
+  ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+  case "$ext" in
+    png)  echo "image/png"  ;;
+    webp) echo "image/webp" ;;
+    jpg|jpeg) echo "image/jpeg" ;;
+    gif)  echo "image/gif"  ;;
+    svg)  echo "image/svg+xml" ;;
+    *)    echo "application/octet-stream" ;;
+  esac
+}
+
+# === Subir todos los archivos compatibles del folder (no recursivo) ===
+find "$FOLDER" -maxdepth 1 -type f \
+  \( -iname '*.png' -o -iname '*.webp' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.gif' -o -iname '*.svg' \) -print0 |
+while IFS= read -r -d '' f; do
+  name="$(basename "$f")"        # mantiene el nombre original (si tiene espacios, se sube igual)
+  ct="$(mime_of "$name")"
+  key="$PREFIX/$name"            # destino en R2
+
+  echo "→ Subiendo: $name  →  $BUCKET/$key  (ct=$ct)"
+  if [ "$DRY_RUN" = false ]; then
+    wrangler r2 object put "$BUCKET/$key" \
+      --file "$f" \
+      --content-type "$ct" \
+      --cache-control "$CACHE_HDR" \
+      --remote
+  fi
+done
+
+echo "✅ Listo."
