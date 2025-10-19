@@ -159,33 +159,46 @@ export class SpreadsComponent implements OnInit {
   }
 
   // ---------- Tiradas ----------
-  async hacerTirada(){
-    if(!this.canDeal) return;
+async hacerTirada() {
+  if (!this.canDeal) return;
 
-    if(this.isFree){ this.agregarCartaLibre(10); return; }
+  if (this.isFree) { this.agregarCartaLibre(10); return; }
 
-    this.dealing = true;
-    const res: DrawResult = await firstValueFrom(this.api.draw(this.spreadId));
-    const withPos: Placed[] = res.cards.map((c,i)=>{
-      const p = this.slots[i] || {x:50,y:50,r:0,z:10+i,position:i+1};
-      return { position:p.position, cardId:c.cardId, reversed:c.reversed, x:p.x,y:p.y,r:p.r,z:p.z, delay:i*80, dealt:false, faceup:false, layer:0 };
-    });
+  this.dealing = true;
+  const res: DrawResult = await firstValueFrom(this.api.draw(this.spreadId));
+  const withPos: Placed[] = res.cards.map((c, i) => {
+    const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
+    return { position: p.position, cardId: c.cardId, reversed: c.reversed, x: p.x, y: p.y, r: p.r, z: p.z, delay: i * 80, dealt: false, faceup: false, layer: 0 };
+  });
 
-    try{
-      const fronts = withPos.map(pc=>this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
-      this.loader.preloadAll([this.backUrl, ...fronts], 60000, {ignoreErrors:true}).catch(()=>{});
-    }catch{}
+  const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
 
-    this.placed = withPos;
-
-    setTimeout(()=>{
-      this.placed.forEach((pc,i)=>{
-        setTimeout(()=>{ pc.dealt=true; setTimeout(()=>pc.faceup=true, 350); }, i*120);
-      });
-      const totalMs = this.placed.length*120 + 450;
-      setTimeout(()=>{ this.dealing=false; this.saveToHistory(); }, totalMs);
-    });
+  try {
+    // Esperar a que TODAS las imágenes estén listas antes de mostrarlas
+    const { ok, fail } = await this.loader.preloadAll([this.backUrl, ...fronts], 45000, { ignoreErrors: true });
+    console.debug('[IMG] preloaded ok:', ok.length, 'fail:', fail.length);
+  } catch (err) {
+    console.warn('[IMG] error al precargar:', err);
   }
+
+  // ← ahora sí renderiza y anima
+  this.placed = withPos;
+
+  setTimeout(() => {
+    this.placed.forEach((pc, i) => {
+      setTimeout(() => {
+        pc.dealt = true;
+        setTimeout(() => pc.faceup = true, 350);
+      }, i * 120);
+    });
+    const totalMs = this.placed.length * 120 + 450;
+    setTimeout(() => {
+      this.dealing = false;
+      this.saveToHistory();
+    }, totalMs);
+  });
+}
+
 
   // Libre
   agregarCartaLibre(n=1){
