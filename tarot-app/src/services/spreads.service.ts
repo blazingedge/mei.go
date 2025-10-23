@@ -1,19 +1,20 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';  // 👈 añadimos firstValueFrom
+import { environment } from '../environments/environment'; // 👈 añadimos environment
 
 export interface SpreadDef {
   id: string;
   name: string;
   positions?: Array<{ index: number; label: string; allowsReversed: boolean }>;
-  slots?: number; // opcional si lo usas
+  slots?: number;
 }
 
 export interface CardMeta {
   id: string;
   name: string;
   suit: 'wands' | 'swords' | 'cups' | 'pents' | 'major';
-  imageUrl: string; // absoluta al mismo origen
+  imageUrl: string;
 }
 
 export interface DrawCard {
@@ -31,17 +32,32 @@ export interface DrawResult {
 @Injectable({ providedIn: 'root' })
 export class TarotApi {
   private http = inject(HttpClient);
-  private base = ''; // en dev: mismo host del proxy: /api...
+  private base = ''; // mismo host del proxy: /api...
 
+  // 🔹 Obtiene definiciones de spreads
   spreads(): Observable<SpreadDef[]> {
     return this.http.get<SpreadDef[]>(`${this.base}/api/spreads`);
   }
 
+  // 🔹 Obtiene metadatos del mazo
   decks(): Observable<CardMeta[]> {
     return this.http.get<CardMeta[]>(`${this.base}/api/decks`);
   }
 
+  // 🔹 Tirada simple (sin login)
   draw(spreadId: string): Observable<DrawResult> {
     return this.http.post<DrawResult>(`${this.base}/api/draw`, { spreadId });
+  }
+
+  // 🔹 Tirada autenticada con Firebase
+  async drawWithAuth(spreadId: string, uid: string, token: string): Promise<DrawResult> {
+    const body = { spreadId, allowsReversed: true, uid };
+
+    return await firstValueFrom(
+      this.http.post<DrawResult>(`${environment.API_BASE}/api/draw`, body, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        withCredentials: true
+      })
+    );
   }
 }

@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../environments/environment';
 import { TarotApi, CardMeta, SpreadDef, DrawResult } from '../services/spreads.service';
 import { ImageLoaderService } from '../services/image-loader.service';
+import { Auth } from '@angular/fire/auth'; // 👈 NUEVO
 
 type Placed = {
   position: number;
@@ -24,7 +25,7 @@ type HistoryEntry = {
   spreadId: 'celtic-cross-10'|'ppf-3'|'free';
   spreadLabel: string;
   cards: Placed[];
-  ts?: number | null;     // ← se agrega sólo al abrir historial
+  ts?: number | null;
 };
 
 const HISTORY_KEY = 'tarot-history-v1';
@@ -41,37 +42,31 @@ export class SpreadsComponent implements OnInit {
   private loader= inject(ImageLoaderService);
   private zone  = inject(NgZone);
   private cdr   = inject(ChangeDetectorRef);
+  private auth  = inject(Auth); // 👈 NUEVO
 
   // ===== estado principal =====
   spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
   spreadLabel = 'Cruz Celta';
 
-  backUrl!: string;                 // SOLO contracara
+  backUrl!: string;
   boardBgUrl = '';
-
   deckMap = new Map<string, CardMeta>();
   spreads: SpreadDef[] = [];
-
   slots:  Slot[] = [];
   placed: Placed[] = [];
   layers: Layer[] = [{ id:1, cards:[] }];
   activeLayer = 0;
   layerOverlay = false;
 
-  // UI
   loadingDeck = true; deckReady=false; deckError:string|null=null;
   deckCount=0; dealing=false; deckProgress=0; deckShuffling=false;
 
-  // Cruz Celta
   stepMode = false;
   private buffer: Placed[] = [];
   private nextIdx = 0;
-
-  // Libre
   freeLayout: FreeLayout = 'pile';
   private focusIdx = 0;
 
-  // Historial
   showHistory = false;
   historyList: HistoryEntry[] = [];
 
@@ -85,7 +80,6 @@ export class SpreadsComponent implements OnInit {
   ];
 
   constructor(){
-    // CARD_BACK_URL > API_BASE > fallback relativo
     this.backUrl =
       environment.CARD_BACK_URL ||
       (environment.API_BASE ? `${environment.API_BASE}/cdn/cards/contracara.webp` : '/cdn/cards/contracara.webp');
@@ -151,57 +145,84 @@ export class SpreadsComponent implements OnInit {
 
   getFrontUrl(cardId?:string){ return cardId ? this.deckMap.get(cardId)?.imageUrl : undefined; }
 
-  // ---------- UI helpers ----------
   toggleShuffle(){ this.deckShuffling = !this.deckShuffling; if(this.deckShuffling) setTimeout(()=>this.deckShuffling=false, 1600); }
   private bumpDeckProgress(target=100,ms=800){
     const start=this.deckProgress, steps=20, inc=(target-start)/steps, dt=Math.max(12,ms/steps);
     let i=0; const t=setInterval(()=>{ this.deckProgress = Math.min(100, Math.round(start+inc*++i)); if(i>=steps) clearInterval(t); }, dt);
   }
 
-  // ---------- Tiradas ----------
-async hacerTirada() {
-  if (!this.canDeal) return;
+  // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
+  // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
+  async hacerTirada() {
+    if (!this.canDeal) return;
 
-  if (this.isFree) { this.agregarCartaLibre(10); return; }
+    this.dealing = true;
+    this.placed = [];
 
-  this.dealing = true;
-  const res: DrawResult = await firstValueFrom(this.api.draw(this.spreadId));
-  const withPos: Placed[] = res.cards.map((c, i) => {
-    const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
-    return { position: p.position, cardId: c.cardId, reversed: c.reversed, x: p.x, y: p.y, r: p.r, z: p.z, delay: i * 80, dealt: false, faceup: false, layer: 0 };
-  });
+    try {
+      const user = this.auth.currentUser;
+      const uid = user?.uid ?? 'guest';
+      const token = user ? await user.getIdToken() : '';
 
-  const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
+      console.log('🎴 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
 
-  try {
-    // Esperar a que TODAS las imágenes estén listas antes de mostrarlas
-    const { ok, fail } = await this.loader.preloadAll([this.backUrl, ...fronts], 45000, { ignoreErrors: true });
-    console.debug('[IMG] preloaded ok:', ok.length, 'fail:', fail.length);
-  } catch (err) {
-    console.warn('[IMG] error al precargar:', err);
-  }
+      const res: DrawResult = await this.api.drawWithAuth(this.spreadId, uid, token);
+      if (!res?.cards?.length) throw new Error('No se recibieron cartas del servidor');
 
-  // ← ahora sí renderiza y anima
-  this.placed = withPos;
+      // Evita nulos
+      const validCards = res.cards.filter(c => !!c.cardId);
 
-  setTimeout(() => {
-    this.placed.forEach((pc, i) => {
+      // Mapear con slots
+      const withPos: Placed[] = validCards.map((c, i) => {
+        const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
+        return {
+          ...p,
+          cardId: c.cardId,
+          reversed: !!c.reversed,
+          delay: i * 100,
+          dealt: false,
+          faceup: false,
+          layer: 0
+        };
+      });
+
+      // Pre-cargar imágenes
+      const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
+      const { ok, fail } = await this.loader.preloadAll(
+        [this.backUrl, ...fronts],
+        30000,
+        { ignoreErrors: true }
+      );
+      console.debug('[IMG] Preload OK:', ok.length, 'Fail:', fail.length);
+
+      // Asignar y animar
+      this.placed = withPos;
+      this.zone.run(() => {
+        withPos.forEach((pc, i) => {
+          setTimeout(() => {
+            pc.dealt = true;
+            setTimeout(() => (pc.faceup = true), 350);
+          }, i * 120);
+        });
+      });
+
+      // Guardar al final
+      const totalMs = withPos.length * 120 + 450;
       setTimeout(() => {
-        pc.dealt = true;
-        setTimeout(() => pc.faceup = true, 350);
-      }, i * 120);
-    });
-    const totalMs = this.placed.length * 120 + 450;
-    setTimeout(() => {
+        this.dealing = false;
+        this.saveToHistory();
+      }, totalMs);
+    } catch (err: any) {
+      console.error('❌ Error en hacerTirada:', err);
+      this.deckError = err.message;
       this.dealing = false;
-      this.saveToHistory();
-    }, totalMs);
-  });
-}
+    }
+  }
 
 
   // Libre
-  agregarCartaLibre(n=1){
+  agregarCartaLibre(n=1)
+  {
     if(!this.deckReady) return;
 
     const used = new Set<string>(this.layers.flatMap(l => l.cards.map(c => c.cardId)));
@@ -392,3 +413,5 @@ async hacerTirada() {
   private readHistory():HistoryEntry[]{ try{ return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); }catch{ return []; } }
   private writeHistory(list:HistoryEntry[]){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }catch{} }
 }
+ 
+

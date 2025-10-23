@@ -6,7 +6,9 @@
 
   // Variables de entorno
   "vars": {
-    "CORS_ORIGINS": "http://localhost:4200"
+    "CORS_ORIGINS": "http://localhost:4200",
+    "HF_TOKEN": "@HF_TOKEN"
+
   },
 
   // D1 (ajusta el database_id si usas prod)

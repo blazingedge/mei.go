@@ -22,6 +22,7 @@ app.use(
     origin: ORIGINS,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
     maxAge: 86400,
   })
 );
@@ -242,26 +243,128 @@ function shuffle<T>(arr: T[], rnd: () => number) {
   return arr;
 }
 
+// =====================
+// /api/draw (Meigo Worker)
+// =====================
 app.post('/api/draw', async (c) => {
-  const { spreadId = 'celtic-cross-10', seed, allowsReversed = true } =
-    (await c.req.json().catch(() => ({}))) as { spreadId?: string; seed?: string; allowsReversed?: boolean };
+  try {
+    // 🧭 Intentamos leer el body, incluso si viene vacío
+    const body = (await c.req.json().catch(() => ({}))) as {
+      spreadId?: string;
+      seed?: string;
+      allowsReversed?: boolean;
+      uid?: string;
+    };
 
-  const count = spreadId === 'ppf-3' ? 3 : spreadId === 'free' ? 9 : 10;
-  if (FULL_DECK.length < count) return c.json({ error: 'not_enough_cards', have: FULL_DECK.length, need: count }, 409);
+    // 🪄 Logs en consola del worker
+    console.log('[DRAW] Body recibido:', body);
 
-  const sd = seed ?? Date.now().toString();
-  const rnd = rng32(hashSeed(sd));
-  const ids = FULL_DECK.map((d) => d.id);
-  const selected = shuffle([...ids], rnd).slice(0, count);
+    const spreadId = body.spreadId ?? 'celtic-cross-10';
+    const allowsReversed = body.allowsReversed ?? true;
+    const seed = body.seed ?? Date.now().toString();
+    const uid = body.uid ?? 'guest'; // 👈 si no hay uid, tratamos como invitado
 
-  const cards = selected.map((id, i) => ({
-    position: i + 1,
-    cardId: id,
-    reversed: allowsReversed ? rnd() < 0.5 : false,
-  }));
+    // 🧩 Detectar modo desarrollo
+    const isDev =
+      !c.env.ENV ||
+      c.env.ENV === 'development' ||
+      c.req.url.includes('127.0.0.1') ||
+      c.req.url.includes('localhost');
 
-  return c.json({ spreadId, seed: sd, cards });
+    if (isDev) {
+      console.log('🧠 [DRAW] Modo desarrollo detectado: sin límite diario.');
+    }
+
+    // Si no hay UID o estamos en modo dev, no aplicamos límites
+    const today = new Date().toISOString().slice(0, 10);
+    const limit = 3;
+
+    if (!isDev && uid !== 'guest') {
+      try {
+        // Verificamos si ya existe la tabla 'draws'
+        const tableCheck = await c.env.DB.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='draws';"
+        ).first();
+
+        if (!tableCheck) {
+          console.warn('⚠️ [DRAW] La tabla "draws" no existe todavía. Saltando control de límite.');
+        } else {
+          const row = await c.env.DB
+            .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
+            .bind(uid, today)
+            .first<{ count: number }>();
+
+          const used = row?.count ?? 0;
+          if (used >= limit) {
+            console.warn(`[DRAW] Usuario ${uid} alcanzó el límite diario (${limit}).`);
+            return c.json(
+              {
+                ok: false,
+                error: 'limit_reached',
+                message: 'Ya hiciste tus tiradas diarias',
+              },
+              429
+            );
+          }
+
+          // Incrementamos el contador
+          await c.env.DB
+            .prepare('INSERT OR REPLACE INTO draws (uid, day, count) VALUES (?, ?, ?)')
+            .bind(uid, today, used + 1)
+            .run();
+        }
+      } catch (dbErr) {
+        console.error('💥 [DRAW] Error accediendo a la base de datos D1:', dbErr);
+      }
+    }
+
+    // 🃏 Generar cartas aleatorias
+    const count = spreadId === 'ppf-3' ? 3 : spreadId === 'free' ? 9 : 10;
+
+    // 🔢 RNG determinista basado en semilla
+    const hashSeed = (s: string) =>
+      [...s].reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
+    const rng32 = (a: number) => () =>
+      (a = Math.imul(a ^ (a >>> 15), 1 | a) ^ (a >>> 7)) / 4294967296;
+
+    const rnd = rng32(hashSeed(seed));
+    const ids = FULL_DECK.map((d) => d.id);
+    const selected = ids.sort(() => rnd() - 0.5).slice(0, count);
+
+    const cards = selected.map((id, i) => ({
+      position: i + 1,
+      cardId: id,
+      reversed: allowsReversed ? rnd() < 0.5 : false,
+    }));
+
+    console.log(`[DRAW] Tirada generada (${uid}):`, cards.map((c) => c.cardId).join(', '));
+
+    // ✅ Respuesta
+    return c.json({
+      ok: true,
+      spreadId,
+      seed,
+      cards,
+      uid,
+      remaining:
+        isDev || uid === 'guest'
+          ? '∞'
+          : limit - ((await c.env.DB
+              .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
+              .bind(uid, today)
+              .first<{ count: number }>())?.count ?? 0) - 1,
+    });
+  } catch (err: any) {
+    console.error('[DRAW] Error interno:', err);
+    return c.json(
+      { ok: false, error: 'internal_error', message: String(err?.message ?? err) },
+      500
+    );
+  }
 });
+
+
+
 
 // =====================
 // Proxy CDN: /cdn/* → R2 (con cache) — SIEMPRE proxy (dev y prod)
@@ -269,8 +372,9 @@ app.post('/api/draw', async (c) => {
 const R2_BASE = `${CDN_BASE}`;
 
 app.get('/cdn/*', async (c) => {
-  const key = c.req.path.replace(/^\/cdn\//, '');
-  const safe = key.split('/').map(encodeURIComponent).join('/');
+   const key = c.req.path.replace(/^\/cdn\//, '');
+  // 🔽 forzamos minúsculas para coincidencia flexible
+  const safe = key.split('/').map(k => encodeURIComponent(k.toLowerCase())).join('/');
   const url  = `${R2_BASE}/${safe}`;
 
   try {
@@ -290,6 +394,28 @@ app.get('/cdn/*', async (c) => {
   } catch {
     return c.text('cdn error', 502, { 'Cache-Control': 'no-store' });
   }
+});
+
+// =====================
+// 🔧 Middleware final CORS Fix
+// =====================
+app.use('*', async (c, next) => {
+  await next();
+
+  const origin = c.req.header('Origin');
+  const allowed = ORIGINS.includes(origin || '');
+
+  if (allowed) {
+    c.header('Access-Control-Allow-Origin', origin!);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  } else {
+    // fallback: bloquea orígenes no listados
+    c.header('Access-Control-Allow-Origin', 'null');
+  }
+
+  c.header('Vary', 'Origin');
 });
 
 export default app;
