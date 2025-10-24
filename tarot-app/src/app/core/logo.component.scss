@@ -28,3 +28,62 @@
     text-shadow: 0 0 4px rgba(255, 215, 0, 0.2);
   }
 }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 999;
+}
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.modal-content {
+  position: relative;
+  background: linear-gradient(180deg, #1d2b2f, #0d1416);
+  color: #efe7d2;
+  padding: 2rem;
+  border-radius: 18px;
+  width: min(480px, 90vw);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6),
+              0 0 0 2px rgba(202,164,72,.2);
+  text-align: left;
+  animation: fadeIn .4s ease-out;
+}
+
+.modal-content h2 {
+  color: #caa448;
+  margin-bottom: 1rem;
+  font-family: 'Cinzel', serif;
+  text-align: center;
+}
+
+.modal-content p {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.btn-cerrar {
+  display: block;
+  margin: 1.5rem auto 0;
+  background: linear-gradient(180deg, #caa448, #9a7c2e);
+  border: none;
+  color: #1a1405;
+  font-weight: 700;
+  padding: 0.6rem 1.4rem;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(202,164,72,0.3);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+

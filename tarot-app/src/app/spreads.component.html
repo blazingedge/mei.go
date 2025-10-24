@@ -73,6 +73,10 @@
     </div>
   </aside>
 
+
+  <!-- 🔮 Interpretación IA -->
+
+
   <!-- Tablero -->
   <main class="board"
         [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : 'none'">
@@ -203,11 +207,37 @@
         </ul>
       }
     </div>
+    
 
     <div class="panel-footer">
       <button type="button" (click)="prevCard()" [disabled]="!activeCards.length">Anterior</button>
       <button type="button" (click)="nextCard()" [disabled]="!activeCards.length">Siguiente</button>
       <button type="button" (click)="saveToHistory()" [disabled]="!activeCards.length">Guardar</button>
     </div>
+
+    <div class="ai-interpret">
+  <h3>Interpretación espiritual</h3>
+  <textarea [(ngModel)]="userContext"
+            placeholder="Describe tu situación o pregunta (opcional)..."
+            [disabled]="loadingInterpret"></textarea>
+
+  <button type="button"
+          (click)="interpretarTirada()"
+          [disabled]="!activeCards.length || loadingInterpret">
+    {{ loadingInterpret ? 'Interpretando...' : 'Solicitar interpretación' }}
+  </button>
+
+  
+</div>
+
   </aside>
+
+  <div class="modal" *ngIf="showInterpretation">
+  <div class="modal-overlay" (click)="showInterpretation=false"></div>
+  <div class="modal-content">
+    <h2>🌕 Interpretación</h2>
+    <p>{{ interpretationText }}</p>
+    <button class="btn-cerrar" (click)="showInterpretation=false">Cerrar</button>
+  </div>
+</div>
 </div>

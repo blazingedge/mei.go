@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, firstValueFrom } from 'rxjs';  // 👈 añadimos firstValueFrom
-import { environment } from '../environments/environment'; // 👈 añadimos environment
+import { Observable, firstValueFrom } from 'rxjs';
+import { environment } from '../environments/environment.prod';
 
 export interface SpreadDef {
   id: string;
@@ -32,21 +32,21 @@ export interface DrawResult {
 @Injectable({ providedIn: 'root' })
 export class TarotApi {
   private http = inject(HttpClient);
-  private base = ''; // mismo host del proxy: /api...
+  private base = environment.API_BASE; // ✅ apunta directamente al Worker (sin /api extra)
 
   // 🔹 Obtiene definiciones de spreads
   spreads(): Observable<SpreadDef[]> {
-    return this.http.get<SpreadDef[]>(`${this.base}/api/spreads`);
+    return this.http.get<SpreadDef[]>(`${this.base}/spreads`);
   }
 
   // 🔹 Obtiene metadatos del mazo
   decks(): Observable<CardMeta[]> {
-    return this.http.get<CardMeta[]>(`${this.base}/api/decks`);
+    return this.http.get<CardMeta[]>(`${this.base}/decks`);
   }
 
   // 🔹 Tirada simple (sin login)
   draw(spreadId: string): Observable<DrawResult> {
-    return this.http.post<DrawResult>(`${this.base}/api/draw`, { spreadId });
+    return this.http.post<DrawResult>(`${this.base}/draw`, { spreadId });
   }
 
   // 🔹 Tirada autenticada con Firebase
@@ -54,9 +54,9 @@ export class TarotApi {
     const body = { spreadId, allowsReversed: true, uid };
 
     return await firstValueFrom(
-      this.http.post<DrawResult>(`${environment.API_BASE}/api/draw`, body, {
+      this.http.post<DrawResult>(`${this.base}/draw`, body, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        withCredentials: true
+        withCredentials: false // ✅ no hace falta credenciales cruzadas
       })
     );
   }

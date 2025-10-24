@@ -67,6 +67,13 @@ export class SpreadsComponent implements OnInit {
   freeLayout: FreeLayout = 'pile';
   private focusIdx = 0;
 
+  userContext = '';
+  aiResponse = '';
+  loadingInterpret = false;
+
+  interpretationText = '';
+showInterpretation = false;
+
   showHistory = false;
   historyList: HistoryEntry[] = [];
 
@@ -75,15 +82,16 @@ export class SpreadsComponent implements OnInit {
   get activeCards():Placed[]{ return this.isFree ? (this.layers[this.activeLayer]?.cards ?? []) : this.placed; }
 
   private bgCandidates = [
-    `${environment.API_BASE}/cdn/cards/celtic-cloth.webp`,
-    `${environment.API_BASE}/cdn/cards/celtic-cloth.jpg`,
-  ];
+  `${environment.CDN_BASE}/cards/celtic-cloth.webp`,
+  `${environment.CDN_BASE}/cards/celtic-cloth.jpg`,
+];
 
-  constructor(){
-    this.backUrl =
-      environment.CARD_BACK_URL ||
-      (environment.API_BASE ? `${environment.API_BASE}/cdn/cards/contracara.webp` : '/cdn/cards/contracara.webp');
-  }
+constructor() {
+  this.backUrl =
+    environment.CARD_BACK_URL ||
+    `${environment.CDN_BASE}/cards/contracara.webp`;
+}
+
 
   async ngOnInit(){
     this.resolveBgInBackground();
@@ -99,6 +107,58 @@ export class SpreadsComponent implements OnInit {
       img.src = url;
     }
   }
+
+async interpretarTirada() {
+  try {
+    this.loadingInterpret = true;
+    this.aiResponse = '';
+    this.interpretationText = '';
+    this.showInterpretation = false;
+
+    const context = prompt('¿Cuál es tu contexto personal o pregunta?') ?? '';
+    this.userContext = context;
+
+    // Mapear cartas para enviar nombre y estado reversed
+    const cards = this.placed.map(c => {
+      return {
+        name: c.cardId,  // o cambia a deckMap.get(c.cardId)?.name si tienes nombre "amigable"
+        reversed: c.reversed
+      };
+    });
+
+    if (!cards.length) {
+      alert('Primero realiza una tirada.');
+      this.loadingInterpret = false;
+      return;
+    }
+
+    const res = await fetch(`${environment.API_BASE}/interpret`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context, cards })
+    });
+
+    const data = await res.json();
+
+    if (data.ok && data.interpretation) {
+      this.interpretationText = data.interpretation;
+      this.aiResponse = data.rawResponse ?? '';
+      this.showInterpretation = true;
+    } else {
+      alert('No se recibió interpretación 😅');
+    }
+  } catch (err) {
+    alert('Error interpretando la tirada.');
+    console.error(err);
+  } finally {
+    this.loadingInterpret = false;
+    this.cdr.markForCheck();
+  }
+}
+
+
+
+
 
   async loadDeckFirst(){
     this.loadingDeck = true; this.deckError = null;
@@ -154,70 +214,83 @@ export class SpreadsComponent implements OnInit {
   // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
   // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
   async hacerTirada() {
-    if (!this.canDeal) return;
+  if (!this.canDeal) return;
 
-    this.dealing = true;
-    this.placed = [];
+  this.dealing = true;
+  this.placed = [];
 
-    try {
-      const user = this.auth.currentUser;
-      const uid = user?.uid ?? 'guest';
-      const token = user ? await user.getIdToken() : '';
+  try {
+    const user = this.auth.currentUser;
+    const uid = user?.uid ?? 'guest';
+    const token = user ? await user.getIdToken() : '';
 
-      console.log('🎴 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
+    console.log('🎴 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
 
-      const res: DrawResult = await this.api.drawWithAuth(this.spreadId, uid, token);
-      if (!res?.cards?.length) throw new Error('No se recibieron cartas del servidor');
+    // 🔮 Solicitar la tirada al Worker
+    const res: DrawResult = await this.api.drawWithAuth(this.spreadId, uid, token);
+    if (!res?.cards?.length) throw new Error('No se recibieron cartas del servidor');
 
-      // Evita nulos
-      const validCards = res.cards.filter(c => !!c.cardId);
+    // Evita nulos
+    const validCards = res.cards.filter(c => !!c.cardId);
 
-      // Mapear con slots
-      const withPos: Placed[] = validCards.map((c, i) => {
-        const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
-        return {
-          ...p,
-          cardId: c.cardId,
-          reversed: !!c.reversed,
-          delay: i * 100,
-          dealt: false,
-          faceup: false,
-          layer: 0
-        };
-      });
+    // Mapear posiciones
+    const withPos: Placed[] = validCards.map((c, i) => {
+      const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
+      return {
+        ...p,
+        cardId: c.cardId,
+        reversed: !!c.reversed,
+        delay: i * 100,
+        dealt: false,
+        faceup: false,
+        layer: 0
+      };
+    });
 
-      // Pre-cargar imágenes
-      const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
-      const { ok, fail } = await this.loader.preloadAll(
-        [this.backUrl, ...fronts],
-        30000,
-        { ignoreErrors: true }
-      );
-      console.debug('[IMG] Preload OK:', ok.length, 'Fail:', fail.length);
+    // 🧠 Pre-cargar imágenes (solo una vez, ahora sí)
+    const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
+    const { ok, fail } = await this.loader.preloadAll(
+      [this.backUrl, ...fronts],
+      30000,
+      { ignoreErrors: true }
+    );
+    console.debug('[IMG] Preload OK:', ok.length, 'Fail:', fail.length);
 
-      // Asignar y animar
-      this.placed = withPos;
-      this.zone.run(() => {
-        withPos.forEach((pc, i) => {
-          setTimeout(() => {
-            pc.dealt = true;
-            setTimeout(() => (pc.faceup = true), 350);
-          }, i * 120);
-        });
-      });
+    // 💡 Esperar un pequeño margen para estabilizar carga
+    await new Promise(r => setTimeout(r, 200));
 
-      // Guardar al final
-      const totalMs = withPos.length * 120 + 450;
-      setTimeout(() => {
-        this.dealing = false;
-        this.saveToHistory();
-      }, totalMs);
-    } catch (err: any) {
-      console.error('❌ Error en hacerTirada:', err);
-      this.deckError = err.message;
+    // ⚠️ Si fallan demasiadas, cancelar animación
+    if (ok.length < fronts.length / 2) {
+      console.warn('⚠️ Demasiadas cartas fallaron al precargar, cancelando animación.');
       this.dealing = false;
+      return;
     }
+
+    // ✅ Asignar y animar
+    this.placed = withPos;
+    this.zone.run(() => {
+      withPos.forEach((pc, i) => {
+        setTimeout(() => {
+          pc.dealt = true;
+          setTimeout(() => (pc.faceup = true), 350);
+        }, i * 120);
+      });
+    });
+
+    // 🕒 Guardar al final
+    const totalMs = withPos.length * 120 + 450;
+    setTimeout(() => {
+      this.dealing = false;
+      this.saveToHistory();
+    }, totalMs);
+
+  } catch (err: any) {
+    console.error('❌ Error en hacerTirada:', err);
+    this.deckError = err.message;
+    this.dealing = false;
   }
+}
+
 
 
   // Libre

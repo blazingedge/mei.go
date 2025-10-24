@@ -10,36 +10,30 @@ const ORIGINS = ['http://localhost:4200', 'http://127.0.0.1:4200'];
 const CDN_BASE =
   'https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1'; // R2 público
 
-type Bindings = { DB: D1Database };
+type Bindings = {
+  DB: D1Database;
+  HF_TOKEN?: string;
+  HF2_TOKEN?: string;
+  ENV?: string;
+};
 const app = new Hono<{ Bindings: Bindings }>();
+
 
 // =====================
 // CORS (global) + OPTIONS
-// =====================
-app.use(
-  '/*',
-  cors({
-    origin: ORIGINS,
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    maxAge: 86400,
-  })
-);
+// ===========
 
-app.options('/*', (c) => {
-  const origin = c.req.header('Origin') ?? '';
-  if (ORIGINS.includes(origin)) {
-    return c.body(null, 204, {
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-      Vary: 'Origin',
-    });
-  }
-  return c.body(null, 204);
-});
+
+app.use('*', cors({
+  origin: (origin) => ORIGINS.includes(origin || '') ? origin : '*',
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  maxAge: 86400,
+}));
+
+
+
 
 // =====================
 // Debug / Auth demo (D1)
@@ -107,11 +101,22 @@ const SUIT_ES: Record<Suit, string> = {
 
 // === Nombres de archivos EXACTOS (R2) ===
 const FILES_WANDS = [
-  'AsdeBastos.webp', 'Dosdebastos.webp', 'Tresdebastos.webp', 'Cuatrodebastos.webp',
-  'Cincodebastos.webp', 'Seisdebastos.webp', 'Sietedebastos.webp', 'Ochodebastos.webp',
-  'Nuevedebastos.webp', 'Diezdebastos.webp', 'Pagedebastos.webp',
-  'Caballerode bsatos.webp', 'Reinadebastos.webp', 'Reydebastos.webp',
+  'asdebastos.webp',
+  'dosdebastos.webp',
+  'tresdebastos.webp',
+  'cuatrodebastos.webp',
+  'cincodebastos.webp',
+  'seisdebastos.webp',
+  'sietedebastos.webp',
+  'ochodebastos.webp',
+  'nuevedebastos.webp',
+  'diezdebastos.webp',
+  'pagedebastos.webp',
+  'caballerodebastos.webp',
+  'reinadebastos.webp',
+  'reydebastos.webp',
 ] as const;
+
 
 const FILES_SWORDS = [
   'asdeespadas.webp', 'dosdeespadas.webp', 'tresdeespadas.webp', 'cuatrodeespadas.webp',
@@ -243,26 +248,27 @@ function shuffle<T>(arr: T[], rnd: () => number) {
   return arr;
 }
 
+
 // =====================
-// /api/draw (Meigo Worker)
+// /api/draw — Genera una tirada de cartas
 // =====================
 app.post('/api/draw', async (c) => {
   try {
-    // 🧭 Intentamos leer el body, incluso si viene vacío
+    // 🧭 Intentamos leer el body (aunque venga vacío)
     const body = (await c.req.json().catch(() => ({}))) as {
       spreadId?: string;
       seed?: string;
       allowsReversed?: boolean;
       uid?: string;
+      context?: string;
     };
 
-    // 🪄 Logs en consola del worker
     console.log('[DRAW] Body recibido:', body);
 
     const spreadId = body.spreadId ?? 'celtic-cross-10';
     const allowsReversed = body.allowsReversed ?? true;
     const seed = body.seed ?? Date.now().toString();
-    const uid = body.uid ?? 'guest'; // 👈 si no hay uid, tratamos como invitado
+    const uid = body.uid ?? 'guest';
 
     // 🧩 Detectar modo desarrollo
     const isDev =
@@ -271,23 +277,20 @@ app.post('/api/draw', async (c) => {
       c.req.url.includes('127.0.0.1') ||
       c.req.url.includes('localhost');
 
-    if (isDev) {
-      console.log('🧠 [DRAW] Modo desarrollo detectado: sin límite diario.');
-    }
+    if (isDev) console.log('🧠 [DRAW] Modo desarrollo detectado: sin límite diario.');
 
-    // Si no hay UID o estamos en modo dev, no aplicamos límites
+    // 📅 Control de límite diario (solo si hay DB)
     const today = new Date().toISOString().slice(0, 10);
     const limit = 3;
 
-    if (!isDev && uid !== 'guest') {
+    if (!isDev && uid !== 'guest' && c.env.DB) {
       try {
-        // Verificamos si ya existe la tabla 'draws'
         const tableCheck = await c.env.DB.prepare(
           "SELECT name FROM sqlite_master WHERE type='table' AND name='draws';"
         ).first();
 
         if (!tableCheck) {
-          console.warn('⚠️ [DRAW] La tabla "draws" no existe todavía. Saltando control de límite.');
+          console.warn('⚠️ [DRAW] La tabla "draws" no existe. Saltando control de límite.');
         } else {
           const row = await c.env.DB
             .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
@@ -298,64 +301,83 @@ app.post('/api/draw', async (c) => {
           if (used >= limit) {
             console.warn(`[DRAW] Usuario ${uid} alcanzó el límite diario (${limit}).`);
             return c.json(
-              {
-                ok: false,
-                error: 'limit_reached',
-                message: 'Ya hiciste tus tiradas diarias',
-              },
+              { ok: false, error: 'limit_reached', message: 'Ya hiciste tus tiradas diarias.' },
               429
             );
           }
 
-          // Incrementamos el contador
           await c.env.DB
             .prepare('INSERT OR REPLACE INTO draws (uid, day, count) VALUES (?, ?, ?)')
             .bind(uid, today, used + 1)
             .run();
         }
       } catch (dbErr) {
-        console.error('💥 [DRAW] Error accediendo a la base de datos D1:', dbErr);
+        console.error('💥 [DRAW] Error accediendo a la base D1:', dbErr);
       }
     }
 
-    // 🃏 Generar cartas aleatorias
-    const count = spreadId === 'ppf-3' ? 3 : spreadId === 'free' ? 9 : 10;
+    // 🎯 Determinar cantidad de cartas según spread
+    const count =
+      spreadId === 'ppf-3' ? 3 : spreadId === 'free' ? 9 : 10;
 
-    // 🔢 RNG determinista basado en semilla
+    // 🎲 RNG determinista basado en semilla
     const hashSeed = (s: string) =>
       [...s].reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
-    const rng32 = (a: number) => () =>
-      (a = Math.imul(a ^ (a >>> 15), 1 | a) ^ (a >>> 7)) / 4294967296;
 
-    const rnd = rng32(hashSeed(seed));
+    function makeRNG(seed: number) {
+      let x = seed | 0;
+      return () => {
+        x ^= x << 13;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        return ((x >>> 0) % 10000) / 10000; // rango [0, 1)
+      };
+    }
+
+    const seedNum = hashSeed(seed);
+    const rnd = makeRNG(seedNum);
+
+    // 🔮 Probabilidad de carta invertida (ajustable)
+    const reverseChance = 0.4; // 40% de invertidas
+
+    // 🔢 Crear IDs de cartas
     const ids = FULL_DECK.map((d) => d.id);
-    const selected = ids.sort(() => rnd() - 0.5).slice(0, count);
 
+    // 🔀 Barajar con Fisher–Yates determinista
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+
+    const selected = ids.slice(0, count);
+
+    // 🃏 Generar objetos carta
     const cards = selected.map((id, i) => ({
       position: i + 1,
       cardId: id,
-      reversed: allowsReversed ? rnd() < 0.5 : false,
+      reversed: allowsReversed ? rnd() < reverseChance : false,
     }));
 
-    console.log(`[DRAW] Tirada generada (${uid}):`, cards.map((c) => c.cardId).join(', '));
+    console.log(`[DRAW] Tirada (${uid}) →`, cards.map((c) => `${c.cardId}${c.reversed ? '↓' : '↑'}`).join(', '));
 
-    // ✅ Respuesta
+    // ✅ Respuesta final
     return c.json({
       ok: true,
       spreadId,
       seed,
-      cards,
       uid,
+      cards,
       remaining:
         isDev || uid === 'guest'
           ? '∞'
-          : limit - ((await c.env.DB
+          : limit -
+            ((await c.env.DB
               .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
               .bind(uid, today)
-              .first<{ count: number }>())?.count ?? 0) - 1,
+              .first<{ count: number }>())?.count ?? 0),
     });
   } catch (err: any) {
-    console.error('[DRAW] Error interno:', err);
+    console.error('💥 [DRAW] Error interno:', err);
     return c.json(
       { ok: false, error: 'internal_error', message: String(err?.message ?? err) },
       500
@@ -366,56 +388,157 @@ app.post('/api/draw', async (c) => {
 
 
 
-// =====================
-// Proxy CDN: /cdn/* → R2 (con cache) — SIEMPRE proxy (dev y prod)
-// =====================
+
+
+
+
+
+
+// Proxy CDN: /cdn/* → R2 (maneja mayúsculas y minúsculas)
 const R2_BASE = `${CDN_BASE}`;
 
+
 app.get('/cdn/*', async (c) => {
-   const key = c.req.path.replace(/^\/cdn\//, '');
-  // 🔽 forzamos minúsculas para coincidencia flexible
-  const safe = key.split('/').map(k => encodeURIComponent(k.toLowerCase())).join('/');
-  const url  = `${R2_BASE}/${safe}`;
+  const key = c.req.path.replace(/^\/cdn\//, '');
+  const parts = key.split('/');
+  const fileName = parts.pop()!;
+  const folder = parts.join('/');
 
+  // Lista de variantes que podría tener el archivo
+  const variants = [
+    fileName,
+    fileName.toLowerCase(),
+    fileName.toUpperCase(),
+    fileName.charAt(0).toUpperCase() + fileName.slice(1),
+    fileName.replace(/([a-z])([A-Z])/g, '$1 $2'), // divide CamelCase
+  ];
+
+  for (const variant of variants) {
+    const candidate = folder
+      ? `${R2_BASE}/${folder}/${encodeURIComponent(variant)}`
+      : `${R2_BASE}/${encodeURIComponent(variant)}`;
+
+    try {
+      const res = await fetch(candidate, {
+        cf: { cacheTtl: 60 * 60 * 24 * 30, cacheEverything: true },
+      });
+
+      if (res.ok) {
+        const ct = res.headers.get('content-type') ?? 'image/webp';
+        console.log(`✅ [CDN] Encontrado: ${candidate}`);
+        return new Response(res.body, {
+          status: 200,
+          headers: {
+            'Content-Type': ct,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
+            'Cross-Origin-Resource-Policy': 'cross-origin',
+            'Cross-Origin-Embedder-Policy': 'unsafe-none',
+            'Cross-Origin-Opener-Policy': 'unsafe-none',
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`❌ [CDN] Fallo al intentar ${candidate}`);
+    }
+  }
+
+  console.warn(`⚠️ [CDN] Ninguna variante encontrada para: ${fileName}`);
+  return c.text('not found', 404, { 'Access-Control-Allow-Origin': '*' });
+});
+
+
+
+
+
+// =====================
+// =====================
+// Interpretación IA (Hugging Face / Mistral) — versión corregida
+
+// =====================
+app.post('/api/interpret', async (c) => {
+
+ 
   try {
-    const res = await fetch(url, { cf: { cacheTtl: 60 * 60 * 24 * 30, cacheEverything: true } });
-    if (!res.ok) return c.text('not found', res.status, { 'Cache-Control': 'no-store' });
+    const { context, cards } = await c.req.json<{
+      context: string;
+      cards: { name: string; reversed: boolean }[];
+    }>();
 
-    const ct = res.headers.get('content-type') ?? 'image/png';
-    return new Response(res.body, {
-      status: 200,
+    // Usa el token nuevo, que sí tiene permisos correctos
+    const token = c.env.HF2_TOKEN || c.env.HF_TOKEN || "";
+
+    if (!token) {
+      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN/HF2_TOKEN' }, 401);
+    }
+
+ 
+    if (!cards?.length) {
+      return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
+    }
+
+    const prompt = `
+Eres un guía espiritual celta con sabiduría ancestral.
+Interpreta el tarot con profundidad, equilibrio y empatía.
+
+Contexto del usuario:
+"${context || 'Sin contexto proporcionado'}"
+
+Cartas extraídas:
+${cards.map(c => `- ${c.name}${c.reversed ? ' (invertida)' : ''}`).join('\n')}
+
+Da una interpretación cálida, práctica y reflexiva que ayude al usuario a crecer espiritualmente.
+`;
+
+    const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        'Content-Type': ct,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*', // imágenes sin CORS
-        'Vary': 'Origin',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        model: 'meta-llama/Llama-3.1-8B-Instruct',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 600,
+        temperature: 0.85,
+      }),
     });
-  } catch {
-    return c.text('cdn error', 502, { 'Cache-Control': 'no-store' });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('❌ Error HF:', res.status, text);
+      return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
+    }
+
+    const data = await res.json();
+    const interpretation = data?.choices?.[0]?.message?.content ?? 'No se recibió respuesta del modelo.';
+    return c.json({ ok: true, interpretation });
+  } catch (err: any) {
+    console.error('💥 [INTERPRET] Error interno:', err);
+    return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
+
+
+
+
+
+
+
 
 // =====================
 // 🔧 Middleware final CORS Fix
 // =====================
-app.use('*', async (c, next) => {
-  await next();
 
-  const origin = c.req.header('Origin');
-  const allowed = ORIGINS.includes(origin || '');
-
-  if (allowed) {
-    c.header('Access-Control-Allow-Origin', origin!);
-    c.header('Access-Control-Allow-Credentials', 'true');
-    c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  } else {
-    // fallback: bloquea orígenes no listados
-    c.header('Access-Control-Allow-Origin', 'null');
-  }
-
-  c.header('Vary', 'Origin');
+app.get('/debug/env', (c) => {
+  return c.json({
+    HF2_TOKEN: c.env.HF2_TOKEN ? '✅ cargado' : '❌ vacío',
+    HF_TOKEN: c.env.HF_TOKEN ? '✅ cargado' : '❌ vacío',
+    ENV: c.env.ENV || 'no definido',
+  });
 });
 
 export default app;

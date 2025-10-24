@@ -14,16 +14,30 @@ export class ImageLoaderService {
     return { ok, fail: fail.map(f => [f, 'fail']) };
   }
 
-  private preload(url: string, timeoutMs = 30000): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
-      img.crossOrigin = 'anonymous';
-      img.referrerPolicy = 'no-referrer';
-      img.onload = () => { clearTimeout(timer); this.cache.set(url, true); resolve(); };
-      img.onerror = (e) => { clearTimeout(timer); reject(e); };
-      img.src = url;
-    });
-  }
+private preload(url: string, timeoutMs = 30000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const img = new Image();
+
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+
+    img.crossOrigin = 'use-credentials';
+    img.referrerPolicy = 'no-referrer';
+    img.loading = 'eager';
+    img.decoding = 'async';
+
+    img.onload = () => {
+      clearTimeout(timer);
+      this.cache.set(url, true);
+      resolve();
+    };
+
+    img.onerror = (e) => {
+      clearTimeout(timer);
+      reject(e);
+    };
+
+    img.src = url;
+  });
+ }
 }
 

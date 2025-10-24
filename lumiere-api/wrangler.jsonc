@@ -3,15 +3,13 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
-
-  // Variables de entorno
+  "rules": [
+    { "type": "ESModule", "globs": ["**/*.ts"] }
+  ],
   "vars": {
     "CORS_ORIGINS": "http://localhost:4200",
     "HF_TOKEN": "@HF_TOKEN"
-
   },
-
-  // D1 (ajusta el database_id si usas prod)
   "d1_databases": [
     {
       "binding": "DB",
@@ -19,8 +17,6 @@
       "database_id": "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
     }
   ],
-
-  // Dev server local (puerto para wrangler dev)
   "dev": {
     "port": 8787
   }
