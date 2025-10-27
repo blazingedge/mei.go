@@ -121,8 +121,8 @@ const FILES_WANDS = [
 const FILES_SWORDS = [
   'asdeespadas.webp', 'dosdeespadas.webp', 'tresdeespadas.webp', 'cuatrodeespadas.webp',
   'cincodeespadas.webp', 'seisdeespadas.webp', 'sietedeespadas.webp', 'ochodeespadas.webp',
-  'nuevedeespadas.webp', 'diezdeespadas.webp', 'Pagedeespadas.webp',
-  'Caballerodeespadas.webp', 'Reinadeespadas.webp', 'Reydeespadas.webp',
+  'nuevedeespadas.webp', 'diezdeespadas.webp', 'pagedeespadas.webp',
+  'caballerodeespadas.webp', 'reinadeespadas.webp', 'reydeespadas.webp',
 ] as const;
 
 
@@ -397,57 +397,51 @@ app.post('/api/draw', async (c) => {
 // Proxy CDN: /cdn/* → R2 (maneja mayúsculas y minúsculas)
 const R2_BASE = `${CDN_BASE}`;
 
+// ✅ Deja una sola definición de /cdn/*
+// y NO fuerces a minúsculas; además, reintenta con capitalización si 404
 
+// ✅ CDN proxy limpio (sin reintentos ni mayúsculas)
 app.get('/cdn/*', async (c) => {
-  const key = c.req.path.replace(/^\/cdn\//, '');
-  const parts = key.split('/');
-  const fileName = parts.pop()!;
-  const folder = parts.join('/');
+  const key = c.req.path.replace(/^\/cdn\//, ''); // ruta relativa dentro del bucket
+  const url = `${CDN_BASE}/${encodeURI(key)}`;
 
-  // Lista de variantes que podría tener el archivo
-  const variants = [
-    fileName,
-    fileName.toLowerCase(),
-    fileName.toUpperCase(),
-    fileName.charAt(0).toUpperCase() + fileName.slice(1),
-    fileName.replace(/([a-z])([A-Z])/g, '$1 $2'), // divide CamelCase
-  ];
+  try {
+    const res = await fetch(url, {
+      cf: {
+        cacheTtl: 60 * 60 * 24 * 30, // 30 días
+        cacheEverything: true,
+      },
+    });
 
-  for (const variant of variants) {
-    const candidate = folder
-      ? `${R2_BASE}/${folder}/${encodeURIComponent(variant)}`
-      : `${R2_BASE}/${encodeURIComponent(variant)}`;
-
-    try {
-      const res = await fetch(candidate, {
-        cf: { cacheTtl: 60 * 60 * 24 * 30, cacheEverything: true },
+    if (!res.ok) {
+      console.warn('⚠️ [CDN Proxy] 404 o error para', url);
+      return c.text('not found', 404, {
+        'Access-Control-Allow-Origin': '*',
       });
-
-      if (res.ok) {
-        const ct = res.headers.get('content-type') ?? 'image/webp';
-        console.log(`✅ [CDN] Encontrado: ${candidate}`);
-        return new Response(res.body, {
-          status: 200,
-          headers: {
-            'Content-Type': ct,
-            'Cache-Control': 'public, max-age=31536000, immutable',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
-            'Cross-Origin-Resource-Policy': 'cross-origin',
-            'Cross-Origin-Embedder-Policy': 'unsafe-none',
-            'Cross-Origin-Opener-Policy': 'unsafe-none',
-          },
-        });
-      }
-    } catch (err) {
-      console.warn(`❌ [CDN] Fallo al intentar ${candidate}`);
     }
-  }
 
-  console.warn(`⚠️ [CDN] Ninguna variante encontrada para: ${fileName}`);
-  return c.text('not found', 404, { 'Access-Control-Allow-Origin': '*' });
+    return new Response(res.body, {
+      status: 200,
+      headers: {
+        'Content-Type': res.headers.get('content-type') ?? 'image/webp',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Cross-Origin-Embedder-Policy': 'unsafe-none',
+        'Cross-Origin-Opener-Policy': 'unsafe-none',
+      },
+    });
+  } catch (err) {
+    console.error('💥 [CDN Proxy] Error al obtener', url, err);
+    return c.text('cdn error', 502, {
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+    });
+  }
 });
+
 
 
 

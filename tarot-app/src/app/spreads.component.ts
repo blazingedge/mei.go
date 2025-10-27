@@ -7,6 +7,7 @@ import { environment } from '../environments/environment';
 import { TarotApi, CardMeta, SpreadDef, DrawResult } from '../services/spreads.service';
 import { ImageLoaderService } from '../services/image-loader.service';
 import { Auth } from '@angular/fire/auth'; // 👈 NUEVO
+import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
 
 type Placed = {
   position: number;
@@ -33,7 +34,7 @@ const HISTORY_KEY = 'tarot-history-v1';
 @Component({
   selector: 'app-spreads',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule],
+  imports: [CommonModule, FormsModule, DragDropModule, NewlineToBrPipe],
   templateUrl: './spreads.component.html',
   styleUrls: ['./spreads.component.scss'],
 })
@@ -72,7 +73,7 @@ export class SpreadsComponent implements OnInit {
   loadingInterpret = false;
 
   interpretationText = '';
-showInterpretation = false;
+  showInterpretation = false;
 
   showHistory = false;
   historyList: HistoryEntry[] = [];
@@ -82,8 +83,7 @@ showInterpretation = false;
   get activeCards():Placed[]{ return this.isFree ? (this.layers[this.activeLayer]?.cards ?? []) : this.placed; }
 
   private bgCandidates = [
-  `${environment.CDN_BASE}/cards/celtic-cloth.webp`,
-  `${environment.CDN_BASE}/cards/celtic-cloth.jpg`,
+  `${environment.CDN_BASE}/cards/celtic-cloth.webp`
 ];
 
 constructor() {
@@ -157,6 +157,16 @@ async interpretarTirada() {
 }
 
 
+extractHighlights(text: string): string[] {
+  if (!text) return [];
+  const sentences = text
+    .split(/[.!?]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 25)
+    .slice(0, 5);
+  return sentences;
+}
+
 
 
 
@@ -203,8 +213,56 @@ async interpretarTirada() {
     this.slots = layout.map(p => ({...p}));
   }
 
-  getFrontUrl(cardId?:string){ return cardId ? this.deckMap.get(cardId)?.imageUrl : undefined; }
+  getFrontUrl(cardId?: string): string | undefined {
+  if (!cardId) return undefined;
 
+  // 🧩 Mapa de alias para las cartas de la corte (Page, Knight, Queen, King)
+  const aliasMap: Record<string, string> = {
+    // Bastos
+    'wands-11': 'pagedebastos',
+    'wands-12': 'reydebastos',
+    'wands-13': 'reinadebastos',
+    'wands-14': 'reydebastos',
+    // Espadas
+    'swords-11': 'pagedeespadas',
+    'swords-12': 'caballerodeespadas',
+    'swords-13': 'reinadeespadas',
+    'swords-14': 'reydeespadas',
+    // Copas
+    'cups-11': 'pagedecopas',
+    'cups-12': 'reydecopas',
+    'cups-13': 'reinadecopas',
+    'cups-14': 'reydecopas',
+    // Pentáculos
+    'pentacles-11': 'pagedepentaculos',
+    'pentacles-12': 'reydepentaculos',
+    'pentacles-13': 'reinadepentaculos',
+    'pentacles-14': 'reydepentaculos',
+  };
+
+  // 🧠 Reemplazar ID si corresponde a alias
+  const fixedId = aliasMap[cardId] ?? cardId;
+
+  // Buscar la carta en el deckMap
+  const meta = this.deckMap.get(fixedId);
+
+  // Validación y logging de diagnóstico
+  if (!meta) {
+    console.warn(`⚠️ Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
+    return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
+  }
+
+  // Validar que la URL sea correcta
+  if (!meta.imageUrl) {
+    console.warn(`⚠️ Carta sin imageUrl asignada: ${fixedId}`);
+    return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
+  }
+
+  return meta.imageUrl;
+}
+
+
+  
   toggleShuffle(){ this.deckShuffling = !this.deckShuffling; if(this.deckShuffling) setTimeout(()=>this.deckShuffling=false, 1600); }
   private bumpDeckProgress(target=100,ms=800){
     const start=this.deckProgress, steps=20, inc=(target-start)/steps, dt=Math.max(12,ms/steps);
@@ -212,28 +270,32 @@ async interpretarTirada() {
   }
 
   // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
-  // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
-  async hacerTirada() {
+
+  // ======================================================================
+// 🎴 FUNCIÓN DEBUG — hace logging, regula ritmo y usa placeholders si falla
+// ======================================================================
+
+async hacerTirada() {
   if (!this.canDeal) return;
 
+  console.groupCollapsed('%c[🔮 hacerTirada: inicio]', 'color:violet');
   this.dealing = true;
   this.placed = [];
 
   try {
     const user = this.auth.currentUser;
     const uid = user?.uid ?? 'guest';
-    const token = user ? await user.getIdToken() : '';
+    const token = user ? await user.getIdToken(true) : '';
 
-    console.log('🎴 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
+    console.log('🪄 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
 
-    // 🔮 Solicitar la tirada al Worker
     const res: DrawResult = await this.api.drawWithAuth(this.spreadId, uid, token);
     if (!res?.cards?.length) throw new Error('No se recibieron cartas del servidor');
 
-    // Evita nulos
     const validCards = res.cards.filter(c => !!c.cardId);
+    console.table(validCards.map(v => ({ cardId: v.cardId, reversed: v.reversed })));
 
-    // Mapear posiciones
+    // Crear estructura
     const withPos: Placed[] = validCards.map((c, i) => {
       const p = this.slots[i] || { x: 50, y: 50, r: 0, z: 10 + i, position: i + 1 };
       return {
@@ -243,53 +305,134 @@ async interpretarTirada() {
         delay: i * 100,
         dealt: false,
         faceup: false,
-        layer: 0
+        layer: 0,
       };
     });
 
-    // 🧠 Pre-cargar imágenes (solo una vez, ahora sí)
+    console.table(withPos.map(c => ({
+      pos: c.position, id: c.cardId, r: c.r, x: c.x, y: c.y
+    })));
+
+    // Precargar imágenes
     const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
-    const { ok, fail } = await this.loader.preloadAll(
-      [this.backUrl, ...fronts],
-      30000,
-      { ignoreErrors: true }
-    );
-    console.debug('[IMG] Preload OK:', ok.length, 'Fail:', fail.length);
-
-    // 💡 Esperar un pequeño margen para estabilizar carga
-    await new Promise(r => setTimeout(r, 200));
-
-    // ⚠️ Si fallan demasiadas, cancelar animación
-    if (ok.length < fronts.length / 2) {
-      console.warn('⚠️ Demasiadas cartas fallaron al precargar, cancelando animación.');
-      this.dealing = false;
-      return;
-    }
-
-    // ✅ Asignar y animar
-    this.placed = withPos;
-    this.zone.run(() => {
-      withPos.forEach((pc, i) => {
-        setTimeout(() => {
-          pc.dealt = true;
-          setTimeout(() => (pc.faceup = true), 350);
-        }, i * 120);
-      });
+    const preloadRes = await this.loader.preloadAll([this.backUrl, ...fronts], 45000, {
+      ignoreErrors: true,
     });
 
-    // 🕒 Guardar al final
-    const totalMs = withPos.length * 120 + 450;
-    setTimeout(() => {
-      this.dealing = false;
-      this.saveToHistory();
-    }, totalMs);
+    console.log('🖼️ Preload completado:', preloadRes);
 
+    // Si alguna carta no cargó, reemplazar con placeholder
+    const placeholder = `${environment.CDN_BASE}/cards/contracara.webp`;
+    const failFlat = preloadRes.fail ?? [];
+
+    withPos.forEach(pc => {
+      const url = this.getFrontUrl(pc.cardId);
+      if (!url || failFlat.includes(url)) {
+        console.warn(`⚠️ Carta ${pc.cardId} falló en preload, usando placeholder`);
+        this.deckMap.set(pc.cardId, {
+          id: pc.cardId,
+          imageUrl: placeholder,
+          name: pc.cardId,
+        } as any);
+      }
+    });
+
+    this.placed = withPos;
+
+    // FPS adaptativo
+    let baseDelay = 120;
+    const fps = await this.getApproxFPS();
+    if (fps < 50) baseDelay = 180;
+    if (fps < 30) baseDelay = 250;
+    console.log('🎞️ FPS aproximado:', fps, '→ baseDelay:', baseDelay);
+
+    document.body.classList.add('spread-active');
+
+    // =============================
+    // Animación concurrente segura
+    // =============================
+    this.zone.runOutsideAngular(async () => {
+      const tasks = withPos.map((pc, i) =>
+        new Promise<void>(async resolve => {
+          try {
+            await new Promise(r => setTimeout(r, i * (baseDelay + Math.random() * 80)));
+
+            this.zone.run(() => {
+              pc.dealt = true;
+              this.cdr.detectChanges();
+            });
+
+            await new Promise(r => setTimeout(r, 350));
+
+            this.zone.run(() => {
+              pc.faceup = true;
+              this.cdr.detectChanges();
+              console.log(`🃏 Carta girada: #${pc.position} (${pc.cardId})`);
+            });
+
+            resolve();
+          } catch (e) {
+            console.error('❌ Error animando carta', pc.cardId, e);
+            resolve();
+          }
+        })
+      );
+
+      await Promise.allSettled(tasks);
+
+      // Recheck final
+      this.zone.run(() => {
+        const pending = this.placed.filter(c => !c.faceup);
+        if (pending.length) {
+          console.warn('🔁 Reintentando girar cartas pendientes:', pending.map(c => c.cardId));
+          pending.forEach(c => (c.faceup = true));
+          this.cdr.detectChanges();
+        }
+
+        // Validar deckMap
+        const missingMeta = this.placed.filter(c => !this.deckMap.get(c.cardId));
+        if (missingMeta.length) {
+          console.warn('⚠️ Cartas sin meta en deckMap:', missingMeta.map(c => c.cardId));
+        }
+
+        this.dealing = false;
+        this.saveToHistory();
+
+        document.body.classList.remove('spread-active');
+        document.body.classList.add('spread-complete');
+        setTimeout(() => document.body.classList.remove('spread-complete'), 800);
+
+        console.groupEnd();
+      });
+    });
   } catch (err: any) {
     console.error('❌ Error en hacerTirada:', err);
     this.deckError = err.message;
     this.dealing = false;
+    console.groupEnd();
   }
 }
+
+
+
+
+
+private getApproxFPS(): Promise<number> {
+  let frames = 0;
+  const start = performance.now();
+  return new Promise<number>(resolve => {
+    function loop() {
+      frames++;
+      if (performance.now() - start < 1000) {
+        requestAnimationFrame(loop);
+      } else {
+        resolve(frames);
+      }
+    }
+    requestAnimationFrame(loop);
+  });
+}
+
 
 
 
@@ -423,21 +566,31 @@ async interpretarTirada() {
     return this.free9();
   }
 
-  private celticCross10(){
-    const Cx=45,Cy=52,dx=15,dy=15,colX=80,h=15;
-    return [
-      {position:1,x:Cx,    y:Cy,    r:0,  z:20},
-      {position:2,x:Cx,    y:Cy,    r:90, z:21},
-      {position:3,x:Cx,    y:Cy+dy, r:0,  z:19},
-      {position:4,x:Cx-dx, y:Cy,    r:0,  z:19},
-      {position:5,x:Cx,    y:Cy-dy, r:0,  z:19},
-      {position:6,x:Cx+dx, y:Cy,    r:0,  z:19},
-      {position:7,x:colX,  y:Cy+h*2,r:0,  z:18},
-      {position:8,x:colX,  y:Cy+h,  r:0,  z:18},
-      {position:9,x:colX,  y:Cy,    r:0,  z:18},
-      {position:10,x:colX, y:Cy-h,  r:0,  z:18},
-    ];
-  }
+/** 📜 Layout para la Cruz Celta (10 cartas) */
+private celticCross10() {
+  // Centro del tapete
+  const Cx = 45, Cy = 52;
+  const dx = 15, dy = 15; // separaciones
+  const colX = 80;        // columna derecha (cartas 7–10)
+  const h = 15;           // altura de salto vertical
+
+  return [
+    // Carta central (la base de la lectura)
+    { position: 1, x: 50, y: 50, r: 0, z: 28 },
+    { position: 2, x: 50, y: 50, r: 90, z: 31 }, // 🔄 corregido: 180° en lugar de 90°
+    // Cartas que rodean la cruz central
+    { position: 3, x: Cx,    y: Cy + dy, r: 0,   z: 19 }, // debajo
+    { position: 4, x: Cx - dx, y: Cy,    r: 0,   z: 19 }, // izquierda
+    { position: 5, x: Cx,    y: Cy - dy, r: 0,   z: 19 }, // arriba
+    { position: 6, x: Cx + dx, y: Cy,    r: 0,   z: 19 }, // derecha
+    // Columna derecha (7–10)
+    { position: 7, x: colX,  y: Cy + 2*h, r: 0,   z: 18 },
+    { position: 8, x: colX,  y: Cy + h,   r: 0,   z: 18 },
+    { position: 9, x: colX,  y: Cy,       r: 0,   z: 18 },
+    { position: 10, x: colX, y: Cy - h,   r: 0,   z: 18 },
+  ];
+}
+
   private ppf3(){ return [{position:1,x:35,y:52,r:0,z:10},{position:2,x:50,y:52,r:0,z:11},{position:3,x:65,y:52,r:0,z:12}]; }
   private free9(){ const baseX=50,baseY=52,rand=(a:number,b:number)=>a+Math.random()*(b-a);
     return Array.from({length:9},(_,i)=>({position:i+1,x:baseX+rand(-6,6),y:baseY+rand(-6,6),r:rand(-8,8),z:20+i})); }
