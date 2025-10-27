@@ -1,91 +1,93 @@
- <div class="auth-layout">
+<!-- INTRO EFECTO "EL MEIGO" -->
+<div class="intro-overlay" *ngIf="showIntro">
+  <app-intro-particles></app-intro-particles>
+  <h1 class="intro-text">El meigo</h1>
+</div>
+
+<!-- LAYOUT PRINCIPAL -->
+<div class="auth-layout" [class.blur]="showIntro">
   <div class="auth-left">
     <app-logo></app-logo>
   </div>
 
-    <div class="auth-layout">
-      <div class="auth-card">
+  <div class="auth-layout">
+    <div class="auth-card">
+      <!-- LOGIN -->
+      <section class="section">
+        <h2>Iniciar sesión</h2>
+        <form (ngSubmit)="onLogin()" #loginForm="ngForm">
+          <input
+            type="email"
+            name="loginEmail"
+            [(ngModel)]="login.email"
+            required
+            placeholder="email"
+            [disabled]="loading"
+          />
+          <input
+            type="password"
+            name="loginPassword"
+            [(ngModel)]="login.password"
+            required
+            placeholder="contraseña"
+            [disabled]="loading"
+          />
+          @if (loginError) {
+            <p class="error">{{ loginError }}</p>
+          }
+          <button type="submit" [disabled]="loginForm.invalid || loading">Entrar</button>
+        </form>
+      </section>
 
-        <!-- LOGIN -->
-        <section class="section">
-          <h2>Iniciar sesión</h2>
-          <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-            <input
-              type="email"
-              name="loginEmail"
-              [(ngModel)]="login.email"
-              required
-              placeholder="email"
-              [disabled]="loading"
-            />
-            <input
-              type="password"
-              name="loginPassword"
-              [(ngModel)]="login.password"
-              required
-              placeholder="contraseña"
-              [disabled]="loading"
-            />
-            @if (loginError) {
-              <p class="error">{{ loginError }}</p>
-            }
-            <button type="submit" [disabled]="loginForm.invalid || loading">Entrar</button>
-          </form>
-        </section>
+      <div class="divider"><span>ó</span></div>
 
-        <!-- SEPARADOR + SOCIAL -->
-        <div class="divider">
-          <span>ó</span>
-        </div>
-        <div class="social">
-  <button class="social-btn google" type="button" (click)="authGoogle()" [disabled]="loading">
-    <img src="assets/google.svg" alt="Google login" />
-  </button>
-  <button class="social-btn facebook" type="button" (click)="authFacebook()" [disabled]="loading">
-    <img src="assets/facebook.svg" alt="Facebook login" />
-  </button>
-</div>
-
-
-        <!-- SEGUNDO SEPARADOR -->
-        <div class="divider thin"></div>
-
-        <!-- REGISTER -->
-        <section class="section">
-          <h2>Regístrate</h2>
-          <form (ngSubmit)="onRegister()" #regForm="ngForm">
-            <input
-              type="email"
-              name="regEmail"
-              [(ngModel)]="register.email"
-              required
-              placeholder="email"
-              [disabled]="loading"
-            />
-            <input
-              type="password"
-              name="regPassword"
-              [(ngModel)]="register.password"
-              required
-              placeholder="contraseña"
-              [disabled]="loading"
-            />
-            <input
-              type="password"
-              name="regConfirm"
-              [(ngModel)]="register.confirm"
-              required
-              placeholder="repetir contraseña"
-              [disabled]="loading"
-            />
-            @if (regError) {
-              <p class="error">{{ regError }}</p>
-            }
-            <button type="submit" [disabled]="regForm.invalid || loading">Crear cuenta</button>
-          </form>
-        </section>
-
-        <div class="corner" aria-hidden="true"></div>
+      <div class="social">
+        <button class="social-btn google" type="button" (click)="authGoogle()" [disabled]="loading">
+          <img src="assets/google.svg" alt="Google login" />
+        </button>
+        <button class="social-btn facebook" type="button" (click)="authFacebook()" [disabled]="loading">
+          <img src="assets/facebook.svg" alt="Facebook login" />
+        </button>
       </div>
+
+      <div class="divider thin"></div>
+
+      <!-- REGISTER -->
+      <section class="section">
+        <h2>Regístrate</h2>
+        <form (ngSubmit)="onRegister()" #regForm="ngForm">
+          <input
+            type="email"
+            name="regEmail"
+            [(ngModel)]="register.email"
+            required
+            placeholder="email"
+            [disabled]="loading"
+          />
+          <input
+            type="password"
+            name="regPassword"
+            [(ngModel)]="register.password"
+            required
+            placeholder="contraseña"
+            [disabled]="loading"
+          />
+          <input
+            type="password"
+            name="regConfirm"
+            [(ngModel)]="register.confirm"
+            required
+            placeholder="repetir contraseña"
+            [disabled]="loading"
+          />
+          @if (regError) {
+            <p class="error">{{ regError }}</p>
+          }
+          <button type="submit" [disabled]="regForm.invalid || loading">Crear cuenta</button>
+        </form>
+      </section>
+
+      <div class="corner" aria-hidden="true"></div>
     </div>
- 
+  </div>
+</div>

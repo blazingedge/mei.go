@@ -4,15 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { LogoComponent } from "./logo.component";
 import { AuthService } from './auth/auth.service';
+import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 
 @Component({
   standalone: true,
   selector: 'app-auth-unified',
-  imports: [CommonModule, FormsModule, LogoComponent],
+  imports: [CommonModule, FormsModule, LogoComponent, IntroParticlesComponent],
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
 })
 export class AuthUnifiedComponent {
+  showIntro = true;
   loading = false;
   loginError = '';
   regError = '';
@@ -21,6 +23,21 @@ export class AuthUnifiedComponent {
   register = { email: '', password: '', confirm: '' };
 
   constructor(private auth: AuthService, private router: Router) {}
+
+
+    
+
+  async playIntro() {
+    const audio = new Audio('assets/audio/el-meigo.mp3');
+    audio.volume = 0.55;
+    try {
+      await audio.play();
+    } catch {
+      console.warn('Autoplay bloqueado, esperando interacción del usuario');
+    }
+    // Duración total del efecto (ajustable)
+    setTimeout(() => (this.showIntro = false), 5200);
+  }
 
   // --- LOGIN normal
   async onLogin() {
