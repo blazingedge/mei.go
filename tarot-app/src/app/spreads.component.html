@@ -1,5 +1,5 @@
 <div class="layout">
-  <!-- Rail izquierdo -->
+  <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
     <div class="rail-title-chip">
       {{ spreadLabel }} <span class="caret">▾</span>
@@ -8,13 +8,16 @@
     <!-- Estado de mazo -->
     <div class="rail-status-min" aria-live="polite">
       <div class="shuffle-dot" [class.spin]="deckShuffling || loadingDeck"></div>
+
       <div class="status-text">
-        @if (loadingDeck) { Cargando mazo… }
-        @else if (deckError) {
+        @if (loadingDeck) {
+          Cargando mazo…
+        } @else if (deckError) {
           <span class="error">{{ deckError }}</span>
           <button type="button" (click)="loadDeckFirst()">Reintentar</button>
+        } @else {
+          Mazo cargado ({{ deckCount }})
         }
-        @else { Mazo cargado ({{ deckCount }}) }
       </div>
 
       <div class="fillbar">
@@ -22,7 +25,7 @@
       </div>
     </div>
 
-    <!-- Ghosts -->
+    <!-- Acciones rápidas -->
     <div class="rail-ghosts">
       <button class="ghost-btn spin" (click)="toggleShuffle()" [disabled]="!deckReady" title="Barajar"></button>
       <button class="ghost-btn" (click)="openHistory()" [disabled]="!deckReady" title="Historial"></button>
@@ -104,7 +107,7 @@
       </div>
     }
 
-    <!-- Slots guía -->
+    <!-- Slots guía (para spreads predefinidas) -->
     @if (!isFree) {
       @for (s of slots; track s.position) {
         <div class="slot"
@@ -146,8 +149,8 @@
 
     <!-- HISTORIAL -->
     @if (showHistory) {
-      <div class="history-modal">
-        <div class="history-card">
+      <div class="history-modal" (click)="closeHistory()">
+        <div class="history-card" (click)="$event.stopPropagation()">
           <header>
             <h4>Historial</h4>
             <button type="button" class="close" (click)="closeHistory()">×</button>
@@ -180,8 +183,8 @@
     }
   </main>
 
-  <!-- PANEL DERECHO -->
-  <aside class="panel">
+  <!-- PANEL DERECHO (se oculta cuando hay modal) -->
+  <aside class="panel" *ngIf="!showInterpretation">
     <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
 
     <div class="panel-body">
@@ -205,12 +208,9 @@
       <button type="button" (click)="saveToHistory()" [disabled]="!activeCards.length">Guardar</button>
     </div>
 
+    <!-- Sin “caja” de contexto extra; el modal ya pregunta -->
     <div class="ai-interpret">
       <h3>Interpretación espiritual</h3>
-      <textarea [(ngModel)]="userContext"
-                placeholder="Describe tu situación o pregunta (opcional)..."
-                [disabled]="loadingInterpret"></textarea>
-
       <button type="button"
               (click)="interpretarTirada()"
               [disabled]="!activeCards.length || loadingInterpret">
@@ -218,32 +218,36 @@
       </button>
     </div>
   </aside>
+</div>
 
-  <!-- MODAL INTERPRETACIÓN -->
-  <div class="interpret-modal" *ngIf="showInterpretation">
-    <div class="interpret-overlay" (click)="showInterpretation=false"></div>
+<!-- MODAL INTERPRETACIÓN -->
+<div class="interpret-modal" *ngIf="showInterpretation" (click)="closeInterpret()">
+  <div class="interpret-container" (click)="$event.stopPropagation()">
+    <header class="interpret-header">
+      <span class="icon">🔮</span>
+      <h2>Interpretación</h2>
+      <span class="spacer"></span>
+      <button class="close-btn" (click)="closeInterpret()">×</button>
+    </header>
 
-    <div class="interpret-container" (click)="$event.stopPropagation()">
-      <header class="interpret-header">
-        <span class="icon">🜂</span>
-        <h2>Interpretación espiritual</h2>
-        <button class="close-btn" (click)="showInterpretation=false">✕</button>
-      </header>
+    <div class="interpret-body">
+      <!-- Usa versión segura -->
+      <article class="interpret-text" [innerHTML]="interpretationSafe"></article>
 
-      <div class="interpret-body">
-        <div class="interpret-text">
-          <div [innerHTML]="interpretationText | newlineToBr"></div>
-        </div>
-
-        <div class="interpret-rail">
-          <h4>Aspectos Clave</h4>
-          <ul>
-            <li *ngFor="let item of extractHighlights(interpretationText)">
-              {{ item }}
-            </li>
-          </ul>
-        </div>
-      </div>
+      <aside class="interpret-rail">
+        <h4>Cartas</h4>
+        <ul>
+          <li *ngFor="let c of lastDraw">
+            {{ c.cardId }} <span *ngIf="c.reversed">↓</span>
+          </li>
+        </ul>
+      </aside>
     </div>
   </div>
+</div>
+
+<!-- LOADER (WEBP animado del mago) -->
+<div class="loading-overlay" *ngIf="loading || loadingInterpret" aria-live="polite" aria-busy="true">
+  <img class="loading-art" src="assets/anim/wizard.webp" alt="Generando tu tirada…" />
+  <p>Conjurando tu lectura…</p>
 </div>

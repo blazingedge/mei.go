@@ -2,12 +2,14 @@ import { Component, OnInit, inject, NgZone, ChangeDetectorRef } from '@angular/c
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
+import { DomSanitizer } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../environments/environment';
-import { TarotApi, CardMeta, SpreadDef, DrawResult } from '../services/spreads.service';
+import { TarotApi, CardMeta, SpreadDef, DrawResult, DrawCard } from '../services/spreads.service';
 import { ImageLoaderService } from '../services/image-loader.service';
 import { Auth } from '@angular/fire/auth'; // 👈 NUEVO
 import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
+import { SafeHtml } from '@angular/platform-browser';
 
 type Placed = {
   position: number;
@@ -34,7 +36,7 @@ const HISTORY_KEY = 'tarot-history-v1';
 @Component({
   selector: 'app-spreads',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, NewlineToBrPipe],
+  imports: [CommonModule, FormsModule, DragDropModule],
   templateUrl: './spreads.component.html',
   styleUrls: ['./spreads.component.scss'],
 })
@@ -59,8 +61,12 @@ export class SpreadsComponent implements OnInit {
   activeLayer = 0;
   layerOverlay = false;
 
-  loadingDeck = true; deckReady=false; deckError:string|null=null;
-  deckCount=0; dealing=false; deckProgress=0; deckShuffling=false;
+  loadingDeck = true; deckReady=false; 
+  deckError:string|null=null;
+  deckCount=0;
+  dealing=false; 
+  deckProgress=0; 
+  deckShuffling=false;
 
   stepMode = false;
   private buffer: Placed[] = [];
@@ -74,9 +80,14 @@ export class SpreadsComponent implements OnInit {
 
   interpretationText = '';
   showInterpretation = false;
+  loading= false;
 
   showHistory = false;
   historyList: HistoryEntry[] = [];
+
+  interpretationSafe: SafeHtml = ''; // versión HTML segura para [innerHTML]
+  lastDraw: DrawCard[] = [];   
+  sanitizer: any;
 
   get canDeal(){ return this.deckReady && !this.dealing; }
   get isFree(){ return this.spreadId === 'free'; }
@@ -156,6 +167,12 @@ async interpretarTirada() {
   }
 }
 
+ setInterpretation(text: string) {
+    this.interpretationText = text ?? '';
+    this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
+      this.toHtml(this.interpretationText)
+    );
+  }
 
 extractHighlights(text: string): string[] {
   if (!text) return [];
@@ -166,7 +183,15 @@ extractHighlights(text: string): string[] {
     .slice(0, 5);
   return sentences;
 }
-
+ private toHtml(s: string): string {
+    // convierte dobles saltos en <p>, simples en <br>
+    const esc = (t: string) =>
+      t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return esc(s)
+      .split(/\n{2,}/g)
+      .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+  }
 
 
 
@@ -621,6 +646,19 @@ private celticCross10() {
     if(changed) this.writeHistory(list);
     this.historyList = list;
     this.showHistory = true;
+  }
+
+  openInterpret() {
+  this.showInterpretation= true;
+  document.body.classList.add('modal-open'); // bloquea scroll página
+}
+closeInterpret() {
+  this.showInterpretation = false;
+  document.body.classList.remove('modal-open');
+}
+
+  setLastDraw(cards: DrawCard[]) {
+    this.lastDraw = Array.isArray(cards) ? cards : [];
   }
 
   closeHistory(){ this.showHistory=false; }
