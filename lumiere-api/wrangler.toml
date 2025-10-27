@@ -1,0 +1,16 @@
+name = "lumiere-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8787
+
+[vars]
+CORS_ORIGINS = "http://localhost:4200"
+HF_TOKEN = "@HF_TOKEN"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lumiere_db"
+database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
