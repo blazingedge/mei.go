@@ -4,27 +4,34 @@
   inset: 0;
   background: var(--bg, #0b1630);
   display: flex;
-  pointer-events: none;
-  
   align-items: center;
   justify-content: center;
   overflow: hidden;
   z-index: 999;
-  animation: fadeOut 1s ease forwards;
-  animation-delay: 4.5s;
+  pointer-events: none;
+  animation: fadeOut 700ms ease forwards;
+  animation-delay: 3.2s;
 }
 
+
+/* Tamaño fluido para texto (se adapta a móviles) */
 .intro-text {
   position: absolute;
   font-family: 'Cinzel Decorative', serif;
-  font-size: 3.6rem;
+  font-size: clamp(1.6rem, 6vw, 3.6rem);
+  line-height: 1.1;
   color: var(--gold, #d6b25e);
-  text-shadow: 0 0 18px rgba(214,178,94,0.9);
+  text-shadow: 0 0 14px rgba(214,178,94,0.8);
   opacity: 0;
-  animation: fadeInUp 2s ease forwards;
+  animation: fadeInUp 1.6s ease forwards;
   z-index: 1000;
 }
 
+/* Respeta preferencias del usuario */
+@media (prefers-reduced-motion: reduce) {
+  .intro-overlay { animation: none; }
+  .intro-text { animation: none; opacity: 1; }
+}
 
 
 @keyframes fadeInUp {
@@ -50,25 +57,27 @@
 
 
 .auth-layout {
-  min-height: 100dvh;
-  display: flex;                /* En lugar de grid */
-  justify-content: flex-end;    /* Mueve al lado derecho */
-  align-items: center;          /* Centra verticalmente */
+  min-height: 100svh;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   background: linear-gradient(180deg, #133d47, #0b2630 70%);
-  padding: 12rem;
-  padding-top: 1rem;
+  padding: 6rem clamp(16px, 4vw, 48px); /* reduce padding en pantallas estrechas */
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  gap: 24px;
+  overflow: auto; /* permite scroll cuando aparece el teclado */
 }
-
-    .auth-card {
-      position: relative;
-      width: min(420px, 95vw);
-      border-radius: 18px;
-      padding: 20px 22px 24px;
-      background: rgba(0,0,0,.35);
-      color: #efe7d2;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
-      overflow: hidden;
-    }
+   .auth-card {
+  position: relative;
+  width: min(420px, 92vw);
+  border-radius: 18px;
+  padding: clamp(16px, 3.5vw, 24px);
+  background: rgba(0,0,0,.35);
+  color: #efe7d2;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  overflow: hidden;
+}
     .auth-card::before {
       content: "";
       position: absolute; inset: -8px;
@@ -184,3 +193,69 @@
     }
     .social-btn:hover { filter: saturate(110%); box-shadow: 0 10px 20px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35); }
     .social-btn img { width: 22px; height: 22px; display: block; }
+
+
+ 
+/* ===== Breakpoint móvil (iPhone/Android) ===== */
+@media (max-width: 768px) {
+  .auth-layout {
+    justify-content: center;   /* centra todo */
+    align-items: flex-start;   /* deja respirar el teclado */
+    padding: clamp(12px, 3vw, 20px);
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .auth-left { display: none; } /* oculta logo lateral en mobile */
+
+  .auth-card {
+    width: min(520px, 96vw);
+    border-radius: 16px;
+    padding: clamp(14px, 3.5vw, 22px);
+    backdrop-filter: blur(2px);
+  }
+
+  .intro-text {
+    font-size: clamp(1.6rem, 9vw, 2.4rem);
+    text-shadow: 0 0 10px rgba(214,178,94,0.7);
+  }
+
+  input {
+    font-size: 16px; /* evita zoom en iOS */
+    padding: 12px 14px;
+  }
+
+  .social { gap: 12px; }
+  .social-btn { width: 44px; height: 44px; }
+
+  button[type="submit"] {
+    padding: 14px 16px; /* objetivo táctil ≥ 44px */
+    font-size: 16px;
+  }
+
+  .divider { margin: 8px 0 12px; }
+}
+
+/* ===== Móviles muy pequeños (≤360px) ===== */
+@media (max-width: 360px) {
+  .auth-card { padding: 12px; }
+  h2 { font-size: 1rem; }
+  .divider span { width: 26px; height: 26px; }
+}
+
+/* ===== Landscape bajo (teclado + barra superior) ===== */
+@media (max-height: 520px) and (orientation: landscape) {
+  .auth-layout { align-items: flex-start; padding-top: 8px; }
+  .auth-card { margin-top: 8px; }
+}
+
+/* iOS fill-available (por si apps WebView) */
+@supports (-webkit-touch-callout: none) {
+  .auth-layout { min-height: -webkit-fill-available; }
+}
+
+/* ===== Tus animaciones ===== */
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(14px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
