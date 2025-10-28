@@ -31,6 +31,8 @@ type HistoryEntry = {
   ts?: number | null;
 };
 
+
+
 const HISTORY_KEY = 'tarot-history-v1';
 
 @Component({
@@ -87,7 +89,7 @@ export class SpreadsComponent implements OnInit {
 
   interpretationSafe: SafeHtml = ''; // versión HTML segura para [innerHTML]
   lastDraw: DrawCard[] = [];   
-  sanitizer: any;
+ 
 
   get canDeal(){ return this.deckReady && !this.dealing; }
   get isFree(){ return this.spreadId === 'free'; }
@@ -97,11 +99,6 @@ export class SpreadsComponent implements OnInit {
   `${environment.CDN_BASE}/cards/celtic-cloth.webp`
 ];
 
-constructor() {
-  this.backUrl =
-    environment.CARD_BACK_URL ||
-    `${environment.CDN_BASE}/cards/contracara.webp`;
-}
 
 
   async ngOnInit(){
@@ -129,13 +126,10 @@ async interpretarTirada() {
     const context = prompt('¿Cuál es tu contexto personal o pregunta?') ?? '';
     this.userContext = context;
 
-    // Mapear cartas para enviar nombre y estado reversed
-    const cards = this.placed.map(c => {
-      return {
-        name: c.cardId,  // o cambia a deckMap.get(c.cardId)?.name si tienes nombre "amigable"
-        reversed: c.reversed
-      };
-    });
+    const cards = this.placed.map(c => ({
+      name: c.cardId,
+      reversed: c.reversed
+    }));
 
     if (!cards.length) {
       alert('Primero realiza una tirada.');
@@ -154,6 +148,11 @@ async interpretarTirada() {
     if (data.ok && data.interpretation) {
       this.interpretationText = data.interpretation;
       this.aiResponse = data.rawResponse ?? '';
+
+      // 🔮 Sanitizar y mostrar
+      const html = this.toHtml(this.interpretationText);
+      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(html);
+
       this.showInterpretation = true;
     } else {
       alert('No se recibió interpretación 😅');
@@ -167,6 +166,8 @@ async interpretarTirada() {
   }
 }
 
+
+
  setInterpretation(text: string) {
     this.interpretationText = text ?? '';
     this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
@@ -174,6 +175,19 @@ async interpretarTirada() {
     );
   }
 
+  constructor(
+  private sanitizer: DomSanitizer
+) {
+  this.backUrl =
+    environment.CARD_BACK_URL ||
+    `${environment.CDN_BASE}/cards/contracara.webp`;
+}
+
+  
+
+
+
+  
 extractHighlights(text: string): string[] {
   if (!text) return [];
   const sentences = text
