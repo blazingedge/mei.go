@@ -1,9 +1,7 @@
 <div class="layout">
   <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
-    <div class="rail-title-chip">
-      {{ spreadLabel }} <span class="caret">▾</span>
-    </div>
+    
 
     <!-- Estado de mazo -->
     <div class="rail-status-min" aria-live="polite">
@@ -46,11 +44,7 @@
           Repartir Cruz
         </button>
 
-        <button type="button"
-                (click)="colocarSiguientePosicion()"
-                [disabled]="!deckReady || dealing || !stepMode">
-          Siguiente posición
-        </button>
+       
       }
 
       @if (isFree) {
@@ -107,7 +101,7 @@
       </div>
     }
 
-    <!-- Slots guía (para spreads predefinidas) -->
+    <!-- Slots guía -->
     @if (!isFree) {
       @for (s of slots; track s.position) {
         <div class="slot"
@@ -183,42 +177,60 @@
     }
   </main>
 
-  <!-- PANEL DERECHO (se oculta cuando hay modal) -->
+  <!-- PANEL DERECHO -->
   <aside class="panel" *ngIf="!showInterpretation">
     <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
 
-    <div class="panel-body">
-      @if (!activeCards.length) {
-        <p class="muted">Aún no hay cartas. {{ isFree ? 'Añade algunas.' : 'Haz una tirada.' }}</p>
-      } @else {
-        <ul>
-          @for (pc of activeCards; track pc.position) {
-            <li>
-              <strong>#{{ pc.position }}</strong> — {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
-              @if (pc.reversed) { <span class="rev"> (invertida)</span> }
-            </li>
-          }
-        </ul>
-      }
+    <!-- Chips interactivas -->
+    <div class="cards-list">
+      <div
+        class="card-chip"
+        *ngFor="let pc of activeCards"
+        (click)="openCardMeaning(pc)"
+        [class.reversed]="pc.reversed"
+      >
+        <span class="num">#{{ pc.position }}</span>
+        <span class="name">
+          {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
+        </span>
+        <span *ngIf="pc.reversed" class="rev">↓</span>
+      </div>
     </div>
 
-    <div class="panel-footer">
-      <button type="button" (click)="prevCard()" [disabled]="!activeCards.length">Anterior</button>
-      <button type="button" (click)="nextCard()" [disabled]="!activeCards.length">Siguiente</button>
-      <button type="button" (click)="saveToHistory()" [disabled]="!activeCards.length">Guardar</button>
-    </div>
-
-    <!-- Sin “caja” de contexto extra; el modal ya pregunta -->
-    <div class="ai-interpret">
-      <h3>Interpretación espiritual</h3>
-      <button type="button"
-              (click)="interpretarTirada()"
-              [disabled]="!activeCards.length || loadingInterpret">
-        {{ loadingInterpret ? 'Interpretando...' : 'Solicitar interpretación' }}
-      </button>
+    <!-- Contexto + botón papiro -->
+    <div class="context-area">
+      <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
+      <textarea
+        id="contextInput"
+        [(ngModel)]="userContextInput"
+        rows="4"
+        placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."
+      ></textarea>
+      <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
     </div>
   </aside>
 </div>
+
+<!-- Overlay del significado de carta -->
+<!-- Overlay que se abre al hacer clic -->
+<div
+  class="card-meaning-overlay"
+  *ngIf="showCardOverlay"
+  (click)="closeCardOverlay()"
+>
+  <div class="meaning-box" (click)="$event.stopPropagation()">
+    <header>
+      <h3>{{ overlayCardTitle }}</h3>
+      <button (click)="closeCardOverlay()" class="close">×</button>
+    </header>
+
+    <article>
+      <p *ngIf="loadingCardMeaning"><em>🔮 Consultando significado...</em></p>
+      <p *ngIf="!loadingCardMeaning" [innerHTML]="overlayCardMeaning"></p>
+    </article>
+  </div>
+</div>
+
 
 <!-- MODAL INTERPRETACIÓN -->
 <div class="interpret-modal" *ngIf="showInterpretation" (click)="closeInterpret()">
@@ -231,9 +243,7 @@
     </header>
 
     <div class="interpret-body">
-      <!-- Usa versión segura -->
       <article class="interpret-text" [innerHTML]="interpretationSafe"></article>
-
       <aside class="interpret-rail">
         <h4>Cartas</h4>
         <ul>
@@ -246,8 +256,8 @@
   </div>
 </div>
 
-<!-- LOADER (WEBP animado del mago) -->
-<div class="loading-overlay" *ngIf="loading || loadingInterpret" aria-live="polite" aria-busy="true">
-  <img class="loading-art" src="assets/anim/wizard.webp" alt="Generando tu tirada…" />
-  <p>Conjurando tu lectura…</p>
+<!-- LOADER -->
+<div class="loading-overlay" *ngIf="loadingInterpret" aria-live="polite" aria-busy="true">
+  <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
+  <p>El mago está interpretando tu lectura…</p>
 </div>

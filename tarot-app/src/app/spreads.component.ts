@@ -76,7 +76,7 @@ export class SpreadsComponent implements OnInit {
   freeLayout: FreeLayout = 'pile';
   private focusIdx = 0;
 
-  userContext = '';
+  
   aiResponse = '';
   loadingInterpret = false;
 
@@ -89,6 +89,15 @@ export class SpreadsComponent implements OnInit {
 
   interpretationSafe: SafeHtml = ''; // versión HTML segura para [innerHTML]
   lastDraw: DrawCard[] = [];   
+
+  showContextModal = false;
+  userContextInput = '';
+  userContext = '';
+
+ 
+
+  
+
  
 
   get canDeal(){ return this.deckReady && !this.dealing; }
@@ -98,6 +107,73 @@ export class SpreadsComponent implements OnInit {
   private bgCandidates = [
   `${environment.CDN_BASE}/cards/celtic-cloth.webp`
 ];
+
+
+showCardOverlay = false;
+overlayCardTitle = '';
+overlayCardMeaning = '';
+loadingCardMeaning = false;
+
+
+
+// 🌙 Abre y actualiza el significado de una carta
+async openCardMeaning(pc: any) {
+  try {
+    const cardName =
+      this.deckMap.get(pc.cardId)?.name || pc.cardId || 'Carta desconocida';
+
+    this.showCardOverlay = true;
+    this.overlayCardTitle = cardName;
+    this.overlayCardMeaning = 'Consultando significado...';
+    this.loadingCardMeaning = true;
+    this.cdr.detectChanges(); // 👈 fuerza refresco inmediato del overlay
+
+    const res = await fetch(
+      'https://lumiere-api.laife91.workers.dev/api/card-meaning',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cardName,
+          reversed: !!pc.reversed,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('⚠️ Error al obtener significado:', res.status, errText);
+      this.overlayCardMeaning = `❌ Error ${res.status}: ${errText}`;
+      this.loadingCardMeaning = false;
+      this.cdr.detectChanges(); // 👈 refresca estado de error
+      return;
+    }
+
+    const data = await res.json();
+    const meaning =
+      data.meaning ||
+      data.message ||
+      'No se recibió interpretación del servidor.';
+
+    this.overlayCardMeaning = meaning;
+  } catch (err: any) {
+    console.error('💥 Error openCardMeaning:', err);
+    this.overlayCardMeaning =
+      '❌ Error interno: ' + (err.message || 'desconocido');
+  } finally {
+    this.loadingCardMeaning = false;
+    this.cdr.detectChanges(); // 👈 fuerza actualización final
+  }
+}
+
+// 🌙 Cierra el overlay
+closeCardOverlay() {
+  this.showCardOverlay = false;
+  this.overlayCardTitle = '';
+  this.overlayCardMeaning = '';
+  this.loadingCardMeaning = false;
+}
+
 
 
 
@@ -116,43 +192,38 @@ export class SpreadsComponent implements OnInit {
     }
   }
 
-async interpretarTirada() {
+async runInterpretation() {
   try {
     this.loadingInterpret = true;
     this.aiResponse = '';
     this.interpretationText = '';
     this.showInterpretation = false;
 
-    const context = prompt('¿Cuál es tu contexto personal o pregunta?') ?? '';
-    this.userContext = context;
-
     const cards = this.placed.map(c => ({
       name: c.cardId,
       reversed: c.reversed
     }));
 
-    if (!cards.length) {
-      alert('Primero realiza una tirada.');
-      this.loadingInterpret = false;
-      return;
-    }
+
 
     const res = await fetch(`${environment.API_BASE}/interpret`, {
+      
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context, cards })
+      body: JSON.stringify({
+      context: this.userContext,
+       cards: this.placed.map(c => ({
+       name: c.cardId,
+       reversed: c.reversed
+      })),
+     spreadId: this.spreadId
+    })
     });
 
     const data = await res.json();
-
     if (data.ok && data.interpretation) {
       this.interpretationText = data.interpretation;
-      this.aiResponse = data.rawResponse ?? '';
-
-      // 🔮 Sanitizar y mostrar
-      const html = this.toHtml(this.interpretationText);
-      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(html);
-
+      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(this.toHtml(data.interpretation));
       this.showInterpretation = true;
     } else {
       alert('No se recibió interpretación 😅');
@@ -165,6 +236,7 @@ async interpretarTirada() {
     this.cdr.markForCheck();
   }
 }
+
 
 
 
@@ -313,6 +385,27 @@ extractHighlights(text: string): string[] {
   // ======================================================================
 // 🎴 FUNCIÓN DEBUG — hace logging, regula ritmo y usa placeholders si falla
 // ======================================================================
+
+openContextModal() {
+  // Reinicia el campo del contexto cada vez que se abre el modal
+  this.userContextInput = '';
+  this.showContextModal = true;
+}
+
+confirmContext() {
+  // Guarda lo que el usuario escribió y cierra el modal
+  this.userContext = this.userContextInput.trim();
+  this.showContextModal = false;
+
+  // Validación
+  if (!this.userContext) {
+    alert('Por favor, escribe tu contexto o pregunta antes de continuar.');
+    return;
+  }
+
+  // Ahora sí ejecuta la IA
+  this.runInterpretation();
+}
 
 async hacerTirada() {
   if (!this.canDeal) return;
@@ -662,11 +755,8 @@ private celticCross10() {
     this.showHistory = true;
   }
 
-  openInterpret() {
-  this.showInterpretation= true;
-  document.body.classList.add('modal-open'); // bloquea scroll página
-}
-closeInterpret() {
+
+  closeInterpret() {
   this.showInterpretation = false;
   document.body.classList.remove('modal-open');
 }

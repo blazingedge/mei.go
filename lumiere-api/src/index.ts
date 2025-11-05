@@ -100,31 +100,165 @@ const SUIT_ES: Record<Suit, string> = {
 };
 
 // === Nombres de archivos EXACTOS (R2) ===
+// === Archivos por palo ===
+
+// 🔥 Bastos
 const FILES_WANDS = [
-  'asdebastos.webp',
-  'dosdebastos.webp',
-  'tresdebastos.webp',
-  'cuatrodebastos.webp',
-  'cincodebastos.webp',
-  'seisdebastos.webp',
-  'sietedebastos.webp',
-  'ochodebastos.webp',
-  'nuevedebastos.webp',
-  'diezdebastos.webp',
-  'pagedebastos.webp',
-  'caballerodebastos.webp',
-  'reinadebastos.webp',
-  'reydebastos.webp',
+  'asdebastos.webp','dosdebastos.webp','tresdebastos.webp','cuatrodebastos.webp',
+  'cincodebastos.webp','seisdebastos.webp','sietedebastos.webp','ochodebastos.webp',
+  'nuevedebastos.webp','diezdebastos.webp','pagedebastos.webp',
+  'caballerodebastos.webp','reinadebastos.webp','reydebastos.webp',
 ] as const;
 
-
+// ⚔️ Espadas
 const FILES_SWORDS = [
-  'asdeespadas.webp', 'dosdeespadas.webp', 'tresdeespadas.webp', 'cuatrodeespadas.webp',
-  'cincodeespadas.webp', 'seisdeespadas.webp', 'sietedeespadas.webp', 'ochodeespadas.webp',
-  'nuevedeespadas.webp', 'diezdeespadas.webp', 'pagedeespadas.webp',
-  'caballerodeespadas.webp', 'reinadeespadas.webp', 'reydeespadas.webp',
+  'asdeespadas.webp','dosdeespadas.webp','tresdeespadas.webp','cuatrodeespadas.webp',
+  'cincodeespadas.webp','seisdeespadas.webp','sietedeespadas.webp','ochodeespadas.webp',
+  'nuevedeespadas.webp','diezdeespadas.webp','pagedeespadas.webp',
+  'caballerodeespadas.webp','reinadeespadas.webp','reydeespadas.webp',
 ] as const;
 
+// 💧 Copas
+const FILES_CUPS = [
+  'asdecopas.webp','dosdecopas.webp','tresdecopas.webp','cuatrodecopas.webp',
+  'cincodecopas.webp','seisdecopas.webp','sietedecopas.webp','ochodecopas.webp',
+  'nuevedecopas.webp','diezdecopas.webp','pagedecopas.webp',
+  'caballerodecopas.webp','reinadecopas.webp','reydecopas.webp',
+] as const;
+
+// 🪙 Pentáculos
+const FILES_PENTS = [
+  'asdepentaculos.webp','dosdepentaculos.webp','tresdepentaculos.webp','cuatrodepentaculos.webp',
+  'cincodepentaculos.webp','seisdepentaculos.webp','sietedepentaculos.webp','ochodepentaculos.webp',
+  'nuevedepentaculos.webp','diezdepentaculos.webp','pagedepentaculos.webp',
+  'caballerodepentaculos.webp','reinadepentaculos.webp','reydepentaculos.webp',
+] as const;
+
+// 🌟 Arcanos Mayores
+const FILES_MAJOR = [
+  'elloco.webp','elmago.webp','lagransacerdotisa.webp','laemperatriz.webp','elemperador.webp',
+  'elpapa.webp','losenamorados.webp','elcarro.webp','lafuerza.webp','elermitano.webp',
+  'ruedadelafortuna.webp','lajusticia.webp','elcolgado.webp','lamuerte.webp','latemplanza.webp',
+  'eldiablo.webp','latorre.webp','laestrella.webp','laluna.webp','elsol.webp','eljuicio.webp','elmundo.webp',
+] as const;
+
+// === Construcción del mazo completo ===
+function buildDeckFromFiles(): CardMeta[] {
+  const out: CardMeta[] = [];
+  const sets: [readonly string[], Suit][] = [
+    [FILES_WANDS, 'wands'],
+    [FILES_SWORDS, 'swords'],
+    [FILES_CUPS, 'cups'],
+    [FILES_PENTS, 'pents'],
+    [FILES_MAJOR, 'major'],
+  ];
+
+  for (const [files, suit] of sets) {
+    for (const f of files) {
+      const m = fileToCardMeta(f, suit);
+      if (m) out.push(m);
+    }
+  }
+
+  out.sort((a, b) =>
+    a.suit === b.suit
+      ? Number(a.id.slice(-2)) - Number(b.id.slice(-2))
+      : a.suit.localeCompare(b.suit)
+  );
+  return out;
+}
+
+
+
+const cardNamesEs: Record<string, string> = {
+  // Bastos
+  'wands-01': 'As de Bastos',
+  'wands-02': 'Dos de Bastos',
+  'wands-03': 'Tres de Bastos',
+  'wands-04': 'Cuatro de Bastos',
+  'wands-05': 'Cinco de Bastos',
+  'wands-06': 'Seis de Bastos',
+  'wands-07': 'Siete de Bastos',
+  'wands-08': 'Ocho de Bastos',
+  'wands-09': 'Nueve de Bastos',
+  'wands-10': 'Diez de Bastos',
+  'wands-11': 'Sota de Bastos',
+  'wands-12': 'Caballero de Bastos',
+  'wands-13': 'Reina de Bastos',
+  'wands-14': 'Rey de Bastos',
+
+  // Copas
+  'cups-01': 'As de Copas',
+  'cups-02': 'Dos de Copas',
+  'cups-03': 'Tres de Copas',
+  'cups-04': 'Cuatro de Copas',
+  'cups-05': 'Cinco de Copas',
+  'cups-06': 'Seis de Copas',
+  'cups-07': 'Siete de Copas',
+  'cups-08': 'Ocho de Copas',
+  'cups-09': 'Nueve de Copas',
+  'cups-10': 'Diez de Copas',
+  'cups-11': 'Sota de Copas',
+  'cups-12': 'Caballero de Copas',
+  'cups-13': 'Reina de Copas',
+  'cups-14': 'Rey de Copas',
+
+  // Espadas
+  'swords-01': 'As de Espadas',
+  'swords-02': 'Dos de Espadas',
+  'swords-03': 'Tres de Espadas',
+  'swords-04': 'Cuatro de Espadas',
+  'swords-05': 'Cinco de Espadas',
+  'swords-06': 'Seis de Espadas',
+  'swords-07': 'Siete de Espadas',
+  'swords-08': 'Ocho de Espadas',
+  'swords-09': 'Nueve de Espadas',
+  'swords-10': 'Diez de Espadas',
+  'swords-11': 'Sota de Espadas',
+  'swords-12': 'Caballero de Espadas',
+  'swords-13': 'Reina de Espadas',
+  'swords-14': 'Rey de Espadas',
+
+  // Pentáculos
+  'pentacles-01': 'As de Pentáculos',
+  'pentacles-02': 'Dos de Pentáculos',
+  'pentacles-03': 'Tres de Pentáculos',
+  'pentacles-04': 'Cuatro de Pentáculos',
+  'pentacles-05': 'Cinco de Pentáculos',
+  'pentacles-06': 'Seis de Pentáculos',
+  'pentacles-07': 'Siete de Pentáculos',
+  'pentacles-08': 'Ocho de Pentáculos',
+  'pentacles-09': 'Nueve de Pentáculos',
+  'pentacles-10': 'Diez de Pentáculos',
+  'pentacles-11': 'Sota de Pentáculos',
+  'pentacles-12': 'Caballero de Pentáculos',
+  'pentacles-13': 'Reina de Pentáculos',
+  'pentacles-14': 'Rey de Pentáculos',
+
+  // Arcanos mayores
+  'major-00': 'El Loco',
+  'major-01': 'El Mago',
+  'major-02': 'La Sacerdotisa',
+  'major-03': 'La Emperatriz',
+  'major-04': 'El Emperador',
+  'major-05': 'El Hierofante',
+  'major-06': 'Los Enamorados',
+  'major-07': 'El Carro',
+  'major-08': 'La Fuerza',
+  'major-09': 'El Ermitaño',
+  'major-10': 'La Rueda de la Fortuna',
+  'major-11': 'La Justicia',
+  'major-12': 'El Colgado',
+  'major-13': 'La Muerte',
+  'major-14': 'La Templanza',
+  'major-15': 'El Diablo',
+  'major-16': 'La Torre',
+  'major-17': 'La Estrella',
+  'major-18': 'La Luna',
+  'major-19': 'El Sol',
+  'major-20': 'El Juicio',
+  'major-21': 'El Mundo'
+};
 
 // === Parse helpers ===
 function stripAccentsLower(s: string) {
@@ -132,9 +266,13 @@ function stripAccentsLower(s: string) {
 }
 
 const RANK_FROM_WORD: Record<string, number> = {
-  as: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  as: 1, uno: 1,
+  dos: 2, tres: 3, cuatro: 4, cinco: 5,
   seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
-  sota: 11, page: 11, pagede: 11, paged: 11, caballero: 12, reina: 13, rey: 14,
+  sota: 11, page: 11, paged: 11, pagede: 11,
+  caballero: 12, knight: 12,
+  reina: 13, queen: 13,
+  rey: 14, king: 14,
 };
 
 function parseMetaFromFilename(file: string): { rank?: number; suit?: Suit } {
@@ -142,13 +280,32 @@ function parseMetaFromFilename(file: string): { rank?: number; suit?: Suit } {
   const tokens = base.replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
 
   let suit: Suit | undefined;
-  if (tokens.some((t) => t.includes('bastos') || t === 'bsatos')) suit = 'wands';
-  if (tokens.some((t) => t.includes('espadas'))) suit = 'swords';
+
+  if (tokens.some(t => t.includes('bastos'))) suit = 'wands';
+  else if (tokens.some(t => t.includes('espadas'))) suit = 'swords';
+  else if (tokens.some(t => t.includes('copas'))) suit = 'cups';
+  else if (tokens.some(t => t.includes('pentaculo') || t.includes('oro'))) suit = 'pents';
+  else if (
+    tokens.some(t =>
+      [
+        // 🜂 Todos los Arcanos Mayores
+        'loco', 'mago', 'sacerdotisa', 'emperatriz', 'emperador',
+        'pap', 'hierofante', 'enamorados', 'carro', 'fuerza',
+        'ermitano', 'rueda', 'justicia', 'colgado', 'muerte',
+        'templanz', 'diablo', 'torre', 'estrella', 'luna',
+        'sol', 'juicio', 'mundo'
+      ].some(k => t.includes(k))
+    )
+  ) suit = 'major';
 
   let rank: number | undefined;
   for (const t of tokens) {
-    if (RANK_FROM_WORD[t] != null) { rank = RANK_FROM_WORD[t]; break; }
+    if (RANK_FROM_WORD[t] != null) {
+      rank = RANK_FROM_WORD[t];
+      break;
+    }
   }
+
   if (!rank) {
     const start = tokens[0] ?? '';
     if (start.startsWith('as')) rank = 1;
@@ -161,7 +318,7 @@ function parseMetaFromFilename(file: string): { rank?: number; suit?: Suit } {
     else if (start.startsWith('ocho')) rank = 8;
     else if (start.startsWith('nueve')) rank = 9;
     else if (start.startsWith('diez')) rank = 10;
-    else if (start.startsWith('page') || start.startsWith('pagede')) rank = 11;
+    else if (start.startsWith('sota') || start.startsWith('page')) rank = 11;
     else if (start.startsWith('caballero')) rank = 12;
     else if (start.startsWith('reina')) rank = 13;
     else if (start.startsWith('rey')) rank = 14;
@@ -169,6 +326,7 @@ function parseMetaFromFilename(file: string): { rank?: number; suit?: Suit } {
 
   return { rank, suit };
 }
+
 
 function rankNameEs(rank: number): string {
   return RANK_NAME[rank] ?? String(rank);
@@ -180,29 +338,36 @@ function suitEs(suit: Suit): string {
 function fileToCardMeta(file: string, forcedSuit?: Suit): CardMeta | null {
   const parsed = parseMetaFromFilename(file);
   const suit = forcedSuit ?? parsed.suit;
-  const rank = parsed.rank;
-  if (!suit || !rank) return null;
+  let rank = parsed.rank;
+
+  // 🪶 Forzar rank en arcanos mayores según su posición en FILES_MAJOR
+  if (suit === 'major') {
+    const index = FILES_MAJOR.indexOf(file);
+    if (index >= 0) rank = index; // 0..21
+  }
+
+  if (!suit || rank == null) return null;
 
   const id = `${suit}-${String(rank).padStart(2, '0')}`;
-  const name = `${rankNameEs(rank)} de ${suitEs(suit)}`;
+  const name =
+    suit === 'major'
+      ? cardNamesEs[id] || file.replace(/\.webp$/, '')
+      : `${rankNameEs(rank)} de ${suitEs(suit)}`;
 
   return {
-    id, suit, name, keywords: [], meaningUp: '', meaningRev: '',
-    imageUrl: `/cdn/cards/${file}`, // **siempre** pasa por /cdn
+    id,
+    suit,
+    name,
+    keywords: [],
+    meaningUp: '',
+    meaningRev: '',
+    imageUrl: `/cdn/cards/${file}`,
   };
 }
 
-function buildDeckFromFiles(): CardMeta[] {
-  const out: CardMeta[] = [];
-  for (const f of FILES_WANDS)  { const m = fileToCardMeta(f, 'wands');  if (m) out.push(m); }
-  for (const f of FILES_SWORDS) { const m = fileToCardMeta(f, 'swords'); if (m) out.push(m); }
-  out.sort((a, b) =>
-    a.suit === b.suit
-      ? Number(a.id.slice(-2)) - Number(b.id.slice(-2))
-      : a.suit.localeCompare(b.suit)
-  );
-  return out;
-}
+
+
+
 
 const FULL_DECK = buildDeckFromFiles();
 
@@ -388,6 +553,53 @@ app.post('/api/draw', async (c) => {
 
 
 
+app.post('/api/card-meaning', async (c) => {
+  try {
+    const { name, reversed } = await c.req.json<{ name: string; reversed: boolean }>();
+    const token = c.env.HF2_TOKEN || c.env.HF_TOKEN || '';
+
+    if (!token) {
+      return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
+    }
+
+    const prompt = `
+Eres un guía espiritual celta. Explica brevemente el significado profundo de la carta "${name}"
+${reversed ? '(invertida)' : '(derecha)'} en una lectura de tarot.
+Usa tono reflexivo y cálido, destacando los aspectos emocionales, prácticos y espirituales.
+`;
+
+    const hfResponse = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/Llama-3.1-8B-Instruct',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.8,
+      }),
+    });
+
+    if (!hfResponse.ok) {
+      const errText = await hfResponse.text();
+      console.error('❌ HF Error:', hfResponse.status, errText);
+      return c.json({ ok: false, meaning: `Error HF ${hfResponse.status}` }, hfResponse.status);
+    }
+
+    // 👇 ESTA ES LA ÚNICA RESPUESTA JSON VÁLIDA QUE ENVÍAS
+    const hfData = await hfResponse.json();
+    const meaning = hfData?.choices?.[0]?.message?.content ?? 'No se recibió respuesta.';
+    return c.json({ ok: true, meaning });
+
+  } catch (err: any) {
+    console.error('💥 Error /api/card-meaning:', err);
+    return c.json({ ok: false, meaning: 'Error interno: ' + (err?.message || 'desconocido') }, 500);
+  }
+});
+
+
 
 
 
@@ -449,71 +661,103 @@ app.get('/cdn/*', async (c) => {
 
 // =====================
 // =====================
-// Interpretación IA (Hugging Face / Mistral) — versión corregida
-
+// Interpretacion de AI
 // =====================
+
 app.post('/api/interpret', async (c) => {
 
- 
+   const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const { context, cards } = await c.req.json<{
+    const { context, cards, spreadId } = await c.req.json<{
       context: string;
       cards: { name: string; reversed: boolean }[];
+      spreadId?: string;
     }>();
 
-    // Usa el token nuevo, que sí tiene permisos correctos
     const token = c.env.HF2_TOKEN || c.env.HF_TOKEN || "";
-
     if (!token) {
       return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN/HF2_TOKEN' }, 401);
     }
-
- 
     if (!cards?.length) {
       return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
     }
 
-    const prompt = `
-Eres un guía espiritual celta con sabiduría ancestral.
-Interpreta el tarot con profundidad, equilibrio y empatía.
+    // 🔮 Normalizar nombres y asegurar que estén todas las cartas antes de interpretar
+    const formattedCards = cards.map(c => {
+      const name = cardNamesEs[c.name] || c.name;
+      return `${name}${c.reversed ? ' (invertida)' : ''}`;
+    });
 
-Contexto del usuario:
-"${context || 'Sin contexto proporcionado'}"
+    // Espera explícita (simula debounce de red o carga lenta)
+    await new Promise(r => setTimeout(r, 400));
+
+    // 🔮 Tipo de tirada
+    const spreadLabel =
+      spreadId === 'celtic-cross-10' ? 'Cruz Celta (10 cartas)' :
+      spreadId === 'ppf-3' ? 'Pasado · Presente · Futuro' :
+      'Tirada libre';
+
+    const prompt = `
+Eres un guía espiritual celta con sabiduría ancestral y una voz cálida.
+Interpreta el tarot con equilibrio, empatía y profundidad.
+
+🧭 Tipo de tirada: ${spreadLabel}
+💫 Contexto del consultante: "${context || 'Sin contexto proporcionado'}"
 
 Cartas extraídas:
-${cards.map(c => `- ${c.name}${c.reversed ? ' (invertida)' : ''}`).join('\n')}
+${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Da una interpretación cálida, práctica y reflexiva que ayude al usuario a crecer espiritualmente.
+Da una lectura reflexiva y espiritual que explique el sentido de las cartas en conjunto,
+sin enumerarlas secamente, sino hilando una historia coherente según el tipo de tirada.
+Usa negritas para destacar ideas clave y anima al usuario con tono esperanzador.
 `;
 
     const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/Llama-3.1-8B-Instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 600,
-        temperature: 0.85,
-      }),
-    });
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model: 'meta-llama/Llama-3.1-8B-Instruct',
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 1600,
+    temperature: 0.85,
+  }),
+  signal: controller.signal,
+}).catch(err => {
+  console.error('⚠️ Timeout o error de red:', err);
+  throw new Error('Timeout en Hugging Face');
+});
+clearTimeout(timeout);
 
     if (!res.ok) {
       const text = await res.text();
       console.error('❌ Error HF:', res.status, text);
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
+    
 
     const data = await res.json();
     const interpretation = data?.choices?.[0]?.message?.content ?? 'No se recibió respuesta del modelo.';
+
+    console.log('✅ Interpretación generada:', interpretation.slice(0, 150) + '...');
+
+    // Detecta posible truncamiento si termina sin punto o está muy corta
+if (interpretation.length < 300 || !/[.!?…]$/.test(interpretation.trim())) {
+  console.warn('⚠️ Interpretación parece incompleta, forzando espera extra');
+  await new Promise(r => setTimeout(r, 800)); // 🕐 pequeño delay
+}
+
+
     return c.json({ ok: true, interpretation });
   } catch (err: any) {
     console.error('💥 [INTERPRET] Error interno:', err);
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
