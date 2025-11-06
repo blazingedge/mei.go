@@ -699,29 +699,32 @@ private getApproxFPS(): Promise<number> {
   }
 
 /** 📜 Layout para la Cruz Celta (10 cartas) */
+/** 📜 Layout para la Cruz Celta (10 cartas) — versión centrada verticalmente */
 private celticCross10() {
-  // Centro del tapete
-  const Cx = 45, Cy = 52;
-  const dx = 15, dy = 15; // separaciones
-  const colX = 80;        // columna derecha (cartas 7–10)
-  const h = 15;           // altura de salto vertical
+  const Cx = 45, Cy = 50; // ⬇️ antes 52 → sube todo el conjunto ~7%
+  const dx = 15, dy = 13; // ajuste suave entre cartas
+  const colX = 78;        // ligera reducción para centrar mejor
+  const h = 12;           // menor altura vertical
 
   return [
-    // Carta central (la base de la lectura)
-    { position: 1, x: 50, y: 50, r: 0, z: 28 },
-    { position: 2, x: 50, y: 50, r: 90, z: 31 }, // 🔄 corregido: 180° en lugar de 90°
-    // Cartas que rodean la cruz central
-    { position: 3, x: Cx,    y: Cy + dy, r: 0,   z: 19 }, // debajo
-    { position: 4, x: Cx - dx, y: Cy,    r: 0,   z: 19 }, // izquierda
-    { position: 5, x: Cx,    y: Cy - dy, r: 0,   z: 19 }, // arriba
-    { position: 6, x: Cx + dx, y: Cy,    r: 0,   z: 19 }, // derecha
-    // Columna derecha (7–10)
-    { position: 7, x: colX,  y: Cy + 2*h, r: 0,   z: 18 },
-    { position: 8, x: colX,  y: Cy + h,   r: 0,   z: 18 },
-    { position: 9, x: colX,  y: Cy,       r: 0,   z: 18 },
-    { position: 10, x: colX, y: Cy - h,   r: 0,   z: 18 },
+    // 🌟 Cruz central
+    { position: 1, x: 50, y: 45, r: 0,  z: 28 },
+    { position: 2, x: 50, y: 45, r: 90, z: 31 },
+
+    // 🔹 Cuatro alrededor de la cruz
+    { position: 3, x: Cx,      y: Cy + dy, r: 0, z: 19 }, // abajo
+    { position: 4, x: Cx - dx, y: Cy,      r: 0, z: 19 }, // izquierda
+    { position: 5, x: Cx,      y: Cy - dy, r: 0, z: 19 }, // arriba
+    { position: 6, x: Cx + dx, y: Cy,      r: 0, z: 19 }, // derecha
+
+    // 🔸 Columna derecha (más arriba)
+    { position: 7, x: colX, y: Cy + h,   r: 0, z: 18 },
+    { position: 8, x: colX, y: Cy,       r: 0, z: 18 },
+    { position: 9, x: colX, y: Cy - h,   r: 0, z: 18 },
+    { position: 10, x: colX, y: Cy - 2*h, r: 0, z: 18 },
   ];
 }
+
 
   private ppf3(){ return [{position:1,x:35,y:52,r:0,z:10},{position:2,x:50,y:52,r:0,z:11},{position:3,x:65,y:52,r:0,z:12}]; }
   private free9(){ const baseX=50,baseY=52,rand=(a:number,b:number)=>a+Math.random()*(b-a);

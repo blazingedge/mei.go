@@ -36,13 +36,14 @@
         <div class="seg">
           <button type="button" [class.active]="!stepMode" (click)="stepMode=false">Completa</button>
           <button type="button" [class.active]="stepMode" (click)="prepararCruzPasoAPaso()">Una por una</button>
-        </div>
-
-        <button type="button"
+            <button type="button"
                 (click)="repartirCruzCompleta()"
                 [disabled]="!deckReady || dealing || stepMode">
           Repartir Cruz
         </button>
+        </div>
+
+      
 
        
       }
@@ -197,17 +198,24 @@
       </div>
     </div>
 
+ 
     <!-- Contexto + botón papiro -->
-    <div class="context-area">
-      <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
-      <textarea
-        id="contextInput"
-        [(ngModel)]="userContextInput"
-        rows="4"
-        placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."
-      ></textarea>
-      <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
-    </div>
+<div class="context-wrap">
+  <div class="context-area">
+    <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
+    <textarea
+      id="contextInput"
+      [(ngModel)]="userContextInput"
+      rows="4"
+      placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."
+    ></textarea>
+  </div>
+
+  <div class="context-action">
+    <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
+  </div>
+</div>
+
   </aside>
 </div>
 

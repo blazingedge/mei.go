@@ -18,11 +18,9 @@
 
 
 /* ===========================================================
-    RAIL IZQUIERDO — textura + botones corregidos
+    RAIL IZQUIERDO 
    =========================================================== */
-/* ===========================================================
-   ⚒️ RAIL IZQUIERDO — versión ampliada (botones en fila)
-   =========================================================== */
+
 :host {
   --rail: 110px; /* ⬆️ antes era 72px */
 }
@@ -51,7 +49,7 @@
     flex-direction: column;
     align-items: center;
     width: 100%;
-    gap: 0.75rem;
+    gap: 0.6rem;
 
     /* 🔸 Fila de botones principales */
     .btn-row {
@@ -59,9 +57,11 @@
       justify-content: center;
       align-items: center;
       flex-wrap: wrap;
-      gap: .4rem;
+      gap: .6rem;
       width: 100%;
     }
+    
+
 
     button {
       flex: 1 1 calc(33% - 0.3rem);
@@ -111,6 +111,8 @@
         inset 0 1px 0 rgba(255,255,255,0.25);
     }
   }
+
+  
 
   /* === Zona de estado del mazo === */
   .rail-status-min {
@@ -178,6 +180,12 @@
     }
   }
 }
+.rail-controls .seg {
+     display: flex;
+     flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+    }
 
 
 
@@ -191,12 +199,14 @@
    =========================================================== */
 
 .board { 
-  min-height: 100vh; 
+  min-height: calc(100vh - 40px);
+  padding-top: 3vh;
   position: relative; 
   background-size: cover; 
   background-position: center; 
   overflow: hidden; 
 }
+
 
 .board::after {
   content:"";
@@ -251,7 +261,7 @@
 }
 
 /* ===========================================================
-   🃏 MAZO (reubicado)
+   🃏 MAZO 
    =========================================================== */
 .deck-pile {
   position: absolute;
@@ -312,12 +322,45 @@
   background: url('/assets/ui/papiro-note.jpg') no-repeat center/cover;
   border: 2px solid rgba(139, 110, 60, 0.5);
   border-radius: 12px;
-  padding: 1rem;
+  padding: 3rem;
   font-family: 'Cardo', serif;
   font-size: 1rem;
   color: #3b2f19;
   resize: none;
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
+}
+
+.context-wrap {
+  display: flex;
+  align-items: center;
+  flex-direction: column;     /* centra verticalmente */
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+
+  /* límites suaves dentro del panel */
+  padding: 0.5rem 0.2rem;
+}
+
+/* el área del texto ocupa casi todo el ancho */
+.context-wrap .context-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* botón al lado derecho */
+.context-wrap .context-action {
+  display: flex;
+  align-items: vertical;
+  justify-content: center;
+}
+
+/* reduce el tamaño del botón para que encaje visualmente */
+.context-wrap .btn-papiro {
+  white-space: nowrap;
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
 }
 
 /* ===========================================================
@@ -327,19 +370,44 @@
 
 /* Slots y cartas */
 .slot,
-.card{
-  --x:50%; --y:50%; --r:0deg;
-  position:absolute; left:var(--x); top:var(--y);
-  transform:translate(-50%,-50%);
+.card {
+  --x: 50%;
+  --y: 25%; /* ⬆️ antes 28% — sube ligeramente todo el conjunto */
+  --r: 0deg;
+
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+
+  /* 🔹 centrado ajustado: sube 10% adicional para equilibrar visualmente */
+  transform: translate(-50%, calc(-50% - 10%));
 }
 
-.slot{
-  width:min(16vw,220px); aspect-ratio:2.5/4; border:2px dashed rgba(214,178,94,.35); border-radius:16px;
-  filter:drop-shadow(0 8px 18px rgba(0,0,0,.25)); transition:border-color .2s ease; z-index:1;
-  &:hover{ border-color:var(--gold); }
-  &::after{ content:attr(data-pos); position:absolute; top:-10px; left:-10px; background:rgba(11,22,48,.85);
-    color:var(--gold); border:1px solid rgba(214,178,94,.5); border-radius:10px; padding:.1rem .35rem; font-size:.8rem; }
+/* Mantiene los estilos base */
+.slot {
+  width: min(16vw, 220px);
+  aspect-ratio: 2.5/4;
+  border: 2px dashed rgba(214,178,94,.35);
+  border-radius: 16px;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.25));
+  transition: border-color .2s ease;
+  z-index: 1;
+  &:hover { border-color: var(--gold); }
+
+  &::after {
+    content: attr(data-pos);
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    background: rgba(11,22,48,.85);
+    color: var(--gold);
+    border: 1px solid rgba(214,178,94,.5);
+    border-radius: 10px;
+    padding: .1rem .35rem;
+    font-size: .8rem;
+  }
 }
+
 
 /* ====== CARD (giro dentro de .card-inner) ====== */
 .card {
