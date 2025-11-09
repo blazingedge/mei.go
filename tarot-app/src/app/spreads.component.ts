@@ -596,6 +596,7 @@ async saveToHistory() {
 
 
 
+
 private getApproxFPS(): Promise<number> {
   let frames = 0;
   const start = performance.now();
@@ -778,23 +779,7 @@ private celticCross10() {
     return Array.from({length:9},(_,i)=>({position:i+1,x:baseX+rand(-6,6),y:baseY+rand(-6,6),r:rand(-8,8),z:20+i})); }
 
   // ---------- Historial ----------
-  saveToHistory(){
-    // guarda el estado actual (sin fecha)
-    const cards = this.isFree ? this.layers[this.activeLayer].cards : this.placed;
-    if(!cards.length) return;
 
-    const entry:HistoryEntry = {
-      id: crypto?.randomUUID?.() ?? String(Date.now()),
-      spreadId: this.spreadId,
-      spreadLabel: this.spreadLabel,
-      cards: JSON.parse(JSON.stringify(cards)),
-      ts: null, // ← se rellenará al abrir historial
-    };
-
-    const list = this.readHistory();
-    list.unshift(entry);
-    this.writeHistory(list);
-  }
 
   openHistory(){
     let list=this.readHistory();
