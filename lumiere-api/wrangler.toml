@@ -21,8 +21,9 @@ vars = {
 # =============================
 [vars]
 ENV = "production"
-CORS_ORIGINS = "https://mei-go.pages.dev"
+CORS_ORIGINS = "http://localhost:4200,https://mei-go.pages.dev"
 HF_TOKEN = "@HF_TOKEN"
+
 HF2_TOKEN = "@HF2_TOKEN"
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 

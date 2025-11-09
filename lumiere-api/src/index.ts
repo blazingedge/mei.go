@@ -68,12 +68,26 @@ function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
 
 
 app.use('*', cors({
-  origin: (origin, c) => getAllowedOrigin(origin, c.req, c.env),
+  origin: (origin, c) => {
+    const env = c.env as any;
+    const allowed = (env.CORS_ORIGINS ?? '').split(',').map(s => s.trim());
+    const requestOrigin = origin ?? '';
+    // Si el origin exacto está permitido → devuélvelo
+    if (allowed.includes(requestOrigin)) return requestOrigin;
+
+    // Si no, pero hay coincidencia parcial (localhost/127.0.0.1)
+    if (allowed.some(o => o.replace('127.0.0.1', 'localhost') === requestOrigin.replace('127.0.0.1', 'localhost')))
+      return requestOrigin;
+
+    // Si nada coincide, bloquea con el primero o '*'
+    return allowed[0] ?? '*';
+  },
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
-  credentials: false, // ⚠️ No necesitas true: no usas cookies ni sesiones
+  credentials: false,
   maxAge: 86400,
 }));
+
 
 
 // =====================
