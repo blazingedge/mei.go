@@ -685,7 +685,7 @@ app.post('/api/draw', async (c) => {
 app.post('/api/card-meaning', async (c) => {
   try {
     const { name, reversed } = await c.req.json<{ name: string; reversed: boolean }>();
-    const token = c.env.HF2_TOKEN || c.env.HF_TOKEN || '';
+    const token = c.env.HF_TOKEN; 
 
     if (!token) {
       return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
