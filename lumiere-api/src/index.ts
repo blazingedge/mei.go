@@ -70,23 +70,25 @@ function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
 app.use('*', cors({
   origin: (origin, c) => {
     const env = c.env as any;
-    const allowed = (env.CORS_ORIGINS ?? '').split(',').map(s => s.trim());
-    const requestOrigin = origin ?? '';
-    // Si el origin exacto está permitido → devuélvelo
-    if (allowed.includes(requestOrigin)) return requestOrigin;
+    const isDev = !env.ENV || env.ENV === 'development';
+    const allowed = isDev
+      ? ['http://localhost:4200', 'http://127.0.0.1:4200']
+      : ['https://mei-go.pages.dev'];
 
-    // Si no, pero hay coincidencia parcial (localhost/127.0.0.1)
-    if (allowed.some(o => o.replace('127.0.0.1', 'localhost') === requestOrigin.replace('127.0.0.1', 'localhost')))
-      return requestOrigin;
+    if (!origin) return allowed[0];
 
-    // Si nada coincide, bloquea con el primero o '*'
-    return allowed[0] ?? '*';
+    // Normaliza equivalencias 127.0.0.1 ↔ localhost
+    const normalized = origin.replace('127.0.0.1', 'localhost');
+    const ok = allowed.some(o => o.replace('127.0.0.1', 'localhost') === normalized);
+
+    return ok ? origin : allowed[0];
   },
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
   maxAge: 86400,
 }));
+
 
 
 
