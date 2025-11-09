@@ -1,16 +1,37 @@
+# =============================
+# 🌟 Lumiere API – Cloudflare Worker
+# =============================
 name = "lumiere-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# =============================
+# 🧩 Configuración local (wrangler dev)
+# =============================
 [dev]
 port = 8787
+vars = { 
+  ENV = "development",
+  CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200"
+}
 
+# =============================
+# 🧱 Variables globales de prod
+# =============================
 [vars]
-CORS_ORIGINS = "http://localhost:4200"
+ENV = "production"
+CORS_ORIGINS = "https://mei-go.pages.dev"
 HF_TOKEN = "@HF_TOKEN"
+HF2_TOKEN = "@HF2_TOKEN"
+FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 
+
+# =============================
+# 🔗 Base de datos D1 (Cloudflare)
+# =============================
 [[d1_databases]]
 binding = "DB"
 database_name = "lumiere_db"
 database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
+

@@ -6,7 +6,16 @@ import bcrypt from 'bcryptjs';
 // =====================
 // Config
 // =====================
-const ORIGINS = ['http://localhost:4200', 'http://127.0.0.1:4200'];
+
+const LOCAL_ORIGINS = [
+  'http://localhost:4200',
+  'http://127.0.0.1:4200',
+];
+
+const PROD_ORIGINS = [
+  'https://mei-go.pages.dev',
+];
+
 const CDN_BASE =
   'https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1'; // R2 público
 
@@ -22,16 +31,46 @@ const app = new Hono<{ Bindings: Bindings }>();
 // =====================
 // CORS (global) + OPTIONS
 // ===========
+// =====================
+// 🔍 ENV & UTILS
+// =====================
+
+
+
+
+function isDevEnv(req: Request, env: Env) {
+  return (
+    !env.ENV ||
+    env.ENV === 'development' ||
+    req.url.includes('127.0.0.1') ||
+    req.url.includes('localhost')
+  );
+}
+
+function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
+  const isDev = isDevEnv(req, env);
+  const allowed = isDev ? LOCAL_ORIGINS : PROD_ORIGINS;
+  return allowed.includes(origin || '') ? origin : allowed[0];
+}
 
 
 app.use('*', cors({
-  origin: (origin) => ORIGINS.includes(origin || '') ? origin : '*',
+  origin: (origin, c) => getAllowedOrigin(origin, c.req, c.env),
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: false, // ⚠️ No necesitas true: no usas cookies ni sesiones
   maxAge: 86400,
 }));
 
+
+// =====================
+// Roles de usuario
+// =====================
+const MASTER_USER = 'laife91@gmail.com';
+
+function isMasterUser(email?: string): boolean {
+  return email?.toLowerCase() === MASTER_USER;
+}
 
 
 
@@ -265,6 +304,31 @@ function stripAccentsLower(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+// util simple para verificar Firebase ID token (sin librerías pesadas)
+async function verifyFirebaseIdToken(idToken: string, apiKey: string) {
+  const resp = await fetch(
+    `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    }
+  );
+
+  if (!resp.ok) throw new Error('invalid_token');
+
+  const data = await resp.json();
+  const user = data?.users?.[0];
+  if (!user) throw new Error('invalid_token');
+
+  return {
+    uid: user.localId,
+    email: (user.email || '').toLowerCase(),
+  };
+}
+
+
+
 const RANK_FROM_WORD: Record<string, number> = {
   as: 1, uno: 1,
   dos: 2, tres: 3, cuatro: 4, cinco: 5,
@@ -334,6 +398,7 @@ function rankNameEs(rank: number): string {
 function suitEs(suit: Suit): string {
   return SUIT_ES[suit];
 }
+
 
 function fileToCardMeta(file: string, forcedSuit?: Suit): CardMeta | null {
   const parsed = parseMetaFromFilename(file);
@@ -419,73 +484,102 @@ function shuffle<T>(arr: T[], rnd: () => number) {
 // =====================
 app.post('/api/draw', async (c) => {
   try {
-    // 🧭 Intentamos leer el body (aunque venga vacío)
+    // ==============================
+    // 🔐 Autenticación Firebase
+    // ==============================
+    let uid = 'guest';
+    let email = 'guest';
+    let isMaster = false;
+
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (token) {
+      try {
+        const apiKey = c.env.FIREBASE_API_KEY || '';
+        const verified = await verifyFirebaseIdToken(token, apiKey);
+        uid = verified.uid;
+        email = verified.email;
+        isMaster = isMasterUser(email);
+      } catch (err) {
+        console.warn('⚠️ Token Firebase inválido:', err);
+      }
+    }
+
+    // ==============================
+    // 🧭 Cuerpo del request
+    // ==============================
     const body = (await c.req.json().catch(() => ({}))) as {
       spreadId?: string;
       seed?: string;
       allowsReversed?: boolean;
-      uid?: string;
       context?: string;
     };
-
-    console.log('[DRAW] Body recibido:', body);
 
     const spreadId = body.spreadId ?? 'celtic-cross-10';
     const allowsReversed = body.allowsReversed ?? true;
     const seed = body.seed ?? Date.now().toString();
-    const uid = body.uid ?? 'guest';
 
-    // 🧩 Detectar modo desarrollo
+    // ==============================
+    // ⚙️ Detectar modo y rol
+    // ==============================
     const isDev =
       !c.env.ENV ||
       c.env.ENV === 'development' ||
       c.req.url.includes('127.0.0.1') ||
       c.req.url.includes('localhost');
 
-    if (isDev) console.log('🧠 [DRAW] Modo desarrollo detectado: sin límite diario.');
+    if (isDev) console.log('🧠 [DRAW] Modo desarrollo detectado.');
+    if (isMaster) console.log('🌟 [DRAW] MasterUser detectado (sin límites).');
 
-    // 📅 Control de límite diario (solo si hay DB)
+    // ==============================
+    // 📅 Control de límite diario
+    // ==============================
     const today = new Date().toISOString().slice(0, 10);
-    const limit = 3;
+    const limit = 2;
+    let remaining = '∞';
 
-    if (!isDev && uid !== 'guest' && c.env.DB) {
+    if (!isDev && !isMaster && uid !== 'guest' && c.env.DB) {
       try {
-        const tableCheck = await c.env.DB.prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='draws';"
-        ).first();
+        await c.env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS draws (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uid TEXT NOT NULL,
+            email TEXT,
+            day TEXT NOT NULL,
+            spreadId TEXT,
+            context TEXT,
+            cards_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          );
+        `).run();
 
-        if (!tableCheck) {
-          console.warn('⚠️ [DRAW] La tabla "draws" no existe. Saltando control de límite.');
-        } else {
-          const row = await c.env.DB
-            .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
-            .bind(uid, today)
-            .first<{ count: number }>();
+        const row = await c.env.DB
+          .prepare('SELECT COUNT(*) as count FROM draws WHERE uid = ? AND day = ?')
+          .bind(uid, today)
+          .first<{ count: number }>();
 
-          const used = row?.count ?? 0;
-          if (used >= limit) {
-            console.warn(`[DRAW] Usuario ${uid} alcanzó el límite diario (${limit}).`);
-            return c.json(
-              { ok: false, error: 'limit_reached', message: 'Ya hiciste tus tiradas diarias.' },
-              429
-            );
-          }
-
-          await c.env.DB
-            .prepare('INSERT OR REPLACE INTO draws (uid, day, count) VALUES (?, ?, ?)')
-            .bind(uid, today, used + 1)
-            .run();
+        const used = row?.count ?? 0;
+        if (used >= limit) {
+          return c.json(
+            { ok: false, error: 'limit_reached', message: 'Has alcanzado tus 2 tiradas gratuitas de hoy.' },
+            429
+          );
         }
+
+        remaining = String(Math.max(limit - (used + 1), 0));
       } catch (dbErr) {
         console.error('💥 [DRAW] Error accediendo a la base D1:', dbErr);
       }
     }
 
-    // 🎯 Determinar cantidad de cartas según spread
+    // ==============================
+    // 🔮 Generar tirada
+    // ==============================
     const count =
-      spreadId === 'ppf-3' ? 3 : spreadId === 'free' ? 9 : 10;
+      spreadId === 'ppf-3' ? 3 :
+      spreadId === 'free'  ? 9 : 10;
 
-    // 🎲 RNG determinista basado en semilla
     const hashSeed = (s: string) =>
       [...s].reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
 
@@ -495,60 +589,64 @@ app.post('/api/draw', async (c) => {
         x ^= x << 13;
         x ^= x >>> 17;
         x ^= x << 5;
-        return ((x >>> 0) % 10000) / 10000; // rango [0, 1)
+        return ((x >>> 0) % 10000) / 10000;
       };
     }
 
     const seedNum = hashSeed(seed);
     const rnd = makeRNG(seedNum);
+    const reverseChance = 0.4;
 
-    // 🔮 Probabilidad de carta invertida (ajustable)
-    const reverseChance = 0.4; // 40% de invertidas
-
-    // 🔢 Crear IDs de cartas
     const ids = FULL_DECK.map((d) => d.id);
-
-    // 🔀 Barajar con Fisher–Yates determinista
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]];
     }
-
     const selected = ids.slice(0, count);
 
-    // 🃏 Generar objetos carta
     const cards = selected.map((id, i) => ({
       position: i + 1,
       cardId: id,
       reversed: allowsReversed ? rnd() < reverseChance : false,
     }));
 
-    console.log(`[DRAW] Tirada (${uid}) →`, cards.map((c) => `${c.cardId}${c.reversed ? '↓' : '↑'}`).join(', '));
+    console.log(`[DRAW] Tirada (${email}) →`, cards.map(c => `${c.cardId}${c.reversed ? '↓' : '↑'}`).join(', '));
 
+    // ==============================
+    // 💾 Guardar tirada (solo usuarios reales)
+    // ==============================
+    try {
+      if (c.env.DB && uid !== 'guest') {
+        await c.env.DB.prepare(`
+          INSERT INTO draws (uid, email, day, spreadId, context, cards_json)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `)
+        .bind(uid, email, today, spreadId, body.context || '', JSON.stringify(cards))
+        .run();
+      }
+    } catch (saveErr) {
+      console.warn('⚠️ [DRAW] No se pudo guardar la tirada:', saveErr);
+    }
+
+    // ==============================
     // ✅ Respuesta final
+    // ==============================
     return c.json({
       ok: true,
       spreadId,
       seed,
       uid,
+      email,
       cards,
-      remaining:
-        isDev || uid === 'guest'
-          ? '∞'
-          : limit -
-            ((await c.env.DB
-              .prepare('SELECT count FROM draws WHERE uid = ? AND day = ?')
-              .bind(uid, today)
-              .first<{ count: number }>())?.count ?? 0),
+      remaining,
     });
+
   } catch (err: any) {
     console.error('💥 [DRAW] Error interno:', err);
-    return c.json(
-      { ok: false, error: 'internal_error', message: String(err?.message ?? err) },
-      500
-    );
+    return c.json({ ok: false, error: 'internal_error', message: String(err?.message ?? err) }, 500);
   }
 });
+
 
 
 
@@ -764,7 +862,11 @@ if (interpretation.length < 300 || !/[.!?…]$/.test(interpretation.trim())) {
 
 
 
-
+function getUserRole(email?: string): 'master' | 'freemium' | 'guest' {
+  if (!email) return 'guest';
+  if (isMasterUser(email)) return 'master';
+  return 'freemium';
+}
 
 
 // =====================
@@ -778,5 +880,7 @@ app.get('/debug/env', (c) => {
     ENV: c.env.ENV || 'no definido',
   });
 });
+
+
 
 export default app;
