@@ -182,6 +182,19 @@ closeCardOverlay() {
     await this.loadDeckFirst();
     this.rebuildSlots();
     this.loadSpreadsInBackground();
+
+    const user = this.auth.currentUser;
+    if (user) {
+     const token = await user.getIdToken(true);
+     const res = await fetch(`${environment.API_BASE}/history/list`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+    const data = await res.json();
+  if (data.ok) {
+    this.historyList = data.history;
+    this.writeHistory(data.history); // sincroniza local
+  }
+}
   }
 
   private resolveBgInBackground(){
@@ -546,6 +559,40 @@ async hacerTirada() {
 }
 
 
+async saveToHistory() {
+  const cards = this.isFree ? this.layers[this.activeLayer].cards : this.placed;
+  if (!cards.length) return;
+
+  const entry: HistoryEntry = {
+    id: crypto?.randomUUID?.() ?? String(Date.now()),
+    spreadId: this.spreadId,
+    spreadLabel: this.spreadLabel,
+    cards: JSON.parse(JSON.stringify(cards)),
+    ts: Date.now(),
+  };
+
+  const list = this.readHistory();
+  list.unshift(entry);
+  this.writeHistory(list);
+
+  // 🌐 Si hay usuario logueado, sincroniza al backend
+  const user = this.auth.currentUser;
+  if (user) {
+    try {
+      const token = await user.getIdToken(true);
+      await fetch(`${environment.API_BASE}/history/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(entry),
+      });
+    } catch (err) {
+      console.warn('⚠️ No se pudo sincronizar historial remoto:', err);
+    }
+  }
+}
 
 
 

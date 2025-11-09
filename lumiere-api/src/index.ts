@@ -48,10 +48,23 @@ function isDevEnv(req: Request, env: Env) {
 }
 
 function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
+  if (!origin) return '*';
   const isDev = isDevEnv(req, env);
   const allowed = isDev ? LOCAL_ORIGINS : PROD_ORIGINS;
-  return allowed.includes(origin || '') ? origin : allowed[0];
+
+  // 🔹 Normaliza equivalentes localhost / 127.0.0.1
+  const normalized = origin.replace('127.0.0.1', 'localhost');
+  if (allowed.some(o => o.replace('127.0.0.1', 'localhost') === normalized)) {
+    return origin; // ✅ devuelve exactamente el origin que pidió el browser
+  }
+
+  // 🔹 En producción, solo devuelve la coincidencia exacta
+  if (!isDev && allowed.includes(origin)) return origin;
+
+  // 🔹 Fallback seguro (primero válido o '*')
+  return allowed[0] ?? '*';
 }
+
 
 
 app.use('*', cors({
@@ -573,6 +586,8 @@ app.post('/api/draw', async (c) => {
       }
     }
 
+    
+
     // ==============================
     // 🔮 Generar tirada
     // ==============================
@@ -697,6 +712,78 @@ Usa tono reflexivo y cálido, destacando los aspectos emocionales, prácticos y 
   }
 });
 
+// =====================
+// Historial remoto
+// =====================
+
+app.post('/api/history/save', async (c) => {
+  try {
+    const { id, spreadId, spreadLabel, cards, ts } = await c.req.json();
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    let uid = 'guest';
+    let email = 'guest';
+
+    if (token) {
+      try {
+        const apiKey = c.env.FIREBASE_API_KEY || '';
+        const verified = await verifyFirebaseIdToken(token, apiKey);
+        uid = verified.uid;
+        email = verified.email;
+      } catch {
+        return c.json({ ok: false, error: 'invalid_token' }, 401);
+      }
+    }
+
+    if (uid === 'guest') return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    await c.env.DB.prepare(`
+      INSERT INTO history (id, uid, spreadId, spreadLabel, cards_json, ts)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, uid, spreadId, spreadLabel, JSON.stringify(cards), ts ?? Date.now()).run();
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('💥 /api/history/save error:', err);
+    return c.json({ ok: false, message: String(err) }, 500);
+  }
+});
+
+app.get('/api/history/list', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    let uid = 'guest';
+    if (token) {
+      try {
+        const apiKey = c.env.FIREBASE_API_KEY || '';
+        const verified = await verifyFirebaseIdToken(token, apiKey);
+        uid = verified.uid;
+      } catch {
+        return c.json({ ok: false, error: 'invalid_token' }, 401);
+      }
+    }
+
+    const rows = await c.env.DB.prepare(
+      'SELECT id, spreadId, spreadLabel, cards_json, ts FROM history WHERE uid = ? ORDER BY ts DESC LIMIT 50'
+    ).bind(uid).all();
+
+    const list = rows.results?.map(r => ({
+      id: r.id,
+      spreadId: r.spreadId,
+      spreadLabel: r.spreadLabel,
+      cards: JSON.parse(r.cards_json || '[]'),
+      ts: Number(r.ts)
+    })) ?? [];
+
+    return c.json({ ok: true, history: list });
+  } catch (err) {
+    console.error('💥 /api/history/list error:', err);
+    return c.json({ ok: false, message: String(err) }, 500);
+  }
+});
 
 
 
