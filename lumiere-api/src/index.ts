@@ -682,8 +682,9 @@ app.post('/api/draw', async (c) => {
 
 
 
+
 // =====================
-// 🔮 /api/card-meaning — Significado de una carta individual (Hugging Face)
+// 🔮 /api/card-meaning — Significado individual de carta (Hugging Face API)
 // =====================
 app.post('/api/card-meaning', async (c) => {
   try {
@@ -695,26 +696,24 @@ app.post('/api/card-meaning', async (c) => {
       return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
     }
 
-    // 🪄 Prompt limpio y expresivo
+    // 🪄 Prompt expresivo
     const prompt = `
-Eres un guía espiritual celta. Explica brevemente el significado profundo de la carta "${name}"
+Eres un guía espiritual celta. Explica el significado profundo de la carta "${name}"
 ${reversed ? '(invertida)' : '(derecha)'} en una lectura de tarot.
-Habla de manera inspiradora y clara, tocando los planos **emocional**, **práctico** y **espiritual**.
-Usa tono cálido, sin tecnicismos, y termina con una frase de aliento o reflexión positiva.
+Describe su mensaje en los planos **emocional**, **práctico** y **espiritual**,
+y concluye con una breve reflexión esperanzadora.
 `;
 
-    // 🌐 Llamada al endpoint moderno de Hugging Face
-    const hfResponse = await fetch('https://api-inference.huggingface.co/v1/chat/completions', {
+    // 🌐 Llamada a Hugging Face (endpoint universal)
+    const hfResponse = await fetch('https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/Llama-3.1-8B-Instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 400,
-        temperature: 0.8,
+        inputs: prompt,
+        parameters: { temperature: 0.8, max_new_tokens: 400 },
       }),
     });
 
@@ -724,20 +723,21 @@ Usa tono cálido, sin tecnicismos, y termina con una frase de aliento o reflexi�
       return c.json({ ok: false, meaning: `Error HF ${hfResponse.status}: ${errText}` }, hfResponse.status);
     }
 
-    // 🧠 Interpreta respuesta
+    // 🧠 Procesar respuesta
     const hfData = await hfResponse.json();
     const meaning =
-      hfData?.choices?.[0]?.message?.content ??
+      hfData?.[0]?.generated_text ??
       hfData?.generated_text ??
       'No se recibió respuesta del modelo.';
 
-    console.log(`✅ [CARD-MEANING] ${name}:`, meaning.slice(0, 120) + '...');
+    console.log(`✅ [CARD-MEANING] ${name}:`, meaning.slice(0, 100) + '...');
     return c.json({ ok: true, meaning });
   } catch (err: any) {
     console.error('💥 [CARD-MEANING] Error interno:', err);
     return c.json({ ok: false, meaning: 'Error interno: ' + (err?.message || 'desconocido') }, 500);
   }
 });
+
 
 
 // =====================
@@ -872,6 +872,7 @@ app.get('/cdn/*', async (c) => {
 // =====================
 // 🔮 /api/interpret — Interpretación completa con Llama 3.1 (Hugging Face)
 // =====================
+
 app.post('/api/interpret', async (c) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -888,7 +889,7 @@ app.post('/api/interpret', async (c) => {
     if (!cards?.length) return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
 
     // ------------------------------
-    // 🪄 Prepara prompt
+    // 🪄 Preparar prompt
     // ------------------------------
     const formattedCards = cards.map((c) => {
       const name = cardNamesEs[c.name] || c.name;
@@ -904,7 +905,7 @@ app.post('/api/interpret', async (c) => {
 
     const prompt = `
 Eres un guía espiritual celta con sabiduría ancestral y una voz cálida.
-Interpreta el tarot con equilibrio, empatía y profundidad.
+Interpreta esta lectura con empatía, profundidad y conexión espiritual.
 
 🧭 Tipo de tirada: ${spreadLabel}
 💫 Contexto del consultante: "${context || 'Sin contexto proporcionado'}"
@@ -912,25 +913,24 @@ Interpreta el tarot con equilibrio, empatía y profundidad.
 Cartas extraídas:
 ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Da una lectura reflexiva y espiritual que explique el sentido de las cartas en conjunto,
-sin enumerarlas secamente, sino hilando una historia coherente según el tipo de tirada.
-Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanzador.
+Desarrolla una interpretación que conecte los significados de las cartas entre sí.
+No las enumeres una por una, sino entreteje una historia coherente que refleje
+el proceso interior del consultante. Usa **negritas** para destacar los ejes espirituales.
+Termina con un cierre positivo o inspirador.
 `;
 
     // ------------------------------
-    // 🌐 Llama a Hugging Face API
+    // 🌐 Llamar al modelo de Hugging Face
     // ------------------------------
-    const res = await fetch('https://api-inference.huggingface.co/v1/chat/completions', {
+    const res = await fetch('https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/Llama-3.1-8B-Instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1600,
-        temperature: 0.85,
+        inputs: prompt,
+        parameters: { temperature: 0.85, max_new_tokens: 1600 },
       }),
       signal: controller.signal,
     });
@@ -943,9 +943,12 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
 
+    // ------------------------------
+    // 🧩 Procesar resultado
+    // ------------------------------
     const data = await res.json();
     const interpretation =
-      data?.choices?.[0]?.message?.content ??
+      data?.[0]?.generated_text ??
       data?.generated_text ??
       'No se recibió respuesta del modelo.';
 
@@ -956,6 +959,7 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
