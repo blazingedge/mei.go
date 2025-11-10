@@ -866,9 +866,9 @@ app.get('/cdn/*', async (c) => {
 // =====================
 
 app.post('/api/interpret', async (c) => {
-
-   const controller = new AbortController();
+  const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
+
   try {
     const { context, cards, spreadId } = await c.req.json<{
       context: string;
@@ -878,8 +878,9 @@ app.post('/api/interpret', async (c) => {
 
     const token = c.env.HF_TOKEN;
     if (!token) {
-      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN/HF2_TOKEN' }, 401);
+      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
     }
+
     if (!cards?.length) {
       return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
     }
@@ -890,8 +891,7 @@ app.post('/api/interpret', async (c) => {
       return `${name}${c.reversed ? ' (invertida)' : ''}`;
     });
 
-    // Espera explícita (simula debounce de red o carga lenta)
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 400)); // pequeña pausa estética
 
     // 🔮 Tipo de tirada
     const spreadLabel =
@@ -911,53 +911,92 @@ ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
 Da una lectura reflexiva y espiritual que explique el sentido de las cartas en conjunto,
 sin enumerarlas secamente, sino hilando una historia coherente según el tipo de tirada.
-Usa negritas para destacar ideas clave y anima al usuario con tono esperanzador.
+Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanzador.
 `;
 
-    const res = await fetch('https://router.huggingface.co/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'meta-llama/Llama-3.1-8B-Instruct',
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 1600,
-    temperature: 0.85,
-  }),
-  signal: controller.signal,
-}).catch(err => {
-  console.error('⚠️ Timeout o error de red:', err);
-  throw new Error('Timeout en Hugging Face');
-});
-clearTimeout(timeout);
+    // ==============================
+    // 🔮 1. Primer intento: Router Hugging Face
+    // ==============================
+    let res = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/Llama-3.1-8B-Instruct',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1600,
+        temperature: 0.85,
+      }),
+      signal: controller.signal,
+    }).catch(err => {
+      console.error('⚠️ Timeout o error de red (router):', err);
+      throw new Error('Timeout en Hugging Face (router)');
+    });
+
+    clearTimeout(timeout);
+
+    // ==============================
+    // 🔁 Si el router devuelve 401/403 → usar API Inference directa
+    // ==============================
+    if (res.status === 401 || res.status === 403) {
+      console.warn(`⚠️ Token rechazado por router (${res.status}), intentando fallback con api-inference...`);
+
+      res = await fetch('https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: { max_new_tokens: 1600, temperature: 0.85 },
+        }),
+      });
+    }
 
     if (!res.ok) {
       const text = await res.text();
       console.error('❌ Error HF:', res.status, text);
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
-    
 
-    const data = await res.json();
-    const interpretation = data?.choices?.[0]?.message?.content ?? 'No se recibió respuesta del modelo.';
+    // ==============================
+    // 📜 Procesar respuesta (router o inference)
+    // ==============================
+    let interpretation = '';
+
+    try {
+      const data = await res.json();
+
+      if (data?.choices?.[0]?.message?.content) {
+        interpretation = data.choices[0].message.content;
+      } else if (Array.isArray(data) && data[0]?.generated_text) {
+        interpretation = data[0].generated_text;
+      } else {
+        interpretation = JSON.stringify(data);
+      }
+    } catch (err) {
+      console.warn('⚠️ Error parseando JSON de Hugging Face:', err);
+      interpretation = 'No se recibió respuesta legible del modelo.';
+    }
+
+    // ✨ Ajuste de seguridad
+    if (interpretation.length < 100) {
+      console.warn('⚠️ Interpretación demasiado corta, posible truncamiento.');
+    }
 
     console.log('✅ Interpretación generada:', interpretation.slice(0, 150) + '...');
 
-    // Detecta posible truncamiento si termina sin punto o está muy corta
-if (interpretation.length < 300 || !/[.!?…]$/.test(interpretation.trim())) {
-  console.warn('⚠️ Interpretación parece incompleta, forzando espera extra');
-  await new Promise(r => setTimeout(r, 800)); // 🕐 pequeño delay
-}
-
-
     return c.json({ ok: true, interpretation });
+
   } catch (err: any) {
     console.error('💥 [INTERPRET] Error interno:', err);
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
