@@ -857,14 +857,9 @@ app.get('/cdn/*', async (c) => {
 
 
 
-
-
-
 // =====================
+// 🔮 /api/interpret — Interpretación con Llama 3.1 en Hugging Face
 // =====================
-// Interpretacion de AI
-// =====================
-
 app.post('/api/interpret', async (c) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -877,27 +872,23 @@ app.post('/api/interpret', async (c) => {
     }>();
 
     const token = c.env.HF_TOKEN;
-    if (!token) {
-      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
-    }
+    if (!token) return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
+    if (!cards?.length) return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
 
-    if (!cards?.length) {
-      return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
-    }
-
-    // 🔮 Normalizar nombres y asegurar que estén todas las cartas antes de interpretar
-    const formattedCards = cards.map(c => {
+    // ------------------------------
+    // 🪄 Prepara prompt
+    // ------------------------------
+    const formattedCards = cards.map((c) => {
       const name = cardNamesEs[c.name] || c.name;
       return `${name}${c.reversed ? ' (invertida)' : ''}`;
     });
 
-    await new Promise(r => setTimeout(r, 400)); // pequeña pausa estética
-
-    // 🔮 Tipo de tirada
     const spreadLabel =
-      spreadId === 'celtic-cross-10' ? 'Cruz Celta (10 cartas)' :
-      spreadId === 'ppf-3' ? 'Pasado · Presente · Futuro' :
-      'Tirada libre';
+      spreadId === 'celtic-cross-10'
+        ? 'Cruz Celta (10 cartas)'
+        : spreadId === 'ppf-3'
+        ? 'Pasado · Presente · Futuro'
+        : 'Tirada libre';
 
     const prompt = `
 Eres un guía espiritual celta con sabiduría ancestral y una voz cálida.
@@ -914,10 +905,10 @@ sin enumerarlas secamente, sino hilando una historia coherente según el tipo de
 Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanzador.
 `;
 
-    // ==============================
-    // 🔮 1. Primer intento: Router Hugging Face
-    // ==============================
-    let res = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    // ------------------------------
+    // 🌐 Llama a Hugging Face API (modelo remoto)
+    // ------------------------------
+    const res = await fetch('https://api-inference.huggingface.co/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -930,66 +921,26 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
         temperature: 0.85,
       }),
       signal: controller.signal,
-    }).catch(err => {
-      console.error('⚠️ Timeout o error de red (router):', err);
-      throw new Error('Timeout en Hugging Face (router)');
     });
 
     clearTimeout(timeout);
 
-    // ==============================
-    // 🔁 Si el router devuelve 401/403 → usar API Inference directa
-    // ==============================
-    if (res.status === 401 || res.status === 403) {
-      console.warn(`⚠️ Token rechazado por router (${res.status}), intentando fallback con api-inference...`);
-
-      const res = await fetch('https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1', {
-
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { max_new_tokens: 1600, temperature: 0.85 },
-        }),
-      });
-    }
-
     if (!res.ok) {
       const text = await res.text();
-      console.error('❌ Error HF:', res.status, text);
+      console.error('❌ Error Hugging Face:', res.status, text);
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
 
-    // ==============================
-    // 📜 Procesar respuesta (router o inference)
-    // ==============================
-    let interpretation = '';
+    // ------------------------------
+    // 📜 Procesa la respuesta
+    // ------------------------------
+    const data = await res.json();
+    const interpretation =
+      data?.choices?.[0]?.message?.content ??
+      data?.generated_text ??
+      JSON.stringify(data);
 
-    try {
-      const data = await res.json();
-
-      if (data?.choices?.[0]?.message?.content) {
-        interpretation = data.choices[0].message.content;
-      } else if (Array.isArray(data) && data[0]?.generated_text) {
-        interpretation = data[0].generated_text;
-      } else {
-        interpretation = JSON.stringify(data);
-      }
-    } catch (err) {
-      console.warn('⚠️ Error parseando JSON de Hugging Face:', err);
-      interpretation = 'No se recibió respuesta legible del modelo.';
-    }
-
-    // ✨ Ajuste de seguridad
-    if (interpretation.length < 100) {
-      console.warn('⚠️ Interpretación demasiado corta, posible truncamiento.');
-    }
-
-    console.log('✅ Interpretación generada:', interpretation.slice(0, 150) + '...');
-
+    console.log('✅ Interpretación generada:', interpretation.slice(0, 200) + '...');
     return c.json({ ok: true, interpretation });
 
   } catch (err: any) {
@@ -997,6 +948,7 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
