@@ -709,31 +709,24 @@ app.post('/api/draw', async (c) => {
 
 
 // =====================
-// 🔮 /api/card-meaning — Significado individual de carta (Hugging Face API)
-// =====================
-// =====================
 // 🔮 /api/card-meaning — Significado de carta individual (Hugging Face nuevo router)
 // =====================
 app.post('/api/card-meaning', async (c) => {
   try {
-    const { name, reversed } = await c.req.json<{ name: string; reversed: boolean }>();
+    const { name, reversed } = await c.req.json<{ name: string; reversed?: boolean }>();
     const token = c.env.HF_TOKEN;
-
-    if (!token) {
-      console.error('❌ HF_TOKEN no definido en el entorno');
-      return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
-    }
+    if (!token)
+      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
 
     const prompt = `
-Eres un guía espiritual celta. Explica el significado profundo de la carta "${name}"
-${reversed ? '(invertida)' : '(derecha)'} en una lectura de tarot.
-Describe su mensaje en los planos **emocional**, **práctico** y **espiritual**,
-y concluye con una reflexión esperanzadora y poética.
+Eres un intérprete experto en tarot celta.
+Explica el significado simbólico de la carta **${name}**${reversed ? ' (invertida)' : ''}.
+Usa un tono reflexivo y espiritual, sin emojis ni autopromoción.
+Responde en formato **Markdown** con 2 o 3 párrafos cortos.
 `;
 
-    // 🌐 Nuevo endpoint router.huggingface.co
-    const hfResponse = await fetch(
-      'https://router.huggingface.co/hf-inference/models/meta-llama/Meta-Llama-3-8B-Instruct',
+    const response = await fetch(
+      'https://router.huggingface.co/featherless-ai/v1/completions',
       {
         method: 'POST',
         headers: {
@@ -741,37 +734,37 @@ y concluye con una reflexión esperanzadora y poética.
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: prompt,
-          parameters: {
-            max_new_tokens: 400,
-            temperature: 0.8,
-          },
+          model: 'meta-llama/Llama-3.1-8B-Instruct',
+          prompt,
+          max_tokens: 500,
+          temperature: 0.7,
         }),
       }
     );
 
-    if (!hfResponse.ok) {
-      const errText = await hfResponse.text();
-      console.error('❌ HF Error:', hfResponse.status, errText);
-      return c.json(
-        { ok: false, meaning: `Error HF ${hfResponse.status}: ${errText}` },
-        hfResponse.status
-      );
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('❌ Error HF:', response.status, text);
+      return c.json({ ok: false, message: `Error HF ${response.status}: ${text}` });
     }
 
-    const hfData = await hfResponse.json();
-    const meaning =
-      hfData?.[0]?.generated_text ??
-      hfData?.generated_text ??
-      'No se recibió respuesta del modelo.';
+    const result = await response.json();
+    let meaning = result?.choices?.[0]?.text?.trim() || '';
 
-    console.log(`✅ [CARD-MEANING] ${name}:`, meaning.slice(0, 100) + '...');
+    meaning = meaning
+      .replace(/(¡?Gracias[^]+$)/i, '')
+      .replace(/(Sígueme[^]+$)/i, '')
+      .replace(/\*{3,}/g, '**');
+
     return c.json({ ok: true, meaning });
   } catch (err: any) {
     console.error('💥 [CARD-MEANING] Error interno:', err);
-    return c.json({ ok: false, meaning: 'Error interno: ' + (err?.message || 'desconocido') }, 500);
+    return c.json({ ok: false, message: err?.message || String(err) }, 500);
   }
 });
+
+
+
 
 
 
@@ -905,9 +898,6 @@ app.get('/cdn/*', async (c) => {
 
 
 
-// =====================
-// 🔮 /api/interpret — Interpretación completa con Llama 3.1 (Hugging Face)
-// =====================
 
 // =====================
 // 🌙 /api/interpret — Interpretación completa de tirada (Hugging Face nuevo router)
@@ -924,8 +914,8 @@ app.post('/api/interpret', async (c) => {
     }>();
 
     const token = c.env.HF_TOKEN;
-    if (!token) return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
-    if (!cards?.length) return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
+    if (!token)
+      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
 
     const formattedCards = cards.map((c) => {
       const name = cardNamesEs[c.name] || c.name;
@@ -939,24 +929,31 @@ app.post('/api/interpret', async (c) => {
         ? 'Pasado · Presente · Futuro'
         : 'Tirada libre';
 
+    // 💡 system prompt para guiar tono y formato
     const prompt = `
-Eres un guía espiritual celta con sabiduría ancestral.
-Interpreta esta tirada de tarot de forma cálida y profunda.
+Eres un guía espiritual celta con tono poético pero conciso.
+Tu estilo es reflexivo y simbólico, sin emojis, hashtags ni autopromoción.
+Usa formato **Markdown**: títulos con "**", frases importantes en **negrita**, sin exagerar.
+Habla en párrafos cortos (máx 3 líneas cada uno).
+
+Interpreta esta tirada de tarot con profundidad y esperanza:
 
 🧭 Tipo de tirada: ${spreadLabel}
-💫 Contexto del consultante: "${context || 'Sin contexto proporcionado'}"
+💫 Contexto del consultante: "${context || 'Sin contexto'}"
 
 Cartas extraídas:
 ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Elabora una interpretación unificada, como si narraras una historia
-que conecte los significados de las cartas y su enseñanza espiritual.
-Usa **negritas** para ideas clave y termina con una frase de esperanza o propósito.
+Tu misión:
+1. Explica el mensaje central de la tirada.
+2. Conecta las cartas en una historia coherente.
+3. Cierra con una frase de esperanza o propósito.
+
+Escribe solo la interpretación. No incluyas redes sociales, ni despedidas, ni emojis.
 `;
 
-    // ✅ Nuevo router oficial de Hugging Face
-    const res = await fetch(
-      'https://router.huggingface.co/hf-inference/models/meta-llama/Meta-Llama-3-8B-Instruct',
+    const response = await fetch(
+      'https://router.huggingface.co/featherless-ai/v1/completions',
       {
         method: 'POST',
         headers: {
@@ -964,11 +961,10 @@ Usa **negritas** para ideas clave y termina con una frase de esperanza o propós
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: prompt,
-          parameters: {
-            temperature: 0.85,
-            max_new_tokens: 1600,
-          },
+          model: 'meta-llama/Llama-3.1-8B-Instruct',
+          prompt,
+          max_tokens: 1500,
+          temperature: 0.75,
         }),
         signal: controller.signal,
       }
@@ -976,25 +972,33 @@ Usa **negritas** para ideas clave y termina con una frase de esperanza o propós
 
     clearTimeout(timeout);
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error('❌ Error Hugging Face:', res.status, text);
-      return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('❌ Error HF:', response.status, text);
+      return c.json({ ok: false, message: `Error HF ${response.status}: ${text}` });
     }
 
-    const data = await res.json();
-    const interpretation =
-      data?.[0]?.generated_text ??
-      data?.generated_text ??
-      'No se recibió respuesta del modelo.';
+    const result = await response.json();
+    let interpretation = result?.choices?.[0]?.text?.trim() || '';
 
-    console.log('✅ Interpretación generada:', interpretation.slice(0, 180) + '...');
+    // ✂️ Post-procesado: elimina firmas o repeticiones
+    interpretation = interpretation
+      .replace(/(¡?Gracias[^]+$)/i, '') // corta despedidas
+      .replace(/(\*{2,}.*Licencia.*$)/i, '')
+      .replace(/\*{3,}/g, '**')
+      .replace(/(_{2,})/g, '')
+      .replace(/[\*\_]{2,}\s*$/, '');
+
     return c.json({ ok: true, interpretation });
   } catch (err: any) {
-    console.error('💥 [INTERPRET] Error interno:', err);
-    return c.json({ ok: false, message: String(err?.message || err) }, 500);
+    console.error('💥 [INTERPRET ERROR]:', err);
+    return c.json({ ok: false, message: err?.message || String(err) });
   }
 });
+
+
+
+
 
 
 

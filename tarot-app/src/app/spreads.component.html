@@ -144,37 +144,38 @@
 
     <!-- HISTORIAL -->
     @if (showHistory) {
-      <div class="history-modal" (click)="closeHistory()">
-        <div class="history-card" (click)="$event.stopPropagation()">
-          <header>
-            <h4>Historial</h4>
-            <button type="button" class="close" (click)="closeHistory()">×</button>
-          </header>
+      <div class="history-modal" [class.visible]="showHistory" (click)="closeHistory()">
+  <div class="history-card" (click)="$event.stopPropagation()">
+    <header>
+      <h4>Historial</h4>
+      <button type="button" class="close" (click)="closeHistory()">×</button>
+    </header>
 
-          @if (!historyList.length) {
-            <p class="muted">Aún no hay tiradas guardadas.</p>
-          } @else {
-            <ul class="history-list">
-              @for (h of historyList; track h.id) {
-                <li>
-                  <div class="meta">
-                    <strong>{{ h.spreadLabel }}</strong>
-                    <small *ngIf="h.ts">· {{ formatTs(h.ts!) }}</small>
-                  </div>
-                  <div class="actions">
-                    <button type="button" (click)="loadHistory(h)">Cargar</button>
-                    <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
-                  </div>
-                </li>
-              }
-            </ul>
-          }
+    <ng-container *ngIf="historyList?.length; else emptyHistory">
+      <ul class="history-list">
+        <li *ngFor="let h of historyList; trackBy: trackById">
+          <div class="meta">
+            <strong>{{ h.spreadLabel }}</strong>
+            <small *ngIf="h.ts">· {{ formatTs(h.ts!) }}</small>
+          </div>
+          <div class="actions">
+            <button type="button" (click)="loadHistory(h)">Cargar</button>
+            <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
+          </div>
+        </li>
+      </ul>
+    </ng-container>
 
-          <footer>
-            <button type="button" (click)="closeHistory()">Cerrar</button>
-          </footer>
-        </div>
-      </div>
+    <ng-template #emptyHistory>
+      <p class="muted">Aún no hay tiradas guardadas.</p>
+    </ng-template>
+
+    <footer>
+      <button type="button" (click)="closeHistory()">Cerrar</button>
+    </footer>
+  </div>
+</div>
+
     }
   </main>
 
