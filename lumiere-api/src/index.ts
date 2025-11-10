@@ -876,7 +876,7 @@ app.post('/api/interpret', async (c) => {
       spreadId?: string;
     }>();
 
-    const token = c.env.HF2_TOKEN || c.env.HF_TOKEN || "";
+    const token = c.env.HF_TOKEN;
     if (!token) {
       return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN/HF2_TOKEN' }, 401);
     }
