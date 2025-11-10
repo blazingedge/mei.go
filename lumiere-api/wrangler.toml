@@ -22,7 +22,6 @@ ENV = "production"
 # Orígenes permitidos tanto en local como en Pages
 CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://6026a26f.mei-go.pages.dev"
 
-HF_TOKEN = "@HF_TOKEN"
 
 
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
