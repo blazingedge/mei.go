@@ -682,22 +682,29 @@ app.post('/api/draw', async (c) => {
 
 
 
+// =====================
+// 🔮 /api/card-meaning — Significado de una carta individual (Hugging Face)
+// =====================
 app.post('/api/card-meaning', async (c) => {
   try {
     const { name, reversed } = await c.req.json<{ name: string; reversed: boolean }>();
-    const token = c.env.HF_TOKEN; 
+    const token = c.env.HF_TOKEN;
 
     if (!token) {
+      console.error('❌ HF_TOKEN no definido en el entorno');
       return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
     }
 
+    // 🪄 Prompt limpio y expresivo
     const prompt = `
 Eres un guía espiritual celta. Explica brevemente el significado profundo de la carta "${name}"
 ${reversed ? '(invertida)' : '(derecha)'} en una lectura de tarot.
-Usa tono reflexivo y cálido, destacando los aspectos emocionales, prácticos y espirituales.
+Habla de manera inspiradora y clara, tocando los planos **emocional**, **práctico** y **espiritual**.
+Usa tono cálido, sin tecnicismos, y termina con una frase de aliento o reflexión positiva.
 `;
 
-    const hfResponse = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    // 🌐 Llamada al endpoint moderno de Hugging Face
+    const hfResponse = await fetch('https://api-inference.huggingface.co/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -706,7 +713,7 @@ Usa tono reflexivo y cálido, destacando los aspectos emocionales, prácticos y 
       body: JSON.stringify({
         model: 'meta-llama/Llama-3.1-8B-Instruct',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0.8,
       }),
     });
@@ -714,19 +721,24 @@ Usa tono reflexivo y cálido, destacando los aspectos emocionales, prácticos y 
     if (!hfResponse.ok) {
       const errText = await hfResponse.text();
       console.error('❌ HF Error:', hfResponse.status, errText);
-      return c.json({ ok: false, meaning: `Error HF ${hfResponse.status}` }, hfResponse.status);
+      return c.json({ ok: false, meaning: `Error HF ${hfResponse.status}: ${errText}` }, hfResponse.status);
     }
 
-    // 👇 ESTA ES LA ÚNICA RESPUESTA JSON VÁLIDA QUE ENVÍAS
+    // 🧠 Interpreta respuesta
     const hfData = await hfResponse.json();
-    const meaning = hfData?.choices?.[0]?.message?.content ?? 'No se recibió respuesta.';
-    return c.json({ ok: true, meaning });
+    const meaning =
+      hfData?.choices?.[0]?.message?.content ??
+      hfData?.generated_text ??
+      'No se recibió respuesta del modelo.';
 
+    console.log(`✅ [CARD-MEANING] ${name}:`, meaning.slice(0, 120) + '...');
+    return c.json({ ok: true, meaning });
   } catch (err: any) {
-    console.error('💥 Error /api/card-meaning:', err);
+    console.error('💥 [CARD-MEANING] Error interno:', err);
     return c.json({ ok: false, meaning: 'Error interno: ' + (err?.message || 'desconocido') }, 500);
   }
 });
+
 
 // =====================
 // Historial remoto
@@ -858,7 +870,7 @@ app.get('/cdn/*', async (c) => {
 
 
 // =====================
-// 🔮 /api/interpret — Interpretación con Llama 3.1 en Hugging Face
+// 🔮 /api/interpret — Interpretación completa con Llama 3.1 (Hugging Face)
 // =====================
 app.post('/api/interpret', async (c) => {
   const controller = new AbortController();
@@ -906,7 +918,7 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
 `;
 
     // ------------------------------
-    // 🌐 Llama a Hugging Face API (modelo remoto)
+    // 🌐 Llama a Hugging Face API
     // ------------------------------
     const res = await fetch('https://api-inference.huggingface.co/v1/chat/completions', {
       method: 'POST',
@@ -931,23 +943,20 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
 
-    // ------------------------------
-    // 📜 Procesa la respuesta
-    // ------------------------------
     const data = await res.json();
     const interpretation =
       data?.choices?.[0]?.message?.content ??
       data?.generated_text ??
-      JSON.stringify(data);
+      'No se recibió respuesta del modelo.';
 
-    console.log('✅ Interpretación generada:', interpretation.slice(0, 200) + '...');
+    console.log('✅ Interpretación generada:', interpretation.slice(0, 180) + '...');
     return c.json({ ok: true, interpretation });
-
   } catch (err: any) {
     console.error('💥 [INTERPRET] Error interno:', err);
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
