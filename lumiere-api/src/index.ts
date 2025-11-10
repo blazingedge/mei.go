@@ -470,11 +470,36 @@ const FULL_DECK = buildDeckFromFiles();
 // =====================
 app.get('/api/spreads', (c) =>
   c.json([
-    { id: 'celtic-cross-10', name: 'Cruz Celta (10)', positions: Array.from({ length: 10 }, (_, i) => ({ index: i + 1, label: `Pos ${i + 1}`, allowsReversed: true })) },
-    { id: 'ppf-3', name: 'Pasado · Presente · Futuro', positions: [1, 2, 3].map((i) => ({ index: i, label: `${i}`, allowsReversed: true })) },
-    { id: 'free', name: 'Libre (9)', positions: Array.from({ length: 9 }, (_, i) => ({ index: i + 1, label: `${i + 1}`, allowsReversed: true })) },
+    {
+      id: 'celtic-cross-10',
+      name: 'Cruz Celta (10)',
+      positions: Array.from({ length: 10 }, (_, i) => ({
+        index: i + 1,
+        label: `Pos ${i + 1}`,
+        allowsReversed: true,
+      })),
+    },
+    {
+      id: 'ppf-3',
+      name: 'Pasado · Presente · Futuro',
+      positions: [1, 2, 3].map((i) => ({
+        index: i,
+        label: `${i}`,
+        allowsReversed: true,
+      })),
+    },
+    {
+      id: 'free',
+      name: 'Libre (9)',
+      positions: Array.from({ length: 9 }, (_, i) => ({
+        index: i + 1,
+        label: `${i + 1}`,
+        allowsReversed: true,
+      })),
+    },
   ])
 );
+
 
 // =====================
 // Deck (front)
@@ -686,6 +711,9 @@ app.post('/api/draw', async (c) => {
 // =====================
 // 🔮 /api/card-meaning — Significado individual de carta (Hugging Face API)
 // =====================
+// =====================
+// 🔮 /api/card-meaning — Significado de carta individual (Hugging Face nuevo router)
+// =====================
 app.post('/api/card-meaning', async (c) => {
   try {
     const { name, reversed } = await c.req.json<{ name: string; reversed: boolean }>();
@@ -696,34 +724,41 @@ app.post('/api/card-meaning', async (c) => {
       return c.json({ ok: false, meaning: 'Falta el token del modelo.' }, 401);
     }
 
-    // 🪄 Prompt expresivo
     const prompt = `
 Eres un guía espiritual celta. Explica el significado profundo de la carta "${name}"
 ${reversed ? '(invertida)' : '(derecha)'} en una lectura de tarot.
 Describe su mensaje en los planos **emocional**, **práctico** y **espiritual**,
-y concluye con una breve reflexión esperanzadora.
+y concluye con una reflexión esperanzadora y poética.
 `;
 
-    // 🌐 Llamada a Hugging Face (endpoint universal)
-    const hfResponse = await fetch('https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: { temperature: 0.8, max_new_tokens: 400 },
-      }),
-    });
+    // 🌐 Nuevo endpoint router.huggingface.co
+    const hfResponse = await fetch(
+      'https://router.huggingface.co/hf-inference/models/meta-llama/Meta-Llama-3-8B-Instruct',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            max_new_tokens: 400,
+            temperature: 0.8,
+          },
+        }),
+      }
+    );
 
     if (!hfResponse.ok) {
       const errText = await hfResponse.text();
       console.error('❌ HF Error:', hfResponse.status, errText);
-      return c.json({ ok: false, meaning: `Error HF ${hfResponse.status}: ${errText}` }, hfResponse.status);
+      return c.json(
+        { ok: false, meaning: `Error HF ${hfResponse.status}: ${errText}` },
+        hfResponse.status
+      );
     }
 
-    // 🧠 Procesar respuesta
     const hfData = await hfResponse.json();
     const meaning =
       hfData?.[0]?.generated_text ??
@@ -737,6 +772,7 @@ y concluye con una breve reflexión esperanzadora.
     return c.json({ ok: false, meaning: 'Error interno: ' + (err?.message || 'desconocido') }, 500);
   }
 });
+
 
 
 
@@ -873,6 +909,9 @@ app.get('/cdn/*', async (c) => {
 // 🔮 /api/interpret — Interpretación completa con Llama 3.1 (Hugging Face)
 // =====================
 
+// =====================
+// 🌙 /api/interpret — Interpretación completa de tirada (Hugging Face nuevo router)
+// =====================
 app.post('/api/interpret', async (c) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -888,9 +927,6 @@ app.post('/api/interpret', async (c) => {
     if (!token) return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
     if (!cards?.length) return c.json({ ok: false, message: 'No se proporcionaron cartas.' }, 400);
 
-    // ------------------------------
-    // 🪄 Preparar prompt
-    // ------------------------------
     const formattedCards = cards.map((c) => {
       const name = cardNamesEs[c.name] || c.name;
       return `${name}${c.reversed ? ' (invertida)' : ''}`;
@@ -904,8 +940,8 @@ app.post('/api/interpret', async (c) => {
         : 'Tirada libre';
 
     const prompt = `
-Eres un guía espiritual celta con sabiduría ancestral y una voz cálida.
-Interpreta esta lectura con empatía, profundidad y conexión espiritual.
+Eres un guía espiritual celta con sabiduría ancestral.
+Interpreta esta tirada de tarot de forma cálida y profunda.
 
 🧭 Tipo de tirada: ${spreadLabel}
 💫 Contexto del consultante: "${context || 'Sin contexto proporcionado'}"
@@ -913,27 +949,30 @@ Interpreta esta lectura con empatía, profundidad y conexión espiritual.
 Cartas extraídas:
 ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Desarrolla una interpretación que conecte los significados de las cartas entre sí.
-No las enumeres una por una, sino entreteje una historia coherente que refleje
-el proceso interior del consultante. Usa **negritas** para destacar los ejes espirituales.
-Termina con un cierre positivo o inspirador.
+Elabora una interpretación unificada, como si narraras una historia
+que conecte los significados de las cartas y su enseñanza espiritual.
+Usa **negritas** para ideas clave y termina con una frase de esperanza o propósito.
 `;
 
-    // ------------------------------
-    // 🌐 Llamar al modelo de Hugging Face
-    // ------------------------------
-    const res = await fetch('https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: { temperature: 0.85, max_new_tokens: 1600 },
-      }),
-      signal: controller.signal,
-    });
+    // ✅ Nuevo router oficial de Hugging Face
+    const res = await fetch(
+      'https://router.huggingface.co/hf-inference/models/meta-llama/Meta-Llama-3-8B-Instruct',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            temperature: 0.85,
+            max_new_tokens: 1600,
+          },
+        }),
+        signal: controller.signal,
+      }
+    );
 
     clearTimeout(timeout);
 
@@ -943,9 +982,6 @@ Termina con un cierre positivo o inspirador.
       return c.json({ ok: false, message: `Error HF ${res.status}: ${text}` }, res.status);
     }
 
-    // ------------------------------
-    // 🧩 Procesar resultado
-    // ------------------------------
     const data = await res.json();
     const interpretation =
       data?.[0]?.generated_text ??
@@ -959,6 +995,7 @@ Termina con un cierre positivo o inspirador.
     return c.json({ ok: false, message: String(err?.message || err) }, 500);
   }
 });
+
 
 
 
