@@ -943,7 +943,8 @@ Usa **negritas** para destacar ideas clave y anima al usuario con tono esperanza
     if (res.status === 401 || res.status === 403) {
       console.warn(`⚠️ Token rechazado por router (${res.status}), intentando fallback con api-inference...`);
 
-      res = await fetch('https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct', {
+      const res = await fetch('https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1', {
+
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
