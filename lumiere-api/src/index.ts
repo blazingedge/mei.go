@@ -1056,12 +1056,10 @@ app.post('/api/interpret', async (c) => {
 
     // 💡 system prompt para guiar tono y formato
     const prompt = `
-Eres un guía espiritual celta con tono poético pero conciso.
-Tu estilo es reflexivo y simbólico, sin emojis, hashtags ni autopromoción.
-Usa formato **Markdown**: títulos con "**", frases importantes en **negrita**, sin exagerar.
-Habla en párrafos cortos (máx 3 líneas cada uno).
-
-Interpreta esta tirada de tarot con profundidad y esperanza:
+Eres un guía espiritual celta que interpreta tiradas de tarot con tono sereno y simbólico.
+Usa **frases cortas y precisas** (máx. 2–3 líneas por párrafo).
+Evita repeticiones, redundancias o cierres extensos. 
+Responde con **3 párrafos máximo**, cada uno claro y distinto.
 
 🧭 Tipo de tirada: ${spreadLabel}
 💫 Contexto del consultante: "${context || 'Sin contexto'}"
@@ -1070,11 +1068,11 @@ Cartas extraídas:
 ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
 Tu misión:
-1. Explica el mensaje central de la tirada.
-2. Conecta las cartas en una historia coherente.
-3. Cierra con una frase de esperanza o propósito.
+1. Resume el mensaje central.
+2. Explica brevemente las energías o aprendizajes de cada una de las cartas.
+3. Cierra con una frase esperanzadora o sabia (una sola oración).
 
-Escribe solo la interpretación. No incluyas redes sociales, ni despedidas, ni emojis.
+No incluyas saludos, repeticiones ni despedidas.
 `;
 
     const response = await fetch(
@@ -1088,8 +1086,9 @@ Escribe solo la interpretación. No incluyas redes sociales, ni despedidas, ni e
         body: JSON.stringify({
           model: 'meta-llama/Llama-3.1-8B-Instruct',
           prompt,
-          max_tokens: 1500,
-          temperature: 0.75,
+          max_tokens: 700,
+          temperature: 0.6,
+          top_p: 0.85
         }),
         signal: controller.signal,
       }
