@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { LogoComponent } from "./logo.component";
 import { AuthService } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
+import { environment } from '../../environments/environment';
 
 @Component({
   standalone: true,
@@ -59,27 +60,41 @@ export class AuthUnifiedComponent {
   }
 
   // --- REGISTRO
-  async onRegister() {
-    this.regError = '';
-    if (!this.register.email || !this.register.password) {
-      this.regError = 'Completa todos los campos';
-      return;
-    }
-    if (this.register.password !== this.register.confirm) {
-      this.regError = 'Las contraseñas no coinciden';
-      return;
-    }
-    this.loading = true;
-    try {
-      const ok = await this.auth.register(this.register.email, this.register.password);
-      if (!ok) throw new Error('No se pudo registrar');
-      alert('✅ Registro completado. Ahora puedes iniciar sesión.');
-    } catch (e: any) {
-      this.regError = e.message || 'Error al registrar';
-    } finally {
-      this.loading = false;
-    }
+  async onRegister(){
+  this.regError = '';
+  // ...validaciones...
+
+  // 1) lee el token del widget
+  // Turnstile lo inserta en un input hidden con name="cf-turnstile-response"
+  const tokenEl = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement|null;
+  const turnstileToken = tokenEl?.value || '';
+
+  if(!turnstileToken){
+    this.regError = 'Completa el desafío "No soy un robot".';
+    return;
   }
+
+  this.loading = true;
+  try{
+    // 2) valida en tu Worker
+    const vr = await fetch(`${environment.API_BASE}/captcha/verify`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: turnstileToken })
+    });
+    if(!vr.ok){ throw new Error('Captcha inválido.'); }
+
+    // 3) si ok, procede al alta en Firebase
+    const ok = await this.auth.register(this.register.email, this.register.password);
+    if(!ok) throw new Error('No se pudo registrar');
+    alert('✅ Registro completado. Ahora puedes iniciar sesión.');
+  } catch(e:any){
+    this.regError = e.message || 'Error al registrar';
+  } finally{
+    this.loading = false;
+  }
+}
+
 
   // --- GOOGLE AUTH (Firebase)
   async authGoogle() {
@@ -95,6 +110,8 @@ export class AuthUnifiedComponent {
       this.loading = false;
     }
   }
+
+  
 
   authFacebook() {
     alert('Aún no está implementado el login con Facebook 😅');

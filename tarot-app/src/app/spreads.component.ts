@@ -31,6 +31,15 @@
     ts?: number | null;
   };
 
+  const PLAN_LIMITS = {
+  luz:       { monthly: 1 },   // 1 tirada (puedes cambiar a 1/mes)
+  sabiduria: { monthly: 30 },
+  quantico:  { monthly: 9999 } // o “Infinity” si prefieres
+} as const;
+
+
+  
+
 
 
   const HISTORY_KEY = 'tarot-history-v1';
@@ -113,7 +122,7 @@
   overlayCardTitle = '';
   overlayCardMeaning = '';
   loadingCardMeaning = false;
-
+  quota: { remaining: number; monthly: number } | null = null;
 
 
   // 🌙 Abre y actualiza el significado de una carta
@@ -193,14 +202,36 @@
       const token = await user.getIdToken(true);
       const res = await fetch(`${environment.API_BASE}/history/list`, {
       headers: { Authorization: `Bearer ${token}` }
-    });
+      });
       const data = await res.json();
-    if (data.ok) {
+      if (data.ok) {
       this.historyList = data.history;
       this.writeHistory(data.history); // sincroniza local
+       }
+      }
+
+      await this.refreshQuota()
     }
-  }
+
+    async refreshQuota(){
+  try{
+    const user = this.auth.currentUser;
+    const token = user ? await user.getIdToken(true) : '';
+    const res = await fetch(`${environment.API_BASE}/quota`, {
+      headers: token ? {Authorization:`Bearer ${token}`} : {}
+    });
+    if(res.ok){
+      this.quota = await res.json();
+      this.cdr.markForCheck();
     }
+  }catch(e){ console.warn('quota?', e); }
+}
+
+// Hook: después de una tirada exitosa, refresca
+private async afterSuccessfulDraw()
+{
+  await this.refreshQuota();
+}
 
     private resolveBgInBackground(){
       for(const url of this.bgCandidates){
@@ -211,49 +242,94 @@
     }
 
   async runInterpretation() {
-    try {
-      this.loadingInterpret = true;
-      this.aiResponse = '';
-      this.interpretationText = '';
-      this.showInterpretation = false;
+  try {
+    this.loadingInterpret = true;
+    this.aiResponse = '';
+    this.interpretationText = '';
+    this.showInterpretation = false;
 
-      const cards = this.placed.map(c => ({
-        name: c.cardId,
-        reversed: c.reversed
-      }));
+    const cards = this.placed.map(c => ({
+      name: c.cardId,
+      reversed: c.reversed
+    }));
 
-
-
-      const res = await fetch(`${environment.API_BASE}/interpret`, {
-        
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    const res = await fetch(`${environment.API_BASE}/interpret`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         context: this.userContext,
-        cards: this.placed.map(c => ({
-        name: c.cardId,
-        reversed: c.reversed
-        })),
-      spreadId: this.spreadId
+        cards,
+        spreadId: this.spreadId
       })
-      });
+    });
 
-      const data = await res.json();
-      if (data.ok && data.interpretation) {
-        this.interpretationText = data.interpretation;
-        this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(this.toHtml(data.interpretation));
-        this.showInterpretation = true;
-      } else {
-        alert('No se recibió interpretación 😅');
-      }
-    } catch (err) {
-      alert('Error interpretando la tirada.');
-      console.error(err);
-    } finally {
-      this.loadingInterpret = false;
-      this.cdr.markForCheck();
+    const data = await res.json();
+
+    if (data.ok && data.interpretation) {
+      this.interpretationText = data.interpretation;
+      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
+        this.toHtml(data.interpretation)
+      );
+      this.showInterpretation = true;
+
+      // 💾 Llamada automática al guardar lectura
+      await this.saveReading();
+
+    } else {
+      alert('No se recibió interpretación 😅');
     }
+  } catch (err) {
+    alert('Error interpretando la tirada.');
+    console.error(err);
+  } finally {
+    this.loadingInterpret = false;
+    this.cdr.markForCheck();
   }
+}
+
+async saveReading() {
+  try {
+    const user = this.auth.currentUser;
+    if (!user) {
+      alert('Inicia sesión para guardar lecturas.');
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+
+    const payload = {
+      title: `Lectura ${new Date().toLocaleString()}`,
+      interpretation: this.interpretationText,
+      cards: this.placed.map(c => ({
+        id: c.cardId,
+        reversed: c.reversed,
+        pos: c.position
+      })),
+      spreadId: this.spreadId
+    };
+
+    const res = await fetch(`${environment.API_BASE}/readings/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.status === 402) {
+      const msg = await res.text();
+      alert(msg || 'Has alcanzado el máximo (5). Pasa a Sabiduría o dona para ampliar.');
+      return;
+    }
+
+    if (!res.ok) throw new Error(await res.text());
+    alert('✅ Lectura guardada.');
+  } catch (e: any) {
+    alert('No se pudo guardar. ' + (e?.message || ''));
+  }
+}
+
 
 
 
@@ -547,6 +623,7 @@
 
           this.dealing = false;
           this.saveToHistory();
+          this.afterSuccessfulDraw(); 
 
           document.body.classList.remove('spread-active');
           document.body.classList.add('spread-complete');
@@ -600,7 +677,12 @@
   }
 
 
+  savedList: { id:string; title:string; ts:number }[] = [];
 
+  openSavedReadings(){
+  // Reusa tu modal de historial o crea otro modal rápido
+  this.openHistory(); // si quieres, por ahora reusamos el mismo mientras creas el modal propio
+}
 
   private getApproxFPS(): Promise<number> {
     let frames = 0;
@@ -810,7 +892,25 @@
       this.lastDraw = Array.isArray(cards) ? cards : [];
     }
 
-    closeHistory(){ this.showHistory=false; }
+    closeHistory() {
+  this.showHistory = false;
+
+  // 🧹 Limpieza visual
+  this.showCardOverlay = false;
+  this.showInterpretation = false;
+  this.layerOverlay = false;
+  this.showContextModal = false;
+
+  // 💡 Asegura que el tablero recupere foco y sea clicable
+  document.body.classList.remove('modal-open', 'spread-complete');
+  document.querySelector('.board')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // 🔄 Refresca la vista por si Angular estaba dormido
+  this.cdr.detectChanges();
+}
+
+    
+
     deleteHistory(id:string){ const list=this.readHistory().filter(e=>e.id!==id); this.writeHistory(list); this.historyList=list; }
     loadHistory(h:HistoryEntry){
       this.showHistory=false;

@@ -24,8 +24,14 @@ type Bindings = {
   HF_TOKEN?: string;
   HF2_TOKEN?: string;
   ENV?: string;
+  TURNSTILE_SECRET: string;
 };
 const app = new Hono<{ Bindings: Bindings }>();
+
+
+function nowYm()
+{ const d=new Date(); 
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`; }
 
 
 // =====================
@@ -65,7 +71,54 @@ function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
   return allowed[0] ?? '*';
 }
 
+// ✅ helper: asegurar plan del usuario
+async function ensureUserPlan(env: Env, uid: string): Promise<'luz' | 'sabiduria' | 'quantico'> {
+  const row = await env.DB.prepare('SELECT plan FROM users WHERE uid=?').bind(uid).first<{ plan: string }>();
+  if (row?.plan) return row.plan as any;
 
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO users(uid, email, plan, created_at, updated_at) VALUES(?,?,?,?,?)'
+  ).bind(uid, null, 'luz', Date.now(), Date.now()).run();
+
+  return 'luz';
+}
+
+// ✅ helper: asegurar fila de cuota del mes
+async function ensureQuotaRow(env: Env, uid: string, plan: 'luz' | 'sabiduria' | 'quantico', period: string) {
+  const row = await env.DB.prepare('SELECT monthly_limit, used FROM quotas WHERE uid=? AND period=?')
+    .bind(uid, period)
+    .first<{ monthly_limit: number; used: number }>();
+
+  if (row) return { monthly: row.monthly_limit, used: row.used };
+
+  const monthly = PLAN_LIMITS[plan].monthly;
+  await env.DB.prepare(
+    'INSERT INTO quotas(uid, plan, period, monthly_limit, used, updated_at) VALUES(?,?,?,?,?,?)'
+  ).bind(uid, plan, period, monthly, 0, Date.now()).run();
+
+  return { monthly, used: 0 };
+}
+
+app.get('/api/quota', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const plan = await ensureUserPlan(c.env, uid);
+    const period = nowYm();
+    const { monthly, used } = await ensureQuotaRow(c.env, uid, plan, period);
+
+    return c.json({ ok: true, plan, monthly, remaining: Math.max(0, monthly - used), period });
+  } catch (err: any) {
+    console.error('💥 /api/quota error:', err);
+    return c.json({ ok: false, error: String(err) }, 500);
+  }
+});
 
 app.use('*', cors({
   origin: (origin, c) => {
@@ -143,6 +196,34 @@ app.post('/auth/login', async (c) => {
   return c.json({ ok: true, token: 'fake-token', user: { id: row.id, email: row.email } });
 });
 
+app.post('/captcha/verify', async (c) => {
+  try {
+    const { token } = await c.req.json<{ token: string }>();
+    if (!token) {
+      return c.json({ ok: false, error: 'missing token' }, 400);
+    }
+
+    const form = new FormData();
+    form.append('secret', c.env.TURNSTILE_SECRET);
+    form.append('response', token);
+
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: form,
+    });
+
+    const data = await resp.json<any>();
+    if (!data.success) {
+      console.warn('⚠️ Turnstile falló:', data['error-codes']);
+      return c.json({ ok: false }, 400);
+    }
+
+    return c.json({ ok: true });
+  } catch (err: any) {
+    console.error('💥 Error verificando captcha:', err);
+    return c.json({ ok: false, error: err.message || 'internal error' }, 500);
+  }
+});
 // =====================
 // Tarot
 // =====================
@@ -589,43 +670,30 @@ app.post('/api/draw', async (c) => {
     // ==============================
     // 📅 Control de límite diario
     // ==============================
-    const today = new Date().toISOString().slice(0, 10);
-    const limit = 2;
-    let remaining = '∞';
+    // ==============================
+// 📅 Control de límite mensual por plan
+// ==============================
+let remaining = '∞';
 
-    if (!isDev && !isMaster && uid !== 'guest' && c.env.DB) {
-      try {
-        await c.env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS draws (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uid TEXT NOT NULL,
-            email TEXT,
-            day TEXT NOT NULL,
-            spreadId TEXT,
-            context TEXT,
-            cards_json TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-          );
-        `).run();
+if (!isMaster && uid !== 'guest' && c.env.DB) {
+  const plan = await ensureUserPlan(c.env, uid);
+  const period = nowYm();
+  const q = await ensureQuotaRow(c.env, uid, plan, period);
 
-        const row = await c.env.DB
-          .prepare('SELECT COUNT(*) as count FROM draws WHERE uid = ? AND day = ?')
-          .bind(uid, today)
-          .first<{ count: number }>();
+  if (q.used >= q.monthly) {
+    return c.json(
+      { ok: false, error: 'sin_cupo', message: 'Sin tiradas disponibles. Pasa a Sabiduría o dona.' },
+      402
+    );
+  }
 
-        const used = row?.count ?? 0;
-        if (used >= limit) {
-          return c.json(
-            { ok: false, error: 'limit_reached', message: 'Has alcanzado tus 2 tiradas gratuitas de hoy.' },
-            429
-          );
-        }
+  await c.env.DB.prepare(
+    'UPDATE quotas SET used = used + 1, updated_at=? WHERE uid=? AND period=?'
+  ).bind(Date.now(), uid, period).run();
 
-        remaining = String(Math.max(limit - (used + 1), 0));
-      } catch (dbErr) {
-        console.error('💥 [DRAW] Error accediendo a la base D1:', dbErr);
-      }
-    }
+  remaining = String(Math.max(q.monthly - (q.used + 1), 0));
+}
+
 
     
 

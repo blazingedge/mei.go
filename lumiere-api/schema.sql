@@ -1,11 +1,12 @@
 ALTER TABLE users RENAME TO users_old;
 
 
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS users (
+  uid TEXT PRIMARY KEY,
+  email TEXT,
+  plan TEXT DEFAULT 'luz',
+  created_at INTEGER,
+  updated_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS refresh_sessions (
@@ -35,4 +36,14 @@ CREATE TABLE IF NOT EXISTS history (
   cards_json TEXT,
   ts INTEGER NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quotas (
+  uid TEXT NOT NULL,
+  plan TEXT NOT NULL,
+  period TEXT NOT NULL,
+  monthly_limit INTEGER NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER,
+  PRIMARY KEY (uid, period)
 );

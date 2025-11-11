@@ -177,6 +177,15 @@
     }
   </main>
 
+  <!-- DRUCOINS HUD (top-right) -->
+<div class="drucoins-hud" (click)="openHistory()" title="Tus tiradas disponibles">
+  <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
+  <div class="counter">
+    <strong>{{ quota?.remaining ?? '—' }}</strong>
+    <small>/{{ quota?.monthly ?? '—' }}</small>
+  </div>
+</div>
+
   <!-- PANEL DERECHO -->
   @if (!showInterpretation) {
     <aside class="panel">
