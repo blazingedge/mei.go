@@ -786,14 +786,19 @@
     // ---------- Historial ----------
 
 
-    openHistory(){
-      let list=this.readHistory();
-      let changed=false;
-      list = list.map(e=>{ if(e.ts==null){ e.ts=Date.now(); changed=true; } return e; });
-      if(changed) this.writeHistory(list);
-      this.historyList = list;
-      this.showHistory = true;
-    }
+    openHistory(e?: MouseEvent){
+  e?.stopPropagation();
+  this.closeCardOverlay();
+  this.showInterpretation = false;
+  let list = this.readHistory();
+  let changed = false;
+  list = list.map(e => { if(e.ts == null){ e.ts = Date.now(); changed = true; } return e; });
+  if (changed) this.writeHistory(list);
+  this.historyList = list;
+  this.showHistory = true;
+  this.cdr.detectChanges();
+}
+
 
 
     closeInterpret() {
