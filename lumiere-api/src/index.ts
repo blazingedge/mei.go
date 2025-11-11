@@ -964,6 +964,63 @@ app.get('/cdn/*', async (c) => {
   }
 });
 
+// =====================
+// 💾 /api/readings/save — Guarda interpretaciones generadas por IA
+// =====================
+app.post('/api/readings/save', async (c) => {
+  try {
+    const { title, interpretation, cards, spreadId } = await c.req.json<{
+      title: string;
+      interpretation: string;
+      cards: any[];
+      spreadId?: string;
+    }>();
+
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    let uid = 'guest';
+    let email = 'guest';
+
+    if (token) {
+      try {
+        const apiKey = c.env.FIREBASE_API_KEY || '';
+        const verified = await verifyFirebaseIdToken(token, apiKey);
+        uid = verified.uid;
+        email = verified.email;
+      } catch {
+        return c.json({ ok: false, error: 'invalid_token' }, 401);
+      }
+    }
+
+    if (uid === 'guest') {
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    // 🔢 Límite de lecturas guardadas (máx 5)
+    const countRow = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM readings WHERE uid = ?'
+    ).bind(uid).first<{ count: number }>();
+
+    if (countRow && countRow.count >= 5) {
+      return c.text('Has alcanzado el máximo (5). Pasa a Sabiduría o dona.', 402);
+    }
+
+    // 💾 Guarda la lectura
+    const id = crypto.randomUUID();
+    await c.env.DB.prepare(`
+      INSERT INTO readings (id, uid, email, title, interpretation, cards_json, spreadId, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `)
+      .bind(id, uid, email, title, interpretation, JSON.stringify(cards), spreadId || '')
+      .run();
+
+    return c.json({ ok: true, id });
+  } catch (err: any) {
+    console.error('💥 /api/readings/save error:', err);
+    return c.json({ ok: false, message: err.message || String(err) }, 500);
+  }
+});
 
 
 

@@ -14,6 +14,35 @@ import { environment } from '../../environments/environment';
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
 })
+
+declare global {
+  interface Window {
+    onCaptchaVerified: (token: string) => void;
+  }
+}
+
+
+window.onCaptchaVerified = async (token: string) => {
+  console.log('✅ Turnstile token recibido:', token);
+  try {
+    const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      console.log('✅ Verificación CAPTCHA exitosa');
+    } else {
+      console.warn('❌ Falló la verificación CAPTCHA');
+      alert('Verifica que no eres un robot e inténtalo de nuevo.');
+    }
+  } catch (err) {
+    console.error('💥 Error verificando Turnstile:', err);
+  }
+};
+
 export class AuthUnifiedComponent {
   showIntro = true;
   loading = false;
