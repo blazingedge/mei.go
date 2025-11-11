@@ -198,6 +198,14 @@
    🔮 BOARD PRINCIPAL
    =========================================================== */
 
+:host {
+  position: relative;
+  isolation: isolate; /* crea contexto propio y separa el tablero del modal */
+  z-index: 0;
+}
+
+
+
 .board { 
   min-height: calc(100vh - 40px);
   padding-top: 3vh;
@@ -521,13 +529,13 @@
 }
 
 
-/* === Modal de Historial === */
+
 
 /* === Modal de Historial / Overlay === */
 .history-modal {
   position: fixed !important;
   inset: 0;
-  z-index: 999999 !important; /* 🔺 Máximo absoluto */
+  z-index: 10000; /* 🔺 Máximo absoluto */
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(6px);
   display: flex;

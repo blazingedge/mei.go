@@ -1,7 +1,6 @@
 <div class="layout">
   <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
-    
 
     <!-- Estado de mazo -->
     <div class="rail-status-min" aria-live="polite">
@@ -36,16 +35,12 @@
         <div class="seg">
           <button type="button" [class.active]="!stepMode" (click)="stepMode=false">Completa</button>
           <button type="button" [class.active]="stepMode" (click)="prepararCruzPasoAPaso()">Una por una</button>
-            <button type="button"
-                (click)="repartirCruzCompleta()"
-                [disabled]="!deckReady || dealing || stepMode">
-          Repartir Cruz
-        </button>
+          <button type="button"
+                  (click)="repartirCruzCompleta()"
+                  [disabled]="!deckReady || dealing || stepMode">
+            Repartir Cruz
+          </button>
         </div>
-
-      
-
-       
       }
 
       @if (isFree) {
@@ -127,7 +122,6 @@
            [class.faceup]="pc.faceup"
            [class.reversed]="pc.reversed"
            (click)="onCardClick(pc, $event)">
-
         <div class="card-inner">
           <img class="front" [src]="getFrontUrl(pc.cardId)" alt="carta" />
           <img class="back"  [src]="backUrl" alt="reverso" />
@@ -138,135 +132,148 @@
 
     <!-- MAZO -->
     <div class="deck-pile" [class.shuffle]="deckShuffling" (click)="onDeckClick()">
-      <img *ngFor="let i of [0,1,2,3,4]" [src]="backUrl" alt="mazo" />
+      @for (i of [0,1,2,3,4]; track i) {
+        <img [src]="backUrl" alt="mazo" />
+      }
       <div class="deck-label">MAZO</div>
     </div>
 
     <!-- HISTORIAL -->
     @if (showHistory) {
       <div class="history-modal" [class.visible]="showHistory" (click)="closeHistory()">
-  <div class="history-card" (click)="$event.stopPropagation()">
-    <header>
-      <h4>Historial</h4>
-      <button type="button" class="close" (click)="closeHistory()">×</button>
-    </header>
+        <div class="history-card" (click)="$event.stopPropagation()">
+          <header>
+            <h4>Historial</h4>
+            <button type="button" class="close" (click)="closeHistory()">×</button>
+          </header>
 
-    <ng-container *ngIf="historyList?.length; else emptyHistory">
-      <ul class="history-list">
-        <li *ngFor="let h of historyList; trackBy: trackById">
-          <div class="meta">
-            <strong>{{ h.spreadLabel }}</strong>
-            <small *ngIf="h.ts">· {{ formatTs(h.ts!) }}</small>
-          </div>
-          <div class="actions">
-            <button type="button" (click)="loadHistory(h)">Cargar</button>
-            <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
-          </div>
-        </li>
-      </ul>
-    </ng-container>
+          @if (historyList.length) {
+            <ul class="history-list">
+              @for (h of historyList; track h.id) {
+                <li>
+                  <div class="meta">
+                    <strong>{{ h.spreadLabel }}</strong>
+                    @if (h.ts) {
+                      <small>· {{ formatTs(h.ts!) }}</small>
+                    }
+                  </div>
+                  <div class="actions">
+                    <button type="button" (click)="loadHistory(h)">Cargar</button>
+                    <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="muted">Aún no hay tiradas guardadas.</p>
+          }
 
-    <ng-template #emptyHistory>
-      <p class="muted">Aún no hay tiradas guardadas.</p>
-    </ng-template>
-
-    <footer>
-      <button type="button" (click)="closeHistory()">Cerrar</button>
-    </footer>
-  </div>
-</div>
-
+          <footer>
+            <button type="button" (click)="closeHistory()">Cerrar</button>
+          </footer>
+        </div>
+      </div>
     }
   </main>
 
   <!-- PANEL DERECHO -->
-  <aside class="panel" *ngIf="!showInterpretation">
-    <h3>@if (isFree) { Capa {{ layers[activeLayer].id }} } @else { Lectura }</h3>
+  @if (!showInterpretation) {
+    <aside class="panel">
+      <h3>
+        @if (isFree) {
+          Capa {{ layers[activeLayer].id }}
+        } @else {
+          Lectura
+        }
+      </h3>
 
-    <!-- Chips interactivas -->
-    <div class="cards-list">
-      <div
-        class="card-chip"
-        *ngFor="let pc of activeCards"
-        (click)="openCardMeaning(pc)"
-        [class.reversed]="pc.reversed"
-      >
-        <span class="num">#{{ pc.position }}</span>
-        <span class="name">
-          {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
-        </span>
-        <span *ngIf="pc.reversed" class="rev">↓</span>
+      <!-- Chips interactivas -->
+      <div class="cards-list">
+        @for (pc of activeCards; track pc.position) {
+          <div
+            class="card-chip"
+            (click)="openCardMeaning(pc)"
+            [class.reversed]="pc.reversed">
+            <span class="num">#{{ pc.position }}</span>
+            <span class="name">
+              {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
+            </span>
+            @if (pc.reversed) {
+              <span class="rev">↓</span>
+            }
+          </div>
+        }
       </div>
-    </div>
 
- 
-    <!-- Contexto + botón papiro -->
-<div class="context-wrap">
-  <div class="context-area">
-    <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
-    <textarea
-      id="contextInput"
-      [(ngModel)]="userContextInput"
-      rows="4"
-      placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."
-    ></textarea>
-  </div>
+      <!-- Contexto + botón papiro -->
+      <div class="context-wrap">
+        <div class="context-area">
+          <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
+          <textarea
+            id="contextInput"
+            [(ngModel)]="userContextInput"
+            rows="4"
+            placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."></textarea>
+        </div>
 
-  <div class="context-action">
-    <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
-  </div>
-</div>
-
-  </aside>
+        <div class="context-action">
+          <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
+        </div>
+      </div>
+    </aside>
+  }
 </div>
 
 <!-- Overlay del significado de carta -->
-<!-- Overlay que se abre al hacer clic -->
-<div
-  class="card-meaning-overlay"
-  *ngIf="showCardOverlay"
-  (click)="closeCardOverlay()"
->
-  <div class="meaning-box" (click)="$event.stopPropagation()">
-    <header>
-      <h3>{{ overlayCardTitle }}</h3>
-      <button (click)="closeCardOverlay()" class="close">×</button>
-    </header>
+@if (showCardOverlay) {
+  <div class="card-meaning-overlay" (click)="closeCardOverlay()">
+    <div class="meaning-box" (click)="$event.stopPropagation()">
+      <header>
+        <h3>{{ overlayCardTitle }}</h3>
+        <button (click)="closeCardOverlay()" class="close">×</button>
+      </header>
 
-    <article>
-      <p *ngIf="loadingCardMeaning"><em>🔮 Consultando significado...</em></p>
-      <p *ngIf="!loadingCardMeaning" [innerHTML]="overlayCardMeaning"></p>
-    </article>
-  </div>
-</div>
-
-
-<!-- MODAL INTERPRETACIÓN -->
-<div class="interpret-modal" *ngIf="showInterpretation" (click)="closeInterpret()">
-  <div class="interpret-container" (click)="$event.stopPropagation()">
-    <header class="interpret-header">
-      <span class="icon">🔮</span>
-      <h2>Interpretación</h2>
-      <span class="spacer"></span>
-      <button class="close-btn" (click)="closeInterpret()">×</button>
-    </header>
-
-    <div class="interpret-body">
-      <article class="interpret-text" [innerHTML]="interpretationSafe"></article>
-      <aside class="interpret-rail">
-        <h4>Cartas</h4>
-        <ul>
-          <li *ngFor="let c of lastDraw">
-            {{ c.cardId }} <span *ngIf="c.reversed">↓</span>
-          </li>
-        </ul>
-      </aside>
+      <article>
+        @if (loadingCardMeaning) {
+          <p><em>🔮 Consultando significado...</em></p>
+        } @else {
+          <p [innerHTML]="overlayCardMeaning"></p>
+        }
+      </article>
     </div>
   </div>
-</div>
+}
+
+<!-- MODAL INTERPRETACIÓN -->
+@if (showInterpretation) {
+  <div class="interpret-modal" (click)="closeInterpret()">
+    <div class="interpret-container" (click)="$event.stopPropagation()">
+      <header class="interpret-header">
+        <span class="icon">🔮</span>
+        <h2>Interpretación</h2>
+        <span class="spacer"></span>
+        <button class="close-btn" (click)="closeInterpret()">×</button>
+      </header>
+
+      <div class="interpret-body">
+        <article class="interpret-text" [innerHTML]="interpretationSafe"></article>
+        <aside class="interpret-rail">
+          <h4>Cartas</h4>
+          <ul>
+            @for (c of lastDraw; track c.cardId) {
+              <li>{{ c.cardId }} @if (c.reversed) { <span>↓</span> }</li>
+            }
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+}
 
 <!-- LOADER -->
-<div class="loading-overlay" *ngIf="loadingInterpret" aria-live="polite" aria-busy="true">
-  <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
-  <p>El mago está interpretando tu lectura…</p>
-</div>
+@if (loadingInterpret) {
+  <div class="loading-overlay" aria-live="polite" aria-busy="true">
+    <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
+    <p>El mago está interpretando tu lectura…</p>
+  </div>
+}
