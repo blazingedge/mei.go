@@ -98,6 +98,17 @@ export class AuthService {
     }
   }
 
+  checkTerms(uid: string) {
+  return fetch(`${environment.API_BASE}/terms/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid })
+  })
+  .then(r => r.json())
+  .then(j => j.accepted === true);
+}
+
+
   // ✅ Logout universal
   async logout(): Promise<void> {
     this.workerToken = null;

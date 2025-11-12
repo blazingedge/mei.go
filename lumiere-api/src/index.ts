@@ -1122,9 +1122,7 @@ No incluyas saludos, repeticiones ni despedidas.
 
 
 
-// =====================
-// 📜 /api/terms/accept — Registrar aceptación de términos
-// =====================
+
 // =====================
 // 📜 /api/terms/accept — Registrar aceptación de términos
 // =====================
@@ -1167,6 +1165,25 @@ app.post('/api/terms/accept', async (c) => {
   } catch (err: any) {
     console.error('💥 /api/terms/accept error:', err);
     return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
+  }
+});
+
+// =====================
+// 📘 /api/terms/check — consulta si aceptó T&C
+// =====================
+app.post('/api/terms/check', async (c) => {
+  try {
+    const { uid } = await c.req.json<{ uid: string }>();
+    if (!uid) return c.json({ accepted: false });
+
+    const row = await c.env.DB.prepare(
+      'SELECT accepted_at FROM terms_acceptance WHERE uid = ?'
+    ).bind(uid).first();
+
+    return c.json({ accepted: !!row });
+  } catch (err: any) {
+    console.error('💥 /api/terms/check error:', err);
+    return c.json({ accepted: false });
   }
 });
 

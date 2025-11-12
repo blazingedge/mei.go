@@ -82,28 +82,38 @@ setTimeout(() => {
   // 🔐 LOGIN
   // ======================================================
   async onLogin() {
-    this.loginError = '';
-    if (!this.login.email || !this.login.password) {
-      this.loginError = 'Completa todos los campos';
-      return;
-    }
-
-    if (!this.acceptedTerms) {
-      alert('Debes aceptar los términos antes de continuar.');
-      return;
-    }
-
-    this.loading = true;
-    try {
-      const ok = await this.auth.login(this.login.email, this.login.password);
-      if (!ok) throw new Error('Credenciales inválidas');
-      await this.router.navigate(['/spreads']);
-    } catch (e: any) {
-      this.loginError = e.message || 'Error al iniciar sesión';
-    } finally {
-      this.loading = false;
-    }
+  this.loginError = '';
+  if (!this.login.email || !this.login.password) {
+    this.loginError = 'Completa todos los campos';
+    return;
   }
+
+  this.loading = true;
+
+  try {
+    const ok = await this.auth.login(this.login.email, this.login.password);
+    if (!ok) throw new Error('Credenciales inválidas');
+
+    const user = this.auth.currentUser;
+    const uid = user?.uid ?? null;
+
+    // ⬅️ AQUÍ: si hay UID (Firebase). Si no, email login sin Firebase
+    if (uid) {
+      const accepted = await this.auth.checkTerms(uid);
+      if (!accepted) {
+        this.showTerms = true;
+        return;
+      }
+    }
+
+    await this.router.navigate(['/spreads']);
+  } catch (e: any) {
+    this.loginError = e.message || 'Error al iniciar sesión';
+  } finally {
+    this.loading = false;
+  }
+}
+
 
   // ======================================================
   // 🪶 TÉRMINOS Y CONDICIONES
@@ -113,25 +123,30 @@ setTimeout(() => {
   }
 
   async onTermsAccepted() {
-    this.showTerms = false;
-    this.acceptedTerms = true;
-    try {
-      const user = this.auth.currentUser;
-      const uid = user?.uid ?? 'guest';
-      const token = user ? await user.getIdToken() : '';
-      await fetch(`${environment.API_BASE}/api/terms/accept`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({ acceptedAt: Date.now() })
-      });
-      console.log('✅ Términos aceptados y registrados');
-    } catch (err) {
-      console.warn('⚠️ No se pudo registrar la aceptación:', err);
-    }
+  this.showTerms = false;
+  this.acceptedTerms = true;
+
+  try {
+    const user = this.auth.currentUser;
+    const token = user ? await user.getIdToken() : '';
+
+    await fetch(`${environment.API_BASE}/api/terms/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify({ acceptedAt: Date.now() })
+    });
+
+    console.log('✅ Términos aceptados y registrados');
+
+    await this.router.navigate(['/spreads']); // ⬅️ nuevo
+  } catch (err) {
+    console.warn('⚠️ No se pudo registrar la aceptación:', err);
   }
+}
+
 
   
 onTermsClosed() {
@@ -179,23 +194,32 @@ onTermsClosed() {
   // 🔑 LOGIN CON GOOGLE
   // ======================================================
   async authGoogle() {
-    if (!this.acceptedTerms) {
-      alert('Debes aceptar los Términos y Condiciones antes de continuar.');
-      return;
+  this.loading = true;
+  this.loginError = '';
+
+  try {
+    const user = await this.auth.loginWithGoogle();
+    if (!user) throw new Error('Error en Firebase Google');
+
+    const uid = user.uid;
+
+    // ⬅️ AQUÍ SE CONSULTA A D1
+    const accepted = await this.auth.checkTerms(uid);
+
+    if (!accepted) {
+      this.showTerms = true; // muestra modal
+      return;                // no navegues aún
     }
 
-    this.loading = true;
-    try {
-      const user = await this.auth.loginWithGoogle();
-      console.log('✅ Login con Google:', user);
-      await this.router.navigate(['/spreads']);
-    } catch (e) {
-      console.error('❌ Error Google Auth:', e);
-      this.loginError = 'Error al iniciar con Google';
-    } finally {
-      this.loading = false;
-    }
+    await this.router.navigate(['/spreads']);
+  } catch (e) {
+    console.error('❌ Error Google Auth:', e);
+    this.loginError = 'Error al iniciar con Google';
+  } finally {
+    this.loading = false;
   }
+}
+
 
   // ======================================================
   // ⚙️ OTROS
