@@ -1122,6 +1122,54 @@ No incluyas saludos, repeticiones ni despedidas.
 
 
 
+// =====================
+// 📜 /api/terms/accept — Registrar aceptación de términos
+// =====================
+// =====================
+// 📜 /api/terms/accept — Registrar aceptación de términos
+// =====================
+app.post('/api/terms/accept', async (c) => {
+  try {
+    const { version = '1.0', acceptedAt } = await c.req.json<{ version?: string; acceptedAt?: number }>();
+
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    // 🔐 Identificar usuario
+    let uid = 'guest';
+    if (token) {
+      try {
+        const apiKey = c.env.FIREBASE_API_KEY || '';
+        const verified = await verifyFirebaseIdToken(token, apiKey);
+        uid = verified.uid;
+      } catch {
+        console.warn('⚠️ Token inválido o expirado, se registra como invitado.');
+      }
+    }
+
+    // 🔍 Metadatos
+    const ip_address =
+      c.req.header('CF-Connecting-IP') ||
+      c.req.header('X-Forwarded-For') ||
+      c.req.header('X-Real-IP') ||
+      'unknown';
+
+    const user_agent = c.req.header('User-Agent') || 'unknown';
+    const timestamp = acceptedAt ?? Date.now();
+
+    // 💾 Guarda o actualiza aceptación (por UID + versión)
+    await c.env.DB.prepare(`
+      INSERT OR REPLACE INTO terms_acceptance (uid, accepted_at, version, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(uid, timestamp, version, ip_address, user_agent).run();
+
+    return c.json({ ok: true, uid, version, accepted_at: timestamp });
+  } catch (err: any) {
+    console.error('💥 /api/terms/accept error:', err);
+    return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
+  }
+});
+
 
 
 

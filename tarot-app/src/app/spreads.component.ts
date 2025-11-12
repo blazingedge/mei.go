@@ -49,7 +49,7 @@
     standalone: true,
     imports: [CommonModule, FormsModule, DragDropModule],
     templateUrl: './spreads.component.html',
-    styleUrls: ['./spreads.component.scss'],
+    styleUrls: ['./spreads.component.scss', './mobile.scss'],
   })
   export class SpreadsComponent implements OnInit {
     private api   = inject(TarotApi);

@@ -1,8 +1,9 @@
 <div class="layout">
+
   <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
 
-    <!-- Estado de mazo -->
+    <!-- Estado del mazo -->
     <div class="rail-status-min" aria-live="polite">
       <div class="shuffle-dot" [class.spin]="deckShuffling || loadingDeck"></div>
 
@@ -24,10 +25,9 @@
 
     <!-- Acciones rápidas -->
     <div class="rail-ghosts">
-      <button class="ghost-btn" (click)="toggleShuffle()" [disabled]="!deckReady" title="Barajar"></button>
-      <button (click)="openHistory($event)" class="ghost-btn" title="Historial"></button>
-
-      <button class="ghost-btn" disabled></button>
+      <button class="ghost-btn ghost--shuffle" (click)="toggleShuffle()" [disabled]="!deckReady" title="Barajar"></button>
+      <button class="ghost-btn ghost--history" (click)="openHistory($event)" title="Historial"></button>
+      <button class="ghost-btn ghost--saved" disabled title="Guardadas"></button>
     </div>
 
     <!-- Controles -->
@@ -79,7 +79,7 @@
       </div>
     </div>
 
-    <!-- Overlay -->
+    <!-- Overlays -->
     @if (layerOverlay) {
       <div class="layer-overlay"></div>
     }
@@ -98,7 +98,7 @@
       </div>
     }
 
-    <!-- Slots guía -->
+    <!-- Slots -->
     @if (!isFree) {
       @for (s of slots; track s.position) {
         <div class="slot"
@@ -110,7 +110,7 @@
       }
     }
 
-    <!-- CARTAS -->
+    <!-- Cartas -->
     @for (pc of activeCards; track pc.position) {
       <div class="card"
            cdkDrag
@@ -126,12 +126,11 @@
         <div class="card-inner">
           <img class="front" [src]="getFrontUrl(pc.cardId)" alt="carta" />
           <img class="back"  [src]="backUrl" alt="reverso" />
-          <span class="pos-badge">#{{ pc.position }}</span>
         </div>
       </div>
     }
 
-    <!-- MAZO -->
+    <!-- Mazo -->
     <div class="deck-pile" [class.shuffle]="deckShuffling" (click)="onDeckClick()">
       @for (i of [0,1,2,3,4]; track i) {
         <img [src]="backUrl" alt="mazo" />
@@ -139,7 +138,7 @@
       <div class="deck-label">MAZO</div>
     </div>
 
-    <!-- HISTORIAL -->
+    <!-- Historial -->
     @if (showHistory) {
       <div class="history-modal" [class.visible]="showHistory" (click)="closeHistory()">
         <div class="history-card" (click)="$event.stopPropagation()">
@@ -177,27 +176,19 @@
     }
   </main>
 
-  <!-- DRUCOINS HUD (top-right) -->
-<div class="drucoins-hud" (click)="openHistory()" title="Tus tiradas disponibles">
-  <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
-  <div class="counter">
-    <strong>{{ quota?.remaining ?? '—' }}</strong>
-    <small>/{{ quota?.monthly ?? '—' }}</small>
+  <!-- HUD de Drucoins -->
+  <div class="drucoins-hud" title="Tus tiradas disponibles">
+    <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
+    <div class="counter">
+      <strong>{{ quota?.remaining ?? '—' }}</strong>
+      <small>/{{ quota?.monthly ?? '—' }}</small>
+    </div>
   </div>
-</div>
 
   <!-- PANEL DERECHO -->
   @if (!showInterpretation) {
     <aside class="panel">
-      <h3>
-        @if (isFree) {
-          Capa {{ layers[activeLayer].id }}
-        } @else {
-          Lectura
-        }
-      </h3>
-
-      <!-- Chips interactivas -->
+      <h3>Lectura</h3>
       <div class="cards-list">
         @for (pc of activeCards; track pc.position) {
           <div
@@ -205,17 +196,12 @@
             (click)="openCardMeaning(pc)"
             [class.reversed]="pc.reversed">
             <span class="num">#{{ pc.position }}</span>
-            <span class="name">
-              {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
-            </span>
-            @if (pc.reversed) {
-              <span class="rev">↓</span>
-            }
+            <span class="name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</span>
+            @if (pc.reversed) { <span class="rev">↓</span> }
           </div>
         }
       </div>
 
-      <!-- Contexto + botón papiro -->
       <div class="context-wrap">
         <div class="context-area">
           <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
@@ -254,14 +240,13 @@
   </div>
 }
 
-<!-- MODAL INTERPRETACIÓN -->
+<!-- Modal interpretación -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
     <div class="interpret-container" (click)="$event.stopPropagation()">
       <header class="interpret-header">
         <span class="icon">🔮</span>
         <h2>Interpretación</h2>
-        <span class="spacer"></span>
         <button class="close-btn" (click)="closeInterpret()">×</button>
       </header>
 
@@ -280,7 +265,7 @@
   </div>
 }
 
-<!-- LOADER -->
+<!-- Loader -->
 @if (loadingInterpret) {
   <div class="loading-overlay" aria-live="polite" aria-busy="true">
     <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
