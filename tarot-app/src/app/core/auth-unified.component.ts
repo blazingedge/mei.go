@@ -78,6 +78,21 @@ setTimeout(() => {
     }
   }
 
+  ngOnInit() {
+  this.auth.termsAccepted$.subscribe((ok) => {
+    if (ok) {
+      // ya aceptados
+      this.router.navigate(['/spreads']);
+    } else {
+      // abrir modal solo si hay usuario
+      if (this.auth.currentUser) {
+        this.showTerms = true;
+      }
+    }
+  });
+}
+
+
   // ======================================================
   // 🔐 LOGIN
   // ======================================================
@@ -122,30 +137,31 @@ setTimeout(() => {
     this.showTerms = true;
   }
 
-  async onTermsAccepted() {
+ async onTermsAccepted() {
+  const user = this.auth.currentUser;
+  if (!user) return;
+
+  const token = await user.getIdToken();
+
+  await fetch(`${environment.API_BASE}/api/terms/accept`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      uid: user.uid,
+      version: '1.0',
+      accepted_at: Date.now(),
+      user_agent: navigator.userAgent
+    })
+  });
+
   this.showTerms = false;
-  this.acceptedTerms = true;
-
-  try {
-    const user = this.auth.currentUser;
-    const token = user ? await user.getIdToken() : '';
-
-    await fetch(`${environment.API_BASE}/api/terms/accept`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? `Bearer ${token}` : ''
-      },
-      body: JSON.stringify({ acceptedAt: Date.now() })
-    });
-
-    console.log('✅ Términos aceptados y registrados');
-
-    await this.router.navigate(['/spreads']); // ⬅️ nuevo
-  } catch (err) {
-    console.warn('⚠️ No se pudo registrar la aceptación:', err);
-  }
+  this.router.navigate(['/spreads']);
 }
+
+
 
 
   
@@ -193,32 +209,30 @@ onTermsClosed() {
   // ======================================================
   // 🔑 LOGIN CON GOOGLE
   // ======================================================
-  async authGoogle() {
+async authGoogle() {
   this.loading = true;
-  this.loginError = '';
 
   try {
     const user = await this.auth.loginWithGoogle();
-    if (!user) throw new Error('Error en Firebase Google');
+    if (!user) return;
 
     const uid = user.uid;
 
-    // ⬅️ AQUÍ SE CONSULTA A D1
     const accepted = await this.auth.checkTerms(uid);
 
     if (!accepted) {
-      this.showTerms = true; // muestra modal
-      return;                // no navegues aún
+      this.showTerms = true;
+      return;
     }
 
-    await this.router.navigate(['/spreads']);
-  } catch (e) {
-    console.error('❌ Error Google Auth:', e);
-    this.loginError = 'Error al iniciar con Google';
+    this.router.navigate(['/spreads']);
+
   } finally {
     this.loading = false;
   }
 }
+
+
 
 
   // ======================================================

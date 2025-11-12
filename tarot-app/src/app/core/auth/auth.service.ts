@@ -1,5 +1,7 @@
 // src/app/core/services/auth.service.ts
 import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
+import { onAuthStateChanged } from '@angular/fire/auth';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import {
@@ -14,8 +16,24 @@ import {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private workerToken: string | null = null;
+  
+  private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
+  termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
-  constructor(private http: HttpClient, private auth: Auth) {}
+  constructor(private http: HttpClient, private auth: Auth) {
+
+  // 👇 SE AGREGA AQUÍ — sin crear otro constructor
+  onAuthStateChanged(this.auth, async (user) => {
+    if (!user) return;
+
+    // ⚡ cuando Firebase autentica (incluso con Google redirect)
+    const accepted = await this.checkTerms(user.uid);
+
+    // guarda en un BehaviorSubject que debes crear
+    this.termsAcceptedSubject.next(accepted);
+  });
+}
+  
 
   // ✅ Devuelve el usuario actual de Firebase (si existe)
   get currentUser(): User | null {

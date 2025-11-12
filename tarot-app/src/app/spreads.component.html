@@ -63,27 +63,80 @@
   </aside>
 
   <!-- TABLERO PRINCIPAL -->
-  @if (!isMobile) {
-    <div class="board" [style.backgroundImage]="'url(' + boardBgUrl + ')'">
-      @for (pc of placed; track pc.cardId) {
-        <div
-          class="card"
-          [class.faceup]="pc.faceup"
-          [class.reversed]="pc.reversed"
-          [style.left.%]="pc.x"
-          [style.top.%]="pc.y"
-          [style.zIndex]="pc.z"
-          [style.transform]="'translate(-50%, -50%) rotate(' + pc.r + 'deg)'"
-          (click)="openCardMeaning(pc)"
-        >
-          <div class="card-inner">
-            <img class="back" [src]="backUrl" alt="Back" />
-            <img class="front" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
-          </div>
+  @if (isMobile) {
+  <!-- === LAYOUT MÓVIL === -->
+  <div class="mobile-layout">
+
+    <!-- 🔘 Drucoins flotante -->
+    <div class="drucoins-hud floating">
+      <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
+      <span class="count">{{ quota?.remaining ?? 0 }}</span>
+    </div>
+
+    <!-- 🎴 Carta activa + interpretación -->
+    <div class="mobile-card-view">
+      @if (placed.length > 0) {
+        <div class="card-area">
+          <img
+            class="card-face"
+            [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+            alt="{{ placed[focusIdx]?.cardId }}"
+            (click)="openCardMeaning(placed[focusIdx])"
+          />
+          <p class="card-counter">
+            Carta {{ focusIdx + 1 }} / {{ placed.length }}
+          </p>
+        </div>
+        <div class="interpret-area">
+          <h4>Interpretación</h4>
+          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+        </div>
+      } @else {
+        <div class="no-cards">
+          <p>✨ No hay cartas aún</p>
         </div>
       }
     </div>
-  }
+
+    <!-- 🎛️ Menú inferior -->
+    <div class="bottom-menu">
+      <button (click)="hacerTirada()">🔮</button>
+      <button (click)="openHistory()">📜</button>
+      <button (click)="toggleBookPanel()">📖</button>
+    </div>
+
+    <!-- 📖 Panel desplegable tipo libro -->
+    <div class="book-panel" [class.open]="showBookPanel">
+      <div class="page left-page" (click)="toggleBookPanel()"></div>
+      <div class="page right-page">
+        <header>
+          <h2>El Grimorio</h2>
+          <button class="close" (click)="toggleBookPanel()">×</button>
+        </header>
+
+        <section>
+          <h3>Suscripciones</h3>
+          <p>🜂 Modo Sabiduría – hasta 30 tiradas/mes.</p>
+          <p>⚛️ Modo Quántico – tiradas ilimitadas + IA avanzada.</p>
+          <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
+        </section>
+
+        <section>
+          <h3>Cuenta</h3>
+          <p>Ver tu perfil, lecturas guardadas y progreso.</p>
+          <button (click)="openProfile()">Mi cuenta</button>
+        </section>
+
+        <section>
+          <h3>Información</h3>
+          <button (click)="openTerms()">Términos y condiciones</button>
+          <button (click)="openPrivacy()">Privacidad</button>
+        </section>
+      </div>
+    </div>
+  </div>
+}
+
 
   @if (isMobile) {
     <div class="mobile-carousel">
@@ -203,3 +256,11 @@
     <p>El mago está interpretando tu lectura…</p>
   </div>
 }
+
+<!-- MENÚ MOBILE -->
+<div class="mobile-menu" *ngIf="isMobile">
+  <button (click)="openHistory()"></button>
+  <button (click)="openSavedReadings()"></button>
+  <button (click)="toggleSettings()"></button>
+</div>
+
