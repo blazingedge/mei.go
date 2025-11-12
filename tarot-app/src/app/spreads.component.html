@@ -2,7 +2,6 @@
 
   <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
-
     <!-- Estado del mazo -->
     <div class="rail-status-min" aria-live="polite">
       <div class="shuffle-dot" [class.spin]="deckShuffling || loadingDeck"></div>
@@ -64,117 +63,49 @@
   </aside>
 
   <!-- TABLERO PRINCIPAL -->
-  <main class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : 'none'">
-
-    <!-- Selector de tirada -->
-    <div class="spread-select">
-      <label class="label">Tipo de tirada</label>
-      <div class="select-wrap">
-        <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()">
-          <option value="celtic-cross-10">Cruz Celta (10)</option>
-          <option value="ppf-3">Pasado · Presente · Futuro</option>
-          <option value="free">Libre (9+)</option>
-        </select>
-        <span class="caret">▾</span>
-      </div>
+  @if (!isMobile) {
+    <div class="board" [style.backgroundImage]="'url(' + boardBgUrl + ')'">
+      @for (pc of placed; track pc.cardId) {
+        <div
+          class="card"
+          [class.faceup]="pc.faceup"
+          [class.reversed]="pc.reversed"
+          [style.left.%]="pc.x"
+          [style.top.%]="pc.y"
+          [style.zIndex]="pc.z"
+          [style.transform]="'translate(-50%, -50%) rotate(' + pc.r + 'deg)'"
+          (click)="openCardMeaning(pc)"
+        >
+          <div class="card-inner">
+            <img class="back" [src]="backUrl" alt="Back" />
+            <img class="front" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
+          </div>
+        </div>
+      }
     </div>
+  }
 
-    <!-- Overlays -->
-    @if (layerOverlay) {
-      <div class="layer-overlay"></div>
-    }
-
-    <!-- Tabs de capas -->
-    @if (isFree && layers.length > 1) {
-      <div class="layer-tabs">
-        @for (l of layers; track l.id; let i = $index) {
-          <button type="button"
-                  class="layer-chip"
-                  [class.active]="i === activeLayer"
-                  (click)="switchLayer(i)">
-            Capa {{ l.id }}
-          </button>
+  @if (isMobile) {
+    <div class="mobile-carousel">
+      <div class="carousel-track">
+        @for (pc of placed; track pc.cardId; let i = $index) {
+          <div class="carousel-card">
+            <div class="card-wrapper" [class.reversed]="pc.reversed">
+              <img class="card-face" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
+              <p class="card-name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</p>
+              <button (click)="openCardMeaning(pc)">Ver significado</button>
+            </div>
+          </div>
         }
       </div>
-    }
 
-    <!-- Slots -->
-    @if (!isFree) {
-      @for (s of slots; track s.position) {
-        <div class="slot"
-             [style.--x]="s.x + '%'"
-             [style.--y]="s.y + '%'"
-             [style.--r]="s.r + 'deg'"
-             [style.zIndex]="s.z"
-             [attr.data-pos]="s.position"></div>
-      }
-    }
-
-    <!-- Cartas -->
-    @for (pc of activeCards; track pc.position) {
-      <div class="card"
-           cdkDrag
-           cdkDragBoundary=".board"
-           [style.--x]="pc.x + '%'"
-           [style.--y]="pc.y + '%'"
-           [style.--r]="pc.r + 'deg'"
-           [style.zIndex]="pc.z"
-           [class.dealt]="pc.dealt"
-           [class.faceup]="pc.faceup"
-           [class.reversed]="pc.reversed"
-           (click)="onCardClick(pc, $event)">
-        <div class="card-inner">
-          <img class="front" [src]="getFrontUrl(pc.cardId)" alt="carta" />
-          <img class="back"  [src]="backUrl" alt="reverso" />
-        </div>
+      <div class="carousel-nav">
+        <button (click)="prevCard()">←</button>
+        <span>{{ focusIdx + 1 }} / {{ placed.length }}</span>
+        <button (click)="nextCard()">→</button>
       </div>
-    }
-
-    <!-- Mazo -->
-    <div class="deck-pile" [class.shuffle]="deckShuffling" (click)="onDeckClick()">
-      @for (i of [0,1,2,3,4]; track i) {
-        <img [src]="backUrl" alt="mazo" />
-      }
-      <div class="deck-label">MAZO</div>
     </div>
-
-    <!-- Historial -->
-    @if (showHistory) {
-      <div class="history-modal" [class.visible]="showHistory" (click)="closeHistory()">
-        <div class="history-card" (click)="$event.stopPropagation()">
-          <header>
-            <h4>Historial</h4>
-            <button type="button" class="close" (click)="closeHistory()">×</button>
-          </header>
-
-          @if (historyList.length) {
-            <ul class="history-list">
-              @for (h of historyList; track h.id) {
-                <li>
-                  <div class="meta">
-                    <strong>{{ h.spreadLabel }}</strong>
-                    @if (h.ts) {
-                      <small>· {{ formatTs(h.ts!) }}</small>
-                    }
-                  </div>
-                  <div class="actions">
-                    <button type="button" (click)="loadHistory(h)">Cargar</button>
-                    <button type="button" class="warn" (click)="deleteHistory(h.id)">Eliminar</button>
-                  </div>
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="muted">Aún no hay tiradas guardadas.</p>
-          }
-
-          <footer>
-            <button type="button" (click)="closeHistory()">Cerrar</button>
-          </footer>
-        </div>
-      </div>
-    }
-  </main>
+  }
 
   <!-- HUD de Drucoins -->
   <div class="drucoins-hud" title="Tus tiradas disponibles">

@@ -1,4 +1,4 @@
-@import './mobile.scss';
+@use './mobile.scss' as *;
 
 :host {
   /* paleta + layout */

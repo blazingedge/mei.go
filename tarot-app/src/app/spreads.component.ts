@@ -61,6 +61,7 @@
     // ===== estado principal =====
     spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
     spreadLabel = 'Cruz Celta';
+    isMobile = false;
 
     backUrl!: string;
     boardBgUrl = '';
@@ -81,9 +82,9 @@
 
     stepMode = false;
     private buffer: Placed[] = [];
-    private nextIdx = 0;
+    nextIdx = 0;
     freeLayout: FreeLayout = 'pile';
-    private focusIdx = 0;
+    focusIdx = 0;
 
     
     aiResponse = '';
@@ -102,6 +103,8 @@
     showContextModal = false;
     userContextInput = '';
     userContext = '';
+
+    showBookPanel = false;
 
   
 
@@ -179,6 +182,9 @@
   return item.id;
 }
 
+toggleBookPanel() {
+  this.showBookPanel = !this.showBookPanel;
+}
 
   // 🌙 Cierra el overlay
   closeCardOverlay() {
@@ -192,6 +198,12 @@
 
 
     async ngOnInit(){
+
+       window.matchMedia('(max-width: 768px)').addEventListener('change', e => {
+      this.isMobile = e.matches;
+      console.log('📱 Cambió a móvil?', this.isMobile);
+      });
+
       this.resolveBgInBackground();
       await this.loadDeckFirst();
       this.rebuildSlots();
@@ -211,6 +223,8 @@
       }
 
       await this.refreshQuota()
+
+      
     }
 
     async refreshQuota(){
