@@ -143,23 +143,36 @@ setTimeout(() => {
 
   const token = await user.getIdToken();
 
-  await fetch(`${environment.API_BASE}/api/terms/accept`, {
+  const res = await fetch(`${environment.API_BASE}/api/terms/accept`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({
-      uid: user.uid,
       version: '1.0',
-      accepted_at: Date.now(),
-      user_agent: navigator.userAgent
+      acceptedAt: Date.now()
     })
   });
+
+  if (!res.ok) {
+    console.error('💥 Error registrando términos:', await res.text());
+    alert('No se pudieron guardar los términos. Inténtalo de nuevo.');
+    return;
+  }
+
+  // avisamos al AuthService para que el guard / otros lo sepan
+  this.auth.markTermsAccepted();
 
   this.showTerms = false;
   this.router.navigate(['/spreads']);
 }
+
+
+markTermsAccepted() {
+  this.termsAcceptedSubject.next(true);
+}
+
 
 
 

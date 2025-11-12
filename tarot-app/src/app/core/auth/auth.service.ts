@@ -56,26 +56,27 @@ export class AuthService {
   }
 
   // ✅ Login clásico (API Worker)
-  async login(email: string, password: string): Promise<boolean> {
-    try {
-      const res = await this.http
-        .post<{ ok: boolean; access?: string }>(
-          `${environment.API_BASE}/auth/login`,
-          { email, password },
-          { withCredentials: true }
-        )
-        .toPromise();
+async login(email: string, password: string): Promise<boolean> {
+  try {
+    const res = await this.http
+      .post<{ ok: boolean; token?: string }>(
+        `${environment.API_BASE}/auth/login`,
+        { email, password },
+        { withCredentials: true }
+      )
+      .toPromise();
 
-      if (res?.ok && res.access) {
-        this.workerToken = res.access;
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('❌ Error en login:', err);
-      return false;
+    if (res?.ok && res.token) {
+      this.workerToken = res.token;
+      return true;
     }
+    return false;
+  } catch (err) {
+    console.error('❌ Error en login:', err);
+    return false;
   }
+}
+
 
   // ✅ Registro clásico (API Worker)
   async register(email: string, password: string): Promise<boolean> {
@@ -116,16 +117,30 @@ export class AuthService {
     }
   }
 
-  checkTerms(uid: string) {
-  return fetch(`${environment.API_BASE}/terms/check`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid })
-  })
-  .then(r => r.json())
-  .then(j => j.accepted === true);
+async checkTerms(uid: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${environment.API_BASE}/api/terms/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid })
+    });
+
+    if (!res.ok) {
+      console.warn('⚠️ /api/terms/check respondió', res.status);
+      return false; // si hay error, forzamos a mostrar modal
+    }
+
+    const j = await res.json().catch(() => null);
+    return !!j?.accepted;
+  } catch (err) {
+    console.error('💥 Error en checkTerms:', err);
+    return false; // en duda → obligamos a aceptar otra vez
+  }
 }
 
+markTermsAccepted() {
+  this.termsAcceptedSubject.next(true);
+}
 
   // ✅ Logout universal
   async logout(): Promise<void> {
