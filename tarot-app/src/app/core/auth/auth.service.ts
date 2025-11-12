@@ -105,10 +105,7 @@ async login(email: string, password: string): Promise<boolean> {
       this.workerToken = token; // reusamos estructura
 
       // (opcional) sincroniza con tu Worker si quieres validarlo allá
-      await this.http
-        .post(`${environment.API_BASE}/auth/firebase`, { token })
-        .toPromise()
-        .catch(() => {});
+     
 
       return result.user;
     } catch (err) {
