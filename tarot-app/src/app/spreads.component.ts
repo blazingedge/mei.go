@@ -199,10 +199,12 @@ toggleBookPanel() {
 
     async ngOnInit(){
 
-       window.matchMedia('(max-width: 768px)').addEventListener('change', e => {
-      this.isMobile = e.matches;
-      console.log('📱 Cambió a móvil?', this.isMobile);
-      });
+    const mq = window.matchMedia('(max-width: 768px)');
+    this.isMobile = mq.matches; // ✅ Detecta móvil desde el inicio
+    mq.addEventListener('change', e => {
+    this.isMobile = e.matches;
+    console.log('📱 Cambió a móvil?', this.isMobile);
+    this.cdr.detectChanges(); });
 
       this.resolveBgInBackground();
       await this.loadDeckFirst();
