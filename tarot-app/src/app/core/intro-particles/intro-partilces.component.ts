@@ -77,14 +77,14 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
   }
 
   private spawnLeaf(top = false) {
-    const size = 8 + Math.random() * 18; // tamaño variable
+    const size = 8 + Math.random() * 18;
     const x = Math.random() * this.width;
     const y = top ? (Math.random() * -this.height * 0.5) : (Math.random() * this.height);
-    const vx = (Math.random() * 0.6 - 0.3) * (0.6 + Math.random());
-    const vy = 0.3 + Math.random() * 1.4;
+    const vx = (Math.random() * 0.4 - 0.2) * 0.6;
+    const vy = 0.15 + Math.random() * 0.75;
     const r = Math.random() * Math.PI * 2;
-    const vr = (Math.random() * 0.02 - 0.01);
-    const alpha = 0.6 + Math.random() * 0.4;
+    const vr = (Math.random() * 0.015 - 0.007);
+    const alpha = 0.6 + Math.random() * 0.3;
     const imgIdx = Math.floor(Math.random() * this.imgs.length);
 
     this.leaves.push({ x, y, vx, vy, r, vr, size, alpha, imgIdx });
@@ -98,7 +98,7 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
 
   private update() {
     const t = performance.now() / 1000;
-    const wind = Math.sin(t * 0.6) * 0.4; // viento suave
+    const wind = Math.sin(t * 0.35) * 0.25;
 
     for (let i = this.leaves.length - 1; i >= 0; i--) {
       const L = this.leaves[i];
@@ -107,7 +107,11 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
       L.y += L.vy;
       L.r += L.vr;
 
-      if (L.y > this.height + 40 || L.x < -50 || L.x > this.width + 50) {
+      if (L.y > this.height * 0.65) {
+        L.alpha = Math.max(0, L.alpha - 0.008);
+      }
+
+      if (L.y > this.height + 60 || L.x < -50 || L.x > this.width + 50 || L.alpha <= 0.02) {
         this.leaves.splice(i, 1);
         this.spawnLeaf(true);
       }

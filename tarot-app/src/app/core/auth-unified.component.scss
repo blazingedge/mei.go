@@ -12,9 +12,8 @@
   z-index: 999;
   opacity: 1;
   pointer-events: all;
-  animation: introExit 2.2s ease-in-out forwards;
-
-  animation-delay: 3.2s;
+  animation: introExit 3s ease-in-out forwards;
+  animation-delay: 3.6s;
 }
 
 @keyframes introExit {
@@ -24,21 +23,17 @@
     filter: blur(0);
     pointer-events: all;
   }
-  70% {
-    opacity: 0.8;
-    transform: translateX(40px);
-    filter: blur(3px);
-  }
-  99% {
-    opacity: 0.1;
-    transform: translateX(80px);
-    filter: blur(6px);
-    pointer-events: none;
+  75% {
+    opacity: 0.85;
+    transform: translateX(30px);
+    filter: blur(2px);
   }
   100% {
     opacity: 0;
-    visibility: hidden;
+    transform: translateX(90px);
+    filter: blur(6px);
     pointer-events: none;
+    visibility: hidden;
     display: none;
   }
 }
@@ -90,8 +85,8 @@
   opacity: 0;
   filter: blur(10px);
   transform: scale(0.98);
-  animation: layoutFocus 1.3s ease forwards;
-  animation-delay: 4.4s; /* empieza justo al morir el overlay */
+  animation: layoutFocus 1.4s ease forwards;
+  animation-delay: 4s;
 }
 
 @keyframes layoutFocus {

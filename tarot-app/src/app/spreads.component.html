@@ -1,4 +1,4 @@
-<div class="layout">
+﻿<div class="layout">
 
   <!-- RAIL IZQUIERDO -->
   <aside class="rail rail--beige">
@@ -64,81 +64,78 @@
 
   <!-- TABLERO PRINCIPAL -->
   @if (isMobile) {
-  <!-- === LAYOUT MÓVIL === -->
-  <div class="mobile-layout">
+    <!-- === LAYOUT MOVIL === -->
+    <div class="mobile-layout">
 
-    <!-- 🔘 Drucoins flotante -->
-    <div class="drucoins-hud floating">
-      <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
-      <span class="count">{{ quota?.remaining ?? 0 }}</span>
-    </div>
+      <!-- Drucoins HUD -->
+      <div class="drucoins-hud floating">
+        <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
+        <span class="count">{{ quota?.remaining ?? 0 }}</span>
+      </div>
 
-    <!-- 🎴 Carta activa + interpretación -->
-    <div class="mobile-card-view">
-      @if (placed.length > 0) {
-        <div class="card-area">
-          <img
-            class="card-face"
-            [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-            alt="{{ placed[focusIdx]?.cardId }}"
-            (click)="openCardMeaning(placed[focusIdx])"
-          />
-          <p class="card-counter">
-            Carta {{ focusIdx + 1 }} / {{ placed.length }}
-          </p>
+      <!-- Carta activa + interpretacion -->
+      <div class="mobile-card-view">
+        @if (placed.length > 0) {
+          <div class="card-area">
+            <img
+              class="card-face"
+              [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+              alt="{{ placed[focusIdx]?.cardId }}"
+              (click)="openCardMeaning(placed[focusIdx])"
+            />
+            <p class="card-counter">
+              Carta {{ focusIdx + 1 }} / {{ placed.length }}
+            </p>
+          </div>
+          <div class="interpret-area">
+            <h4>Interpretacion</h4>
+            <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado...'"></p>
+          </div>
+        } @else {
+          <div class="no-cards">
+            <p>No hay cartas todavia</p>
+          </div>
+        }
+      </div>
+
+      <!-- Menu inferior -->
+      <div class="bottom-menu">
+        <button (click)="hacerTirada()">Tirada</button>
+        <button (click)="openHistory()">Historial</button>
+        <button (click)="toggleBookPanel()">Grimorio</button>
+      </div>
+
+      <!-- Panel desplegable tipo libro -->
+      <div class="book-panel" [class.open]="showBookPanel">
+        <div class="page left-page" (click)="toggleBookPanel()"></div>
+        <div class="page right-page">
+          <header>
+            <h2>El Grimorio</h2>
+            <button class="close" (click)="toggleBookPanel()">Cerrar</button>
+          </header>
+
+          <section>
+            <h3>Suscripciones</h3>
+            <p>Modo Sabiduria: hasta 30 tiradas al mes.</p>
+            <p>Modo Quantico: tiradas ilimitadas + IA avanzada.</p>
+            <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
+          </section>
+
+          <section>
+            <h3>Cuenta</h3>
+            <p>Revisa tu perfil, lecturas guardadas y progreso.</p>
+            <button (click)="openProfile()">Mi cuenta</button>
+          </section>
+
+          <section>
+            <h3>Informacion</h3>
+            <button (click)="openTerms()">Terminos y condiciones</button>
+            <button (click)="openPrivacy()">Privacidad</button>
+          </section>
         </div>
-        <div class="interpret-area">
-          <h4>Interpretación</h4>
-          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-        </div>
-      } @else {
-        <div class="no-cards">
-          <p>✨ No hay cartas aún</p>
-        </div>
-      }
-    </div>
-
-    <!-- 🎛️ Menú inferior -->
-    <div class="bottom-menu">
-      <button (click)="hacerTirada()">🔮</button>
-      <button (click)="openHistory()">📜</button>
-      <button (click)="toggleBookPanel()">📖</button>
-    </div>
-
-    <!-- 📖 Panel desplegable tipo libro -->
-    <div class="book-panel" [class.open]="showBookPanel">
-      <div class="page left-page" (click)="toggleBookPanel()"></div>
-      <div class="page right-page">
-        <header>
-          <h2>El Grimorio</h2>
-          <button class="close" (click)="toggleBookPanel()">×</button>
-        </header>
-
-        <section>
-          <h3>Suscripciones</h3>
-          <p>🜂 Modo Sabiduría – hasta 30 tiradas/mes.</p>
-          <p>⚛️ Modo Quántico – tiradas ilimitadas + IA avanzada.</p>
-          <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
-        </section>
-
-        <section>
-          <h3>Cuenta</h3>
-          <p>Ver tu perfil, lecturas guardadas y progreso.</p>
-          <button (click)="openProfile()">Mi cuenta</button>
-        </section>
-
-        <section>
-          <h3>Información</h3>
-          <button (click)="openTerms()">Términos y condiciones</button>
-          <button (click)="openPrivacy()">Privacidad</button>
-        </section>
       </div>
     </div>
-  </div>
-}
 
-
-  @if (isMobile) {
     <div class="mobile-carousel">
       <div class="carousel-track">
         @for (pc of placed; track pc.cardId; let i = $index) {
@@ -153,24 +150,104 @@
       </div>
 
       <div class="carousel-nav">
-        <button (click)="prevCard()">←</button>
+        <button (click)="prevCard()">&lt;</button>
         <span>{{ focusIdx + 1 }} / {{ placed.length }}</span>
-        <button (click)="nextCard()">→</button>
+        <button (click)="nextCard()">&gt;</button>
+      </div>
+    </div>
+  } @else {
+    <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
+      <div class="spread-select">
+        <span class="label">Elige tirada</span>
+        <div class="select-wrap">
+          <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
+            @if (spreads?.length) {
+              @for (def of spreads; track def.id) {
+                <option [value]="def.id">{{ def.name }}</option>
+              }
+            } @else {
+              <option value="celtic-cross-10">Cruz Celta</option>
+              <option value="ppf-3">Pasado - Presente - Futuro</option>
+              <option value="free">Libre</option>
+            }
+          </select>
+          <span class="caret">&#9662;</span>
+        </div>
+      </div>
+
+      @if (isFree && layers.length > 1) {
+        <div class="layer-pills">
+          @for (layer of layers; track layer.id; let i = $index) {
+            <button type="button" (click)="switchLayer(i)" [class.active]="i === activeLayer">
+              Capa {{ layer.id }}
+            </button>
+          }
+        </div>
+      }
+
+      @if (!activeCards.length && deckReady && !dealing) {
+        <p class="board-empty">Haz clic en el mazo para comenzar una lectura.</p>
+      }
+
+      <div
+        class="slot"
+        *ngFor="let slot of slots; trackBy: trackSlot"
+        [style.--x]="slot.x + '%'"
+        [style.--y]="slot.y + '%'"
+        [style.--r]="slot.r + 'deg'"
+        [attr.data-pos]="slot.position"
+        aria-hidden="true">
+      </div>
+
+      <div
+        class="card"
+        *ngFor="let pc of activeCards; trackBy: trackCard"
+        cdkDrag
+        (cdkDragEnded)="onDragEnd(pc, $event)"
+        [class.dealt]="pc.dealt"
+        [class.faceup]="pc.faceup"
+        [class.reversed]="pc.reversed"
+        [style.--x]="pc.x + '%'"
+        [style.--y]="pc.y + '%'"
+        [style.--r]="pc.r + 'deg'"
+        [style.z-index]="pc.z">
+        <div class="card-inner" (click)="onCardClick(pc, $event)">
+          <img class="back" [src]="backUrl" alt="Carta boca abajo" draggable="false" />
+          <img class="front" [src]="getFrontUrl(pc.cardId)" [alt]="pc.cardId" draggable="false" loading="lazy" />
+        </div>
+      </div>
+
+      <div class="board-actions">
+        <button type="button" class="btn-main" (click)="hacerTirada()" [disabled]="!canDeal">
+          @if (dealing) { Barajando... } @else { Nueva tirada }
+        </button>
+        <button type="button" class="btn-main secondary" (click)="openContextModal()" [disabled]="!activeCards.length">
+          Interpretar
+        </button>
+      </div>
+
+      <div class="deck-pile" (click)="onDeckClick()" [class.shuffle]="deckShuffling || loadingDeck">
+        <img *ngFor="let deck of deckStack; trackBy: trackDeck" [src]="backUrl" alt="Mazo de cartas" draggable="false" />
+        <div class="deck-label">
+          @if (loadingDeck) { Cargando } @else { {{ deckCount }} cartas }
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- HUD de Drucoins -->
+  @if (!isMobile) {
+    <div class="drucoins-hud" title="Tus tiradas disponibles">
+      <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
+      <div class="counter">
+        <strong>{{ quota?.remaining ?? '--' }}</strong>
+        <small>/{{ quota?.monthly ?? '--' }}</small>
       </div>
     </div>
   }
 
-  <!-- HUD de Drucoins -->
-  <div class="drucoins-hud" title="Tus tiradas disponibles">
-    <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
-    <div class="counter">
-      <strong>{{ quota?.remaining ?? '—' }}</strong>
-      <small>/{{ quota?.monthly ?? '—' }}</small>
-    </div>
-  </div>
-
   <!-- PANEL DERECHO -->
-  @if (!showInterpretation) {
+  @if (!isMobile && !showInterpretation) {
     <aside class="panel">
       <h3>Lectura</h3>
       <div class="cards-list">

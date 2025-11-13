@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, OnInit } from '@angular/core';
+﻿import { Component, AfterViewInit, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,6 +7,7 @@ import { AuthService } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
 import { TermsModalComponent } from '../components/terms-modal.component';
+import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   standalone: true,
@@ -21,7 +22,7 @@ import { TermsModalComponent } from '../components/terms-modal.component';
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
 })
-export class AuthUnifiedComponent implements AfterViewInit, OnInit {
+export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
   // ----------------------------------------------------
   // Estado
@@ -36,6 +37,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
 
   login = { email: '', password: '' };
   register = { email: '', password: '', confirm: '' };
+  private destroy$ = new Subject<void>();
 
   constructor(private auth: AuthService, private router: Router) {}
 
@@ -62,7 +64,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
         el.style.pointerEvents = 'none';
       }
       this.showIntro = false;
-    }, 6000);
+    }, 7500);
   }
 
   async playIntro() {
@@ -71,7 +73,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     try {
       await audio.play();
     } catch {
-      console.warn('🔇 Autoplay bloqueado');
+      console.warn('Autoplay bloqueado');
     }
   }
 
@@ -79,17 +81,31 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
   ngOnInit() {
-  this.auth.termsAccepted$.subscribe((accepted) => {
-    const user = this.auth.currentUser;
+    this.auth.termsAccepted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((accepted) => {
+        const user = this.auth.currentUser;
+        if (!user) {
+          this.showTerms = false;
+          return;
+        }
 
-    if (!user) return; // si no hay usuario, no mostramos nada
+        if (accepted) {
+          this.showTerms = false;
+          this.finishAuthFlow();
+          return;
+        }
 
-    // si el login está en curso y NO aceptó → mostrar modal
-    if (!accepted) {
-      this.showTerms = true;
-    }
-  });
-}
+        if (this.auth.authFlowStarted) {
+          this.showTerms = true;
+        }
+      });
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
 
 
 
@@ -117,6 +133,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
       this.loginError = e.message || 'Error al iniciar sesión';
     } finally {
       this.loading = false;
+      if (!this.auth.currentUser) {
+        this.auth.authFlowStarted = false;
+      }
     }
   }
 
@@ -124,20 +143,30 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
   private async afterAuth() {
-  await new Promise(res => setTimeout(res, 300));
+    await new Promise(res => setTimeout(res, 300));
 
-  const user = this.auth.currentUser;
-  if (!user) return;
+    const user = this.auth.currentUser;
+    if (!user) {
+      this.auth.authFlowStarted = false;
+      return;
+    }
 
-  const accepted = await this.auth.checkTerms(user.uid);
+    const accepted = await this.auth.checkTerms(user.uid);
 
-  if (!accepted) {
-    this.showTerms = true;
-    return;
+    if (!accepted) {
+      this.showTerms = true;
+      return;
+    }
+
+    this.finishAuthFlow();
   }
 
-  this.router.navigate(['/spreads']);
-}
+  private finishAuthFlow() {
+    this.auth.authFlowStarted = false;
+    if (this.router.url !== '/spreads') {
+      this.router.navigate(['/spreads']);
+    }
+  }
 
 
   // ============================================================================
@@ -197,11 +226,17 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
 
     try {
       const user = await this.auth.loginWithGoogle();
-      if (!user) return;
+      if (!user) {
+        this.auth.authFlowStarted = false;
+        return;
+      }
 
       await this.afterAuth();
     } finally {
       this.loading = false;
+      if (!this.auth.currentUser) {
+        this.auth.authFlowStarted = false;
+      }
     }
   }
 
@@ -224,7 +259,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     this.acceptedTerms = true;
     this.showTerms = false;
 
-    this.router.navigate(['/spreads']);
+    this.finishAuthFlow();
   }
 
   onTermsClosed() {

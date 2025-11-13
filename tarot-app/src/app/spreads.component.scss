@@ -228,6 +228,94 @@
   background:radial-gradient(ellipse at center, rgba(0,0,0,.35), rgba(0,0,0,.55) 70%);
 }
 
+.layer-pills {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.35rem;
+  z-index: 6;
+
+  button {
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid rgba(214,178,94,.4);
+    background: rgba(10,12,18,.65);
+    color: var(--ink);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all .2s ease;
+
+    &.active {
+      background: linear-gradient(180deg, #d6b25e, #b9913a);
+      color: #1a1405;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    }
+  }
+}
+
+.board-actions {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1rem;
+  z-index: 8;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-main {
+  padding: 0.65rem 1.8rem;
+  border-radius: 999px;
+  border: none;
+  font-family: 'Cinzel', serif;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(180deg, #d6b25e, #b9913a);
+  color: #1a1405;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+  transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+
+  &:hover:not([disabled]) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 18px rgba(0,0,0,0.4);
+  }
+
+  &.secondary {
+    background: rgba(10,12,18,.65);
+    color: var(--ink);
+    border: 1px solid rgba(214,178,94,.35);
+  }
+
+  &[disabled] {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+}
+
+.board-empty {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ink);
+  font-family: 'Cardo', serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 0.75rem 1.5rem;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(214,178,94,0.3);
+  border-radius: 12px;
+  z-index: 5;
+}
+
 /* Selector de tirada */
 .spread-select {
   position:absolute;
