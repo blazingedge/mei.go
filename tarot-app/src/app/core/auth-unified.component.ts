@@ -22,6 +22,10 @@ import { TermsModalComponent } from '../components/terms-modal.component';
   styleUrls: ['./auth-unified.component.scss']
 })
 export class AuthUnifiedComponent implements AfterViewInit, OnInit {
+
+  // ----------------------------------------------------
+  // Estado
+  // ----------------------------------------------------
   showIntro = true;
   showTerms = false;
   acceptedTerms = false;
@@ -72,18 +76,16 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   }
 
   // ============================================================================
-  // ⭐ ngOnInit — CORREGIDO Y FINAL
-  // SOLO ACTÚA SI HAY USUARIO DE FIREBASE
+  // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
-
   ngOnInit() {
     this.auth.termsAccepted$.subscribe((accepted) => {
       const user = this.auth.currentUser;
 
-      if (!user) return;  // 🔥 SI NO HAY USUARIO → NO HACER NADA
+      if (!user) return;                       // No usuario → no hacer nada
+      if (!this.auth.authFlowStarted) return;  // No iniciamos un login → no mostrar modal
 
-      if (this.auth.authFlowstarted && !accepted) {
-        // usuario logueado, pero sin términos aceptados
+      if (!accepted) {
         this.showTerms = true;
       }
     });
@@ -92,10 +94,10 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ============================================================================
   // 🔐 LOGIN CLÁSICO
   // ============================================================================
-
   async onLogin() {
-    this.auth.authFlowstarted = true;
+    this.auth.authFlowStarted = true;
     this.loginError = '';
+
     if (!this.login.email || !this.login.password) {
       this.loginError = 'Completa todos los campos';
       return;
@@ -116,11 +118,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   }
 
   // ============================================================================
-  // 🌟 FUNCIÓN CENTRAL — MANEJA TODO EL FLUJO DE TÉRMINOS
+  // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
-
   private async afterAuth() {
-    // esperar a que Firebase actualice currentUser
+
+    // esperar a que Firebase setee correctamente el currentUser
     await new Promise(res => setTimeout(res, 250));
 
     const user = this.auth.currentUser;
@@ -129,12 +131,10 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     const accepted = await this.auth.checkTerms(user.uid);
 
     if (!accepted) {
-      // ❗ mostrar modal de términos
       this.showTerms = true;
       return;
     }
 
-    // ✔ ya aceptados → entrar
     this.router.navigate(['/spreads']);
   }
 
@@ -161,18 +161,21 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     }
 
     this.loading = true;
+
     try {
       const vr = await fetch(`${environment.API_BASE}/captcha/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: turnstileToken })
       });
+
       if (!vr.ok) throw new Error('Captcha inválido.');
 
       const ok = await this.auth.register(
         this.register.email,
         this.register.password
       );
+
       if (!ok) throw new Error('No se pudo registrar');
 
       alert('Registro completado. Ahora puedes iniciar sesión.');
@@ -186,9 +189,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ============================================================================
   // 🔑 LOGIN GOOGLE
   // ============================================================================
-
   async authGoogle() {
-    this.auth.authFlowstarted = true;
+    this.auth.authFlowStarted = true;
     this.loading = true;
 
     try {
@@ -204,7 +206,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ============================================================================
   // 📜 TÉRMINOS Y CONDICIONES
   // ============================================================================
-
   openTerms() {
     this.showTerms = true;
   }
@@ -247,6 +248,7 @@ declare global {
 
 window.onCaptchaVerified = async (token: string) => {
   console.log('Turnstile token:', token);
+
   try {
     const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
       method: 'POST',
