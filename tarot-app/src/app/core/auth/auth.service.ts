@@ -21,6 +21,8 @@ export class AuthService {
   private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
   termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
+  public authFlowstarted = false; 
+
   constructor(private http: HttpClient, private auth: Auth) {
 
     // ⭐ Sincroniza sesión Firebase
@@ -54,6 +56,8 @@ export class AuthService {
   // Login clásico (Worker)
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
+
+    this.authFlowstarted = true;
     try {
       const res = await this.http
         .post<{ ok: boolean; token?: string }>(
@@ -101,6 +105,7 @@ export class AuthService {
   // Login con Google
   // -----------------------
   async loginWithGoogle(): Promise<User | null> {
+    this.authFlowstarted = true;
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(this.auth, provider);

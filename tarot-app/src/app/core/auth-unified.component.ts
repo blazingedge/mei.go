@@ -82,7 +82,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
 
       if (!user) return;  // 🔥 SI NO HAY USUARIO → NO HACER NADA
 
-      if (!accepted) {
+      if (this.auth.authFlowstarted && !accepted) {
         // usuario logueado, pero sin términos aceptados
         this.showTerms = true;
       }
@@ -94,6 +94,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ============================================================================
 
   async onLogin() {
+    this.auth.authFlowstarted = true;
     this.loginError = '';
     if (!this.login.email || !this.login.password) {
       this.loginError = 'Completa todos los campos';
@@ -187,6 +188,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ============================================================================
 
   async authGoogle() {
+    this.auth.authFlowstarted = true;
     this.loading = true;
 
     try {
