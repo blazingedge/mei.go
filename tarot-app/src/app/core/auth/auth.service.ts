@@ -127,7 +127,7 @@ export class AuthService {
   // ======================================================
   async checkTerms(uid: string): Promise<boolean> {
     try {
-      const res = await fetch(`${environment.API_BASE}/api/terms/check`, {
+      const res = await fetch(`${environment.API_BASE}/terms/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid })
@@ -159,7 +159,7 @@ export class AuthService {
         return false;
       }
 
-      const res = await fetch(`${environment.API_BASE}/api/terms/accept`, {
+      const res = await fetch(`${environment.API_BASE}terms/accept`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
