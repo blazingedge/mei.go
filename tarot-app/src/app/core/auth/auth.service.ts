@@ -15,28 +15,22 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  // 🔐 token del worker para login clásico
+
   private workerToken: string | null = null;
 
-  // 🔮 estado reactivo de T&C
   private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
   termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
   constructor(private http: HttpClient, private auth: Auth) {
 
-    // ⭐ Escucha cambios de sesión Firebase
+    // ⭐ Sincroniza sesión Firebase
     onAuthStateChanged(this.auth, async (user) => {
       if (!user) return;
 
-      // Cuando el usuario inicia sesión en Firebase (Google)
       const accepted = await this.checkTerms(user.uid);
       this.termsAcceptedSubject.next(accepted);
     });
   }
-
-  // ======================================================
-  // 🚀 UTILIDADES
-  // ======================================================
 
   get currentUser(): User | null {
     return this.auth.currentUser ?? null;
@@ -45,7 +39,6 @@ export class AuthService {
   async getIdToken(): Promise<string | null> {
     const user = this.currentUser;
 
-    // 🟢 Firebase login (Google)
     if (user) {
       try {
         return await user.getIdToken();
@@ -54,13 +47,12 @@ export class AuthService {
       }
     }
 
-    // 🟡 Login clásico (worker)
     return this.workerToken;
   }
 
-  // ======================================================
-  // 🔐 LOGIN CLÁSICO (worker)
-  // ======================================================
+  // -----------------------
+  // Login clásico (Worker)
+  // -----------------------
   async login(email: string, password: string): Promise<boolean> {
     try {
       const res = await this.http
@@ -77,15 +69,16 @@ export class AuthService {
       }
 
       return false;
+
     } catch (err) {
       console.error('❌ Error en login:', err);
       return false;
     }
   }
 
-  // ======================================================
-  // 📝 REGISTRO CLÁSICO (worker)
-  // ======================================================
+  // -----------------------
+  // Registro Worker
+  // -----------------------
   async register(email: string, password: string): Promise<boolean> {
     try {
       const res = await this.http
@@ -97,34 +90,35 @@ export class AuthService {
         .toPromise();
 
       return !!res?.ok;
+
     } catch (err) {
       console.error('❌ Error en register:', err);
       return false;
     }
   }
 
-  // ======================================================
-  // 🔑 LOGIN CON GOOGLE (Firebase)
-  // ======================================================
+  // -----------------------
+  // Login con Google
+  // -----------------------
   async loginWithGoogle(): Promise<User | null> {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(this.auth, provider);
 
-      // Guardamos token Firebase como "token worker"
       const token = await result.user.getIdToken();
       this.workerToken = token;
 
       return result.user;
+
     } catch (err) {
       console.error('❌ Error Google Auth:', err);
       return null;
     }
   }
 
-  // ======================================================
-  // 📘 CHECK TÉRMINOS
-  // ======================================================
+  // -----------------------
+  // Verificar términos
+  // -----------------------
   async checkTerms(uid: string): Promise<boolean> {
     try {
       const res = await fetch(`${environment.API_BASE}/terms/check`, {
@@ -133,10 +127,7 @@ export class AuthService {
         body: JSON.stringify({ uid })
       });
 
-      if (!res.ok) {
-        console.warn('⚠️ /api/terms/check →', res.status);
-        return false;
-      }
+      if (!res.ok) return false;
 
       const j = await res.json().catch(() => null);
       return !!j?.accepted;
@@ -147,17 +138,13 @@ export class AuthService {
     }
   }
 
-  // ======================================================
-  // 🖋️ REGISTRO DE TÉRMINOS (Worker)
-  // ======================================================
+  // -----------------------
+  // Registrar aceptación
+  // -----------------------
   async markTermsAcceptedRemote(): Promise<boolean> {
     try {
       const token = await this.getIdToken();
-
-      if (!token) {
-        console.warn('⚠️ No hay token Firebase ni Worker → no puedo registrar T&C');
-        return false;
-      }
+      if (!token) return false;
 
       const res = await fetch(`${environment.API_BASE}/terms/accept`, {
         method: 'POST',
@@ -173,12 +160,8 @@ export class AuthService {
 
       const data = await res.json();
 
-      if (!data.ok) {
-        console.error('❌ Error registrando T&C:', data);
-        return false;
-      }
+      if (!data.ok) return false;
 
-      // Notificar a la app que ya fue aceptado
       this.termsAcceptedSubject.next(true);
       return true;
 
@@ -188,16 +171,10 @@ export class AuthService {
     }
   }
 
-  // ======================================================
-  // 🌙 MARCA INTERNA (solo frontend)
-  // ======================================================
   markTermsAccepted() {
     this.termsAcceptedSubject.next(true);
   }
 
-  // ======================================================
-  // 🚪 LOGOUT UNIVERSAL
-  // ======================================================
   async logout(): Promise<void> {
     this.workerToken = null;
     await signOut(this.auth);

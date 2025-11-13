@@ -1,15 +1,12 @@
-// src/app/auth/auth-unified.component.ts
 import { Component, AfterViewInit, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-
 import { LogoComponent } from './logo.component';
-import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
-import { TermsModalComponent } from '../components/terms-modal.component';
-
 import { AuthService } from './auth/auth.service';
+import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
+import { TermsModalComponent } from '../components/terms-modal.component';
 
 @Component({
   standalone: true,
@@ -25,7 +22,6 @@ import { environment } from '../../environments/environment';
   styleUrls: ['./auth-unified.component.scss']
 })
 export class AuthUnifiedComponent implements AfterViewInit, OnInit {
-
   showIntro = true;
   showTerms = false;
   acceptedTerms = false;
@@ -39,9 +35,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
 
   constructor(private auth: AuthService, private router: Router) {}
 
-  // ======================================================
-  // 🎬 INTRO EFECTO
-  // ======================================================
+  // ============================================================================
+  // 🎬 INTRO
+  // ============================================================================
   ngAfterViewInit() {
     this.playIntro();
 
@@ -68,7 +64,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   async playIntro() {
     const audio = new Audio('assets/audio/el-meigo.mp3');
     audio.volume = 0.55;
-
     try {
       await audio.play();
     } catch {
@@ -76,30 +71,28 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     }
   }
 
-  // ======================================================
-  // 🔄 OBSERVADOR DE TERMS (solo para redirecciones)
-  // ======================================================
+  // ============================================================================
+  // ⭐ ngOnInit — CORREGIDO Y FINAL
+  // SOLO ACTÚA SI HAY USUARIO DE FIREBASE
+  // ============================================================================
+
   ngOnInit() {
-  this.auth.termsAccepted$.subscribe((ok) => {
-    const user = this.auth.currentUser;
+    this.auth.termsAccepted$.subscribe((accepted) => {
+      const user = this.auth.currentUser;
 
-    // si no hay usuario (no logueado) no hacer nada
-    if (!user) return;
+      if (!user) return;  // 🔥 SI NO HAY USUARIO → NO HACER NADA
 
-    if (!ok) {
-      // no ha aceptado T&C → mostrar modal
-      this.showTerms = true;
-    } else {
-      // ya aceptó → entramos directo
-      this.router.navigate(['/spreads']);
-    }
-  });
-}
+      if (!accepted) {
+        // usuario logueado, pero sin términos aceptados
+        this.showTerms = true;
+      }
+    });
+  }
 
-
-  // ======================================================
+  // ============================================================================
   // 🔐 LOGIN CLÁSICO
-  // ======================================================
+  // ============================================================================
+
   async onLogin() {
     this.loginError = '';
     if (!this.login.email || !this.login.password) {
@@ -113,58 +106,43 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
       const ok = await this.auth.login(this.login.email, this.login.password);
       if (!ok) throw new Error('Credenciales inválidas');
 
-      const user = this.auth.currentUser;
-      const uid = user?.uid ?? null;
-
-      if (uid) {
-        const accepted = await this.auth.checkTerms(uid);
-
-        if (!accepted) {
-          this.showTerms = true;
-          return;
-        }
-      }
-
-      this.router.navigate(['/spreads']);
+      await this.afterAuth();
     } catch (e: any) {
-      this.loginError = e.message ?? 'Error al iniciar sesión';
+      this.loginError = e.message || 'Error al iniciar sesión';
     } finally {
       this.loading = false;
     }
   }
 
-  // ======================================================
-  // 🪶 TÉRMINOS Y CONDICIONES
-  // ======================================================
-  openTerms() {
-    this.showTerms = true;
-  }
+  // ============================================================================
+  // 🌟 FUNCIÓN CENTRAL — MANEJA TODO EL FLUJO DE TÉRMINOS
+  // ============================================================================
 
-  async onTermsAccepted() {
-    const ok = await this.auth.markTermsAcceptedRemote();
+  private async afterAuth() {
+    // esperar a que Firebase actualice currentUser
+    await new Promise(res => setTimeout(res, 250));
 
-    if (!ok) {
-      alert('No se pudieron guardar los términos.');
+    const user = this.auth.currentUser;
+    if (!user) return;
+
+    const accepted = await this.auth.checkTerms(user.uid);
+
+    if (!accepted) {
+      // ❗ mostrar modal de términos
+      this.showTerms = true;
       return;
     }
 
-    this.auth.markTermsAccepted();
-    this.acceptedTerms = true;
-
-    this.showTerms = false;
+    // ✔ ya aceptados → entrar
     this.router.navigate(['/spreads']);
   }
 
-  onTermsClosed() {
-    this.showTerms = false;
-  }
-
-  // ======================================================
-  // 🧾 REGISTRO
-  // ======================================================
+  // ============================================================================
+  // 📝 REGISTRO
+  // ============================================================================
   async onRegister() {
     if (!this.acceptedTerms) {
-      alert('Debes aceptar los términos antes de registrarte.');
+      alert('Debes aceptar los Términos y Condiciones antes de registrarte.');
       return;
     }
 
@@ -173,78 +151,91 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
     const tokenEl = document.querySelector(
       'input[name="cf-turnstile-response"]'
     ) as HTMLInputElement | null;
-    const turnstileToken = tokenEl?.value ?? '';
+
+    const turnstileToken = tokenEl?.value || '';
 
     if (!turnstileToken) {
-      this.regError = 'Completa el desafío "No soy un robot".';
+      this.regError = 'Debes completar el CAPTCHA.';
       return;
     }
 
     this.loading = true;
-
     try {
       const vr = await fetch(`${environment.API_BASE}/captcha/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: turnstileToken })
       });
+      if (!vr.ok) throw new Error('Captcha inválido.');
 
-      if (!vr.ok) throw new Error('Captcha inválido');
-
-      const ok = await this.auth.register(this.register.email, this.register.password);
+      const ok = await this.auth.register(
+        this.register.email,
+        this.register.password
+      );
       if (!ok) throw new Error('No se pudo registrar');
 
       alert('Registro completado. Ahora puedes iniciar sesión.');
     } catch (e: any) {
-      this.regError = e.message ?? 'Error al registrar';
+      this.regError = e.message || 'Error al registrar';
     } finally {
       this.loading = false;
     }
   }
 
-  // ======================================================
-  // 🔑 LOGIN CON GOOGLE
-  // ======================================================
+  // ============================================================================
+  // 🔑 LOGIN GOOGLE
+  // ============================================================================
+
   async authGoogle() {
-  this.loading = true;
+    this.loading = true;
 
-  try {
-    // 1. Login con Google
-    const result = await this.auth.loginWithGoogle();
-    if (!result) return;
+    try {
+      const user = await this.auth.loginWithGoogle();
+      if (!user) return;
 
-    // 👉 Usa el UID directamente del resultado del popup
-    const uid = result.uid;
+      await this.afterAuth();
+    } finally {
+      this.loading = false;
+    }
+  }
 
-    // 2. Preguntar al backend si ya aceptó T&C
-    const accepted = await this.auth.checkTerms(uid);
+  // ============================================================================
+  // 📜 TÉRMINOS Y CONDICIONES
+  // ============================================================================
 
-    // 3. Si NO ha aceptado → mostrar modal
-    if (!accepted) {
-      this.showTerms = true;
+  openTerms() {
+    this.showTerms = true;
+  }
+
+  async onTermsAccepted() {
+    const ok = await this.auth.markTermsAcceptedRemote();
+
+    if (!ok) {
+      alert('No se pudieron guardar los términos. Intenta de nuevo.');
       return;
     }
 
-    // 4. Si ya aceptó → continuar al dashboard
+    this.auth.markTermsAccepted();
+    this.acceptedTerms = true;
+    this.showTerms = false;
+
     this.router.navigate(['/spreads']);
-
-  } finally {
-    this.loading = false;
   }
-}
 
+  onTermsClosed() {
+    this.showTerms = false;
+  }
 
-
-  // ======================================================
-  // ⚙️ Otros
-  // ======================================================
+  // ============================================================================
+  // FACEBOOK
+  // ============================================================================
   authFacebook() {
-    alert('Login con Facebook no implementado.');
+    alert('Aún no está implementado 😅');
   }
 }
 
 // ======================================================
-// 🌐 CALLBACK GLOBAL TURNSTILE
+// 🌐 CALLBACK TURNSTILE
 // ======================================================
 declare global {
   interface Window {
@@ -253,8 +244,7 @@ declare global {
 }
 
 window.onCaptchaVerified = async (token: string) => {
-  console.log('Token Turnstile recibido:', token);
-
+  console.log('Turnstile token:', token);
   try {
     const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
       method: 'POST',
@@ -264,9 +254,9 @@ window.onCaptchaVerified = async (token: string) => {
 
     const data = await res.json();
     if (!data.ok) {
-      alert('Verificación CAPTCHA fallida.');
+      alert('Verifica que no eres un robot.');
     }
   } catch (err) {
-    console.error('Error verificando Turnstile:', err);
+    console.error('Turnstile error:', err);
   }
 };
