@@ -80,8 +80,22 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // 🔄 OBSERVADOR DE TERMS (solo para redirecciones)
   // ======================================================
   ngOnInit() {
-  
-  }
+  this.auth.termsAccepted$.subscribe((ok) => {
+    const user = this.auth.currentUser;
+
+    // si no hay usuario (no logueado) no hacer nada
+    if (!user) return;
+
+    if (!ok) {
+      // no ha aceptado T&C → mostrar modal
+      this.showTerms = true;
+    } else {
+      // ya aceptó → entramos directo
+      this.router.navigate(['/spreads']);
+    }
+  });
+}
+
 
   // ======================================================
   // 🔐 LOGIN CLÁSICO
