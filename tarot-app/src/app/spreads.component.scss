@@ -206,14 +206,17 @@
 
 
 
-.board { 
+.board {
   min-height: calc(100vh - 40px);
   padding-top: 3vh;
-  position: relative; 
-  background-size: cover; 
-  background-position: center; 
-  overflow: hidden; 
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+
+  background-image: url('https://lumiere-api.laife91.workers.dev/cdn/cards/celtic-cloth.webp');
 }
+
 
 
 .board::after {
