@@ -925,7 +925,26 @@ async saveReading() {
   this.cdr.detectChanges();
 }
 
-    
+    openSubscription() {
+  console.log("openSubscription clicked");
+}
+
+openProfile() {
+  console.log("openProfile clicked");
+}
+
+openTerms() {
+  console.log("openTerms clicked");
+}
+
+openPrivacy() {
+  console.log("openPrivacy clicked");
+}
+
+toggleSettings() {
+  console.log("toggleSettings clicked");
+}
+
 
     deleteHistory(id:string){ const list=this.readHistory().filter(e=>e.id!==id); this.writeHistory(list); this.historyList=list; }
     loadHistory(h:HistoryEntry){
