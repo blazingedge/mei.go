@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  API_BASE: 'https://lumiere-api.laife91.workers.dev/api',
+  API_BASE: 'https://lumiere-api.laife91.workers.dev',
   CDN_BASE: 'https://lumiere-api.laife91.workers.dev/cdn',
   CARD_BACK_URL: '',
   firebase: {
