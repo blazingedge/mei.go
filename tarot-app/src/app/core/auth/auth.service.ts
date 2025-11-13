@@ -2,7 +2,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { environment } from '/../../environments/environment';
+import { environment } from '../../../environments/environment';
 
 import {
   Auth,
@@ -16,24 +16,32 @@ import {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
 
+  // -----------------------
+  // FLAGS Y ESTADO
+  // -----------------------
+  public authFlowStarted = false;   // <-- CORREGIDO Y ESTANDARIZADO
   private workerToken: string | null = null;
 
   private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
   termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
-  public authFlowstarted = false; 
-
   constructor(private http: HttpClient, private auth: Auth) {
 
-    // ⭐ Sincroniza sesión Firebase
+    // ⭐ Listener de Firebase
     onAuthStateChanged(this.auth, async (user) => {
       if (!user) return;
 
+      // Cuando Firebase cambia de usuario, verificamos términos
       const accepted = await this.checkTerms(user.uid);
+
+      // Emitimos resultado al flujo
       this.termsAcceptedSubject.next(accepted);
     });
   }
 
+  // -----------------------
+  // Utils
+  // -----------------------
   get currentUser(): User | null {
     return this.auth.currentUser ?? null;
   }
@@ -53,11 +61,9 @@ export class AuthService {
   }
 
   // -----------------------
-  // Login clásico (Worker)
+  // LOGIN WORKER
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
-
-    
     try {
       const res = await this.http
         .post<{ ok: boolean; token?: string }>(
@@ -71,7 +77,6 @@ export class AuthService {
         this.workerToken = res.token;
         return true;
       }
-
       return false;
 
     } catch (err) {
@@ -81,7 +86,7 @@ export class AuthService {
   }
 
   // -----------------------
-  // Registro Worker
+  // REGISTER WORKER
   // -----------------------
   async register(email: string, password: string): Promise<boolean> {
     try {
@@ -102,13 +107,14 @@ export class AuthService {
   }
 
   // -----------------------
-  // Login con Google
+  // LOGIN GOOGLE
   // -----------------------
   async loginWithGoogle(): Promise<User | null> {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(this.auth, provider);
 
+      // Guardar token Firebase como token worker temporal
       const token = await result.user.getIdToken();
       this.workerToken = token;
 
@@ -121,7 +127,7 @@ export class AuthService {
   }
 
   // -----------------------
-  // Verificar términos
+  // CHECK TERMS
   // -----------------------
   async checkTerms(uid: string): Promise<boolean> {
     try {
@@ -131,7 +137,10 @@ export class AuthService {
         body: JSON.stringify({ uid })
       });
 
-      if (!res.ok) return false;
+      if (!res.ok) {
+        console.warn('⚠️ /api/terms/check → status', res.status);
+        return false;
+      }
 
       const j = await res.json().catch(() => null);
       return !!j?.accepted;
@@ -143,12 +152,15 @@ export class AuthService {
   }
 
   // -----------------------
-  // Registrar aceptación
+  // REGISTER TERMS ACCEPT
   // -----------------------
   async markTermsAcceptedRemote(): Promise<boolean> {
     try {
       const token = await this.getIdToken();
-      if (!token) return false;
+      if (!token) {
+        console.warn('⚠️ No hay token para registrar T&C');
+        return false;
+      }
 
       const res = await fetch(`${environment.API_BASE}/terms/accept`, {
         method: 'POST',
@@ -163,7 +175,6 @@ export class AuthService {
       });
 
       const data = await res.json();
-
       if (!data.ok) return false;
 
       this.termsAcceptedSubject.next(true);
@@ -179,6 +190,9 @@ export class AuthService {
     this.termsAcceptedSubject.next(true);
   }
 
+  // -----------------------
+  // LOGOUT
+  // -----------------------
   async logout(): Promise<void> {
     this.workerToken = null;
     await signOut(this.auth);
