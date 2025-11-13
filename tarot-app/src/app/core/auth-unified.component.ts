@@ -192,24 +192,34 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // 🔑 LOGIN CON GOOGLE
   // ======================================================
   async authGoogle() {
-    this.loading = true;
+  this.loading = true;
 
-    try {
-      const user = await this.auth.loginWithGoogle();
-      if (!user) return;
+  try {
+    // 1. Login con Google
+    const result = await this.auth.loginWithGoogle();
+    if (!result) return;
 
-      const accepted = await this.auth.checkTerms(user.uid);
+    // 👉 Usa el UID directamente del resultado del popup
+    const uid = result.uid;
 
-      if (!accepted) {
-        this.showTerms = true;
-        return;
-      }
+    // 2. Preguntar al backend si ya aceptó T&C
+    const accepted = await this.auth.checkTerms(uid);
 
-      this.router.navigate(['/spreads']);
-    } finally {
-      this.loading = false;
+    // 3. Si NO ha aceptado → mostrar modal
+    if (!accepted) {
+      this.showTerms = true;
+      return;
     }
+
+    // 4. Si ya aceptó → continuar al dashboard
+    this.router.navigate(['/spreads']);
+
+  } finally {
+    this.loading = false;
   }
+}
+
+
 
   // ======================================================
   // ⚙️ Otros
