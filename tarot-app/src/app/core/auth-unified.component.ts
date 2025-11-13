@@ -1,8 +1,8 @@
-import { Component, AfterViewInit } from '@angular/core';
+import { Component, AfterViewInit, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { LogoComponent } from "./logo.component";
+import { LogoComponent } from './logo.component';
 import { AuthService } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
@@ -21,11 +21,10 @@ import { TermsModalComponent } from '../components/terms-modal.component';
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
 })
-export class AuthUnifiedComponent implements AfterViewInit {
+export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   showIntro = true;
   showTerms = false;
   acceptedTerms = false;
-  
 
   loading = false;
   loginError = '';
@@ -40,33 +39,28 @@ export class AuthUnifiedComponent implements AfterViewInit {
   // 🎬 INTRO CONTROL (sin bloqueo del blur)
   // ======================================================
   ngAfterViewInit() {
-  this.playIntro();
+    this.playIntro();
 
-  const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
+    const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
 
-if (intro) {
-  intro.addEventListener('animationend', () => {
-    intro.style.display = 'none'; // 💥 desaparece físicamente
-    intro.style.pointerEvents = 'none';
-    this.showIntro = false;
-  });
-}
+    if (intro) {
+      intro.addEventListener('animationend', () => {
+        intro.style.display = 'none';
+        intro.style.pointerEvents = 'none';
+        this.showIntro = false;
+      });
+    }
 
-// seguridad adicional por si algo falla
-setTimeout(() => {
-  const el = document.querySelector('.intro-overlay') as HTMLElement | null;
-  if (el) {
-    el.style.display = 'none';
-    el.style.pointerEvents = 'none';
+    // seguridad adicional por si algo falla
+    setTimeout(() => {
+      const el = document.querySelector('.intro-overlay') as HTMLElement | null;
+      if (el) {
+        el.style.display = 'none';
+        el.style.pointerEvents = 'none';
+      }
+      this.showIntro = false;
+    }, 6000);
   }
-  this.showIntro = false;
-}, 6000);
-
-
-  // Seguridad extra por si el evento no dispara
-
-}
-
 
   async playIntro() {
     const audio = new Audio('assets/audio/el-meigo.mp3');
@@ -78,143 +72,86 @@ setTimeout(() => {
     }
   }
 
+  // ======================================================
+  // 🔄 SUBSCRIPCIÓN A termsAccepted$
+  // ======================================================
   ngOnInit() {
-  this.auth.termsAccepted$.subscribe((ok) => {
-    if (ok) {
-      // ya aceptados
-      this.router.navigate(['/spreads']);
-    } else {
-      // abrir modal solo si hay usuario
-      if (this.auth.currentUser) {
-        this.showTerms = true;
+    this.auth.termsAccepted$.subscribe((ok) => {
+      if (ok) {
+        // ya aceptados → entra directo
+        this.router.navigate(['/spreads']);
+      } else {
+        // abrir modal solo si hay usuario autenticado
+        if (this.auth.currentUser) {
+          this.showTerms = true;
+        }
       }
-    }
-  });
-}
-
+    });
+  }
 
   // ======================================================
-  // 🔐 LOGIN
+  // 🔐 LOGIN CLÁSICO (worker)
   // ======================================================
   async onLogin() {
-  this.loginError = '';
-  if (!this.login.email || !this.login.password) {
-    this.loginError = 'Completa todos los campos';
-    return;
-  }
-
-  this.loading = true;
-
-  try {
-    const ok = await this.auth.login(this.login.email, this.login.password);
-    if (!ok) throw new Error('Credenciales inválidas');
-
-    const user = this.auth.currentUser;
-    const uid = user?.uid ?? null;
-
-    // ⬅️ AQUÍ: si hay UID (Firebase). Si no, email login sin Firebase
-    if (uid) {
-      const accepted = await this.auth.checkTerms(uid);
-      if (!accepted) {
-        this.showTerms = true;
-        return;
-      }
+    this.loginError = '';
+    if (!this.login.email || !this.login.password) {
+      this.loginError = 'Completa todos los campos';
+      return;
     }
 
-    await this.router.navigate(['/spreads']);
-  } catch (e: any) {
-    this.loginError = e.message || 'Error al iniciar sesión';
-  } finally {
-    this.loading = false;
-  }
-}
+    this.loading = true;
 
+    try {
+      const ok = await this.auth.login(this.login.email, this.login.password);
+      if (!ok) throw new Error('Credenciales inválidas');
+
+      const user = this.auth.currentUser;
+      const uid = user?.uid ?? null;
+
+      // si hay UID Firebase, se comprueban términos
+      if (uid) {
+        const accepted = await this.auth.checkTerms(uid);
+        if (!accepted) {
+          this.showTerms = true;
+          return;
+        }
+      }
+
+      await this.router.navigate(['/spreads']);
+    } catch (e: any) {
+      this.loginError = e.message || 'Error al iniciar sesión';
+    } finally {
+      this.loading = false;
+    }
+  }
 
   // ======================================================
-  // 🪶 TÉRMINOS Y CONDICIONES
+  // 🪶 TÉRMINOS Y CONDICIONES (modal)
   // ======================================================
   openTerms() {
     this.showTerms = true;
   }
 
- async onTermsAccepted() {
-  const user = this.auth.currentUser;
-  if (!user) return;
+  async onTermsAccepted() {
+    // 🔥 registrar en el Worker usando el servicio
+    const ok = await this.auth.markTermsAcceptedRemote();
 
-  const token = await user.getIdToken();
-
-  const res = await fetch(`${environment.API_BASE}/api/terms/accept`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      version: '1.0',
-      acceptedAt: Date.now()
-    })
-  });
-
-  if (!res.ok) {
-    console.error('💥 Error registrando términos:', await res.text());
-    alert('No se pudieron guardar los términos. Inténtalo de nuevo.');
-    return;
-  }
-
-  // avisamos al AuthService para que el guard / otros lo sepan
-  this.auth.markTermsAcceptedRemote();
-
-  this.showTerms = false;
-  this.router.navigate(['/spreads']);
-}
-
-
-
-// ⬇️ Nuevo método
-async markTermsAcceptedRemote(): Promise<boolean> {
-  try {
-    const token = await this.getIdToken();
-    if (!token) {
-      console.warn('⚠️ No hay token Firebase todavía, no puedo registrar T&C');
-      return false;
+    if (!ok) {
+      alert('No se pudieron guardar los términos. Inténtalo de nuevo.');
+      return;
     }
 
-    const res = await fetch(`${environment.API_BASE}/api/terms/accept`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        version: '1.0',
-        acceptedAt: Date.now()
-      })
-    });
+    // estado en memoria (BehaviorSubject)
+    this.auth.markTermsAccepted();
+    this.acceptedTerms = true; // útil también para onRegister()
 
-    const data = await res.json();
-    if (!data.ok) {
-      console.error('❌ Error registrando T&C:', data);
-      return false;
-    }
-
-    // 🔥 marca internamente como aceptado
-    this.termsAcceptedSubject.next(true);
-    return true;
-
-  } catch (err) {
-    console.error('💥 markTermsAcceptedRemote error:', err);
-    return false;
+    this.showTerms = false;
+    this.router.navigate(['/spreads']);
   }
-}
 
-
-
-
-
-  
-onTermsClosed() {
-  this.showTerms = false;
-}
+  onTermsClosed() {
+    this.showTerms = false;
+  }
 
   // ======================================================
   // 🧾 REGISTRO
@@ -226,7 +163,9 @@ onTermsClosed() {
     }
 
     this.regError = '';
-    const tokenEl = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement | null;
+    const tokenEl = document.querySelector(
+      'input[name="cf-turnstile-response"]'
+    ) as HTMLInputElement | null;
     const turnstileToken = tokenEl?.value || '';
 
     if (!turnstileToken) {
@@ -243,7 +182,10 @@ onTermsClosed() {
       });
       if (!vr.ok) throw new Error('Captcha inválido.');
 
-      const ok = await this.auth.register(this.register.email, this.register.password);
+      const ok = await this.auth.register(
+        this.register.email,
+        this.register.password
+      );
       if (!ok) throw new Error('No se pudo registrar');
       alert('✅ Registro completado. Ahora puedes iniciar sesión.');
     } catch (e: any) {
@@ -254,33 +196,30 @@ onTermsClosed() {
   }
 
   // ======================================================
-  // 🔑 LOGIN CON GOOGLE
+  // 🔑 LOGIN CON GOOGLE (Firebase)
   // ======================================================
-async authGoogle() {
-  this.loading = true;
+  async authGoogle() {
+    this.loading = true;
 
-  try {
-    const user = await this.auth.loginWithGoogle();
-    if (!user) return;
+    try {
+      const user = await this.auth.loginWithGoogle();
+      if (!user) return;
 
-    const uid = user.uid;
+      const uid = user.uid;
 
-    const accepted = await this.auth.checkTerms(uid);
+      const accepted = await this.auth.checkTerms(uid);
 
-    if (!accepted) {
-      this.showTerms = true;
-      return;
+      if (!accepted) {
+        // no aceptó todavía → mostrar modal
+        this.showTerms = true;
+        return;
+      }
+
+      this.router.navigate(['/spreads']);
+    } finally {
+      this.loading = false;
     }
-
-    this.router.navigate(['/spreads']);
-
-  } finally {
-    this.loading = false;
   }
-}
-
-
-
 
   // ======================================================
   // ⚙️ OTROS
@@ -290,6 +229,9 @@ async authGoogle() {
   }
 }
 
+// ======================================================
+// 🌐 CALLBACK GLOBAL DE TURNSTILE
+// ======================================================
 declare global {
   interface Window {
     onCaptchaVerified: (token: string) => void;
@@ -302,7 +244,7 @@ window.onCaptchaVerified = async (token: string) => {
     const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token })
     });
 
     const data = await res.json();
