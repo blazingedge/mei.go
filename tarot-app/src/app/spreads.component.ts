@@ -3,16 +3,19 @@
   import { FormsModule } from '@angular/forms';
   import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
   import { BreakpointObserver } from '@angular/cdk/layout';
-  import { DomSanitizer } from '@angular/platform-browser';
+  import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
   import { firstValueFrom } from 'rxjs';
   import { environment } from '../environments/environment';
   import { TarotApi, CardMeta, SpreadDef, DrawResult, DrawCard } from '../services/spreads.service';
   import { ImageLoaderService } from '../services/image-loader.service';
-  import { Auth } from '@angular/fire/auth'; // 👈 NUEVO
+  import { Auth } from '@angular/fire/auth';
   import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
-  import { SafeHtml } from '@angular/platform-browser';
   import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-  type Placed = {
+  import { HangingMenuComponent } from './components/hanging-menu.component';
+  import { AuthService } from './core/auth/auth.service';
+  import { Router } from '@angular/router';
+
+type Placed = {
     position: number;
     cardId: string;
     reversed: boolean;
@@ -40,7 +43,7 @@
   @Component({
     selector: 'app-spreads',
     standalone: true,
-    imports: [CommonModule, FormsModule, DragDropModule],
+    imports: [CommonModule, FormsModule, DragDropModule, HangingMenuComponent],
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
   })
@@ -49,8 +52,10 @@
     private loader= inject(ImageLoaderService);
     private zone  = inject(NgZone);
     private cdr   = inject(ChangeDetectorRef);
-    private auth  = inject(Auth); // NUEVO
+    private auth  = inject(Auth);
     private breakpointObserver = inject(BreakpointObserver);
+    private authService = inject(AuthService);
+    private router = inject(Router);
     // ===== estado principal =====
     spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
     spreadLabel = 'Cruz Celta';
@@ -90,6 +95,13 @@
     userContextInput = '';
     userContext = '';
     showBookPanel = false;
+    readonly hangingMenuItems = [
+      { label: 'Mi cuenta', action: 'account' },
+      { label: 'Configuración', action: 'settings' },
+      { label: 'Lecturas guardadas', action: 'saved' },
+      { label: 'Premium / Drucoins', action: 'premium' },
+      { label: 'Cerrar sesión', action: 'logout' }
+    ];
     readonly deckStack = Array.from({ length: 5 }, (_, i) => i);
   
     
@@ -323,6 +335,10 @@ async saveReading() {
 
   trackDeck(_index: number, item: number): number {
     return item;
+  }
+
+  trackHistoryEntry(_index: number, entry: HistoryEntry): string {
+    return entry.id;
   }
     
     
@@ -795,6 +811,36 @@ openPrivacy() {
 toggleSettings() {
   console.log("toggleSettings clicked");
 }
+
+    handleMenuAction(action: string) {
+      switch (action) {
+        case 'logout':
+          this.logout();
+          break;
+        case 'saved':
+          this.openSavedReadings();
+          break;
+        case 'account':
+          this.openProfile();
+          break;
+        case 'settings':
+          this.toggleSettings();
+          break;
+        case 'premium':
+          this.openSubscription();
+          break;
+        default:
+          console.log('menu action', action);
+      }
+    }
+
+    async logout() {
+      try {
+        await this.authService.logout();
+      } finally {
+        await this.router.navigate(['/login']);
+      }
+    }
     deleteHistory(id:string){ const list=this.readHistory().filter(e=>e.id!==id); this.writeHistory(list); this.historyList=list; }
     loadHistory(h:HistoryEntry){
       this.showHistory=false;

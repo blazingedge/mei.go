@@ -84,8 +84,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
-        const user = this.auth.currentUser;
-        if (!user) {
+        if (!this.auth.authFlowStarted) {
           this.showTerms = false;
           return;
         }
@@ -93,10 +92,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
         if (accepted) {
           this.showTerms = false;
           this.finishAuthFlow();
-          return;
-        }
-
-        if (this.auth.authFlowStarted) {
+        } else {
           this.showTerms = true;
         }
       });

@@ -1,7 +1,14 @@
-﻿<div class="layout">
+﻿<!-- ===========================================================
+     🎭 LAYOUT GENERAL — Rail / Board / Panel
+     =========================================================== -->
 
-  <!-- RAIL IZQUIERDO -->
+<div class="layout">
+
+  <!-- ===========================================================
+       🧿 RAIL IZQUIERDO (SIEMPRE VISIBLE)
+       =========================================================== -->
   <aside class="rail rail--beige">
+
     <!-- Estado del mazo -->
     <div class="rail-status-min" aria-live="polite">
       <div class="shuffle-dot" [class.spin]="deckShuffling || loadingDeck"></div>
@@ -24,13 +31,24 @@
 
     <!-- Acciones rápidas -->
     <div class="rail-ghosts">
-      <button class="ghost-btn ghost--shuffle" (click)="toggleShuffle()" [disabled]="!deckReady" title="Barajar"></button>
-      <button class="ghost-btn ghost--history" (click)="openHistory($event)" title="Historial"></button>
-      <button class="ghost-btn ghost--saved" disabled title="Guardadas"></button>
+      <button class="ghost-btn ghost--shuffle"
+              (click)="toggleShuffle()"
+              [disabled]="!deckReady"
+              title="Barajar"></button>
+
+      <button class="ghost-btn ghost--history"
+              (click)="openHistory($event)"
+              title="Historial"></button>
+
+      <button class="ghost-btn ghost--saved"
+              disabled
+              title="Guardadas"></button>
     </div>
 
     <!-- Controles -->
     <div class="rail-controls">
+
+      <!-- Botones exclusivos para Cruz Celta -->
       @if (spreadId === 'celtic-cross-10') {
         <div class="seg">
           <button type="button" [class.active]="!stepMode" (click)="stepMode=false">Completa</button>
@@ -43,6 +61,7 @@
         </div>
       }
 
+      <!-- Botones especiales para modo libre -->
       @if (isFree) {
         <div class="free-controls">
           <div class="seg">
@@ -50,6 +69,7 @@
             <button type="button" (click)="agregarCartaLibre(3)">+3</button>
             <button type="button" (click)="agregarCartaLibre(10)">+10</button>
           </div>
+
           <label>Layout:
             <select [(ngModel)]="freeLayout">
               <option value="pile">Pila</option>
@@ -59,106 +79,33 @@
           </label>
         </div>
       }
+
     </div>
   </aside>
 
-  <!-- TABLERO PRINCIPAL -->
-  @if (isMobile) {
-    <!-- === LAYOUT MOVIL === -->
-    <div class="mobile-layout">
 
-      <!-- Drucoins HUD -->
-      <div class="drucoins-hud floating">
+
+  <!-- ===========================================================
+       📱 MOBILE LAYOUT
+       =========================================================== -->
+  @if (isMobile) {
+
+  <div class="mobile-layout">
+
+    <!-- ===========================================================
+         🔝 TOP BAR (MOBILE) — Drucoins + Selector + Logout
+         =========================================================== -->
+    <div class="mobile-top-bar">
+
+      <!-- Drucoins -->
+      <div class="drucoins-hud bubble">
         <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
         <span class="count">{{ quota?.remaining ?? 0 }}</span>
       </div>
 
-      <!-- Carta activa + interpretacion -->
-      <div class="mobile-card-view">
-        @if (placed.length > 0) {
-          <div class="card-area">
-            <img
-              class="card-face"
-              [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-              alt="{{ placed[focusIdx]?.cardId }}"
-              (click)="openCardMeaning(placed[focusIdx])"
-            />
-            <p class="card-counter">
-              Carta {{ focusIdx + 1 }} / {{ placed.length }}
-            </p>
-          </div>
-          <div class="interpret-area">
-            <h4>Interpretacion</h4>
-            <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado...'"></p>
-          </div>
-        } @else {
-          <div class="no-cards">
-            <p>No hay cartas todavia</p>
-          </div>
-        }
-      </div>
-
-      <!-- Menu inferior -->
-      <div class="bottom-menu">
-        <button (click)="hacerTirada()">Tirada</button>
-        <button (click)="openHistory()">Historial</button>
-        <button (click)="toggleBookPanel()">Grimorio</button>
-      </div>
-
-      <!-- Panel desplegable tipo libro -->
-      <div class="book-panel" [class.open]="showBookPanel">
-        <div class="page left-page" (click)="toggleBookPanel()"></div>
-        <div class="page right-page">
-          <header>
-            <h2>El Grimorio</h2>
-            <button class="close" (click)="toggleBookPanel()">Cerrar</button>
-          </header>
-
-          <section>
-            <h3>Suscripciones</h3>
-            <p>Modo Sabiduria: hasta 30 tiradas al mes.</p>
-            <p>Modo Quantico: tiradas ilimitadas + IA avanzada.</p>
-            <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
-          </section>
-
-          <section>
-            <h3>Cuenta</h3>
-            <p>Revisa tu perfil, lecturas guardadas y progreso.</p>
-            <button (click)="openProfile()">Mi cuenta</button>
-          </section>
-
-          <section>
-            <h3>Informacion</h3>
-            <button (click)="openTerms()">Terminos y condiciones</button>
-            <button (click)="openPrivacy()">Privacidad</button>
-          </section>
-        </div>
-      </div>
-    </div>
-
-    <div class="mobile-carousel">
-      <div class="carousel-track">
-        @for (pc of placed; track pc.cardId; let i = $index) {
-          <div class="carousel-card">
-            <div class="card-wrapper" [class.reversed]="pc.reversed">
-              <img class="card-face" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
-              <p class="card-name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</p>
-              <button (click)="openCardMeaning(pc)">Ver significado</button>
-            </div>
-          </div>
-        }
-      </div>
-
-      <div class="carousel-nav">
-        <button (click)="prevCard()">&lt;</button>
-        <span>{{ focusIdx + 1 }} / {{ placed.length }}</span>
-        <button (click)="nextCard()">&gt;</button>
-      </div>
-    </div>
-  } @else {
-    <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
-      <div class="spread-select">
-        <span class="label">Elige tirada</span>
+      <!-- Selector de tirada -->
+      <div class="mobile-spread-select">
+        <label>Tipo de tirada</label>
         <div class="select-wrap">
           <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
             @if (spreads?.length) {
@@ -171,123 +118,397 @@
               <option value="free">Libre</option>
             }
           </select>
-          <span class="caret">&#9662;</span>
         </div>
       </div>
 
-      @if (isFree && layers.length > 1) {
-        <div class="layer-pills">
-          @for (layer of layers; track layer.id; let i = $index) {
-            <button type="button" (click)="switchLayer(i)" [class.active]="i === activeLayer">
-              Capa {{ layer.id }}
+      <!-- Logout -->
+      <button type="button" class="logout-btn" (click)="logout()" aria-label="Cerrar sesión">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9" />
+        </svg>
+      </button>
+
+    </div>
+
+
+
+    <!-- ===========================================================
+         🪶 MENÚ COLGANTE (ÚNICO)
+         =========================================================== -->
+    <app-hanging-menu title="Grimorio" (action)="handleMenuAction($event)">
+      <ul class="hanging-menu-list">
+        @for (item of hangingMenuItems; track item.label) {
+          <li>
+            <button type="button" [attr.data-action]="item.action">
+              {{ item.label }}
             </button>
+          </li>
+        }
+      </ul>
+    </app-hanging-menu>
+
+
+
+    <!-- ===========================================================
+         🃏 PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
+         =========================================================== -->
+    <div class="mobile-card-panel" [class.empty]="!placed.length">
+
+      @if (placed.length > 0) {
+
+        <!-- Vista previa de carta -->
+        <div class="card-preview">
+          <img
+            class="card-face"
+            [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+            alt="{{ placed[focusIdx]?.cardId }}"
+            (click)="openCardMeaning(placed[focusIdx])" />
+        </div>
+
+        <!-- Vista previa de interpretación -->
+        <div class="interpret-preview">
+          <h4>Interpretación</h4>
+          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+        </div>
+
+      } @else {
+
+        <!-- Estado vacío -->
+        <div class="empty-mobile-state">
+          <p>Aún no hay cartas repartidas.</p>
+          <button type="button" class="btn-main secondary"
+                  (click)="hacerTirada()" [disabled]="!canDeal">
+            Hacer tirada
+          </button>
+        </div>
+
+      }
+
+    </div>
+
+
+
+    <!-- ===========================================================
+         🔢 CONTADOR DE CARTA
+         =========================================================== -->
+    <p class="mobile-card-counter">
+      Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
+    </p>
+
+
+
+    <!-- ===========================================================
+         📘 BOOK PANEL (ÚNICO - MOBILE)
+         =========================================================== -->
+    <div class="book-panel" [class.open]="showBookPanel">
+
+      <div class="page left-page" (click)="toggleBookPanel()"></div>
+
+      <div class="page right-page">
+        <header>
+          <h2>El Grimorio</h2>
+          <button class="close" (click)="toggleBookPanel()">Cerrar</button>
+        </header>
+
+        <section>
+          <h3>Suscripciones</h3>
+          <p>Modo Sabiduría: hasta 30 tiradas al mes.</p>
+          <p>Modo Quántico: tiradas ilimitadas + IA avanzada.</p>
+          <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
+        </section>
+
+        <section>
+          <h3>Cuenta</h3>
+          <p>Revisa tu perfil, lecturas guardadas y progreso.</p>
+          <button (click)="openProfile()">Mi cuenta</button>
+        </section>
+
+        <section>
+          <h3>Información</h3>
+          <button (click)="openTerms()">Términos y condiciones</button>
+          <button (click)="openPrivacy()">Privacidad</button>
+        </section>
+      </div>
+
+    </div>
+
+
+
+    <!-- ===========================================================
+         🎠 MOBILE CAROUSEL — SIEMPRE QUE HAYA CARTAS
+         =========================================================== -->
+    @if (placed.length > 0) {
+      <div class="mobile-carousel">
+        <div class="carousel-track">
+
+          @for (pc of placed; track pc.cardId) {
+            <div class="carousel-card">
+              <div class="card-wrapper" [class.reversed]="pc.reversed">
+                <img class="card-face" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
+                <p class="card-name">
+                  {{ deckMap.get(pc.cardId)?.name || pc.cardId }}
+                </p>
+                <button (click)="openCardMeaning(pc)">Ver significado</button>
+              </div>
+            </div>
           }
+
         </div>
-      }
 
-      @if (!activeCards.length && deckReady && !dealing) {
-        <p class="board-empty">Haz clic en el mazo para comenzar una lectura.</p>
-      }
-
-      <div
-        class="slot"
-        *ngFor="let slot of slots; trackBy: trackSlot"
-        [style.--x]="slot.x + '%'"
-        [style.--y]="slot.y + '%'"
-        [style.--r]="slot.r + 'deg'"
-        [attr.data-pos]="slot.position"
-        aria-hidden="true">
-      </div>
-
-      <div
-        class="card"
-        *ngFor="let pc of activeCards; trackBy: trackCard"
-        cdkDrag
-        (cdkDragEnded)="onDragEnd(pc, $event)"
-        [class.dealt]="pc.dealt"
-        [class.faceup]="pc.faceup"
-        [class.reversed]="pc.reversed"
-        [style.--x]="pc.x + '%'"
-        [style.--y]="pc.y + '%'"
-        [style.--r]="pc.r + 'deg'"
-        [style.z-index]="pc.z">
-        <div class="card-inner" (click)="onCardClick(pc, $event)">
-          <img class="back" [src]="backUrl" alt="Carta boca abajo" draggable="false" />
-          <img class="front" [src]="getFrontUrl(pc.cardId)" [alt]="pc.cardId" draggable="false" loading="lazy" />
+        <div class="carousel-nav">
+          <button (click)="prevCard()">&lt;</button>
+          <span>{{ focusIdx + 1 }} / {{ placed.length }}</span>
+          <button (click)="nextCard()">&gt;</button>
         </div>
       </div>
+    }
 
-      <div class="board-actions">
-        <button type="button" class="btn-main" (click)="hacerTirada()" [disabled]="!canDeal">
-          @if (dealing) { Barajando... } @else { Nueva tirada }
-        </button>
-        <button type="button" class="btn-main secondary" (click)="openContextModal()" [disabled]="!activeCards.length">
-          Interpretar
-        </button>
-      </div>
+  </div> <!-- /mobile-layout -->
 
-      <div class="deck-pile" (click)="onDeckClick()" [class.shuffle]="deckShuffling || loadingDeck">
-        <img *ngFor="let deck of deckStack; trackBy: trackDeck" [src]="backUrl" alt="Mazo de cartas" draggable="false" />
-        <div class="deck-label">
-          @if (loadingDeck) { Cargando } @else { {{ deckCount }} cartas }
-        </div>
-      </div>
-    </section>
-  }
 
-  <!-- HUD de Drucoins -->
-  @if (!isMobile) {
-    <div class="drucoins-hud" title="Tus tiradas disponibles">
-      <img class="coin" src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" alt="Drucoins" />
-      <div class="counter">
-        <strong>{{ quota?.remaining ?? '--' }}</strong>
-        <small>/{{ quota?.monthly ?? '--' }}</small>
+  <!-- ===========================================================
+       📱 MENÚ INFERIOR (MOBILE)
+       =========================================================== -->
+  <div class="bottom-menu">
+    <button (click)="hacerTirada()">Tirada</button>
+    <button (click)="openHistory()">Historial</button>
+    <button (click)="toggleBookPanel()">Grimorio</button>
+  </div>
+
+
+
+  <!-- FIN DE MOBILE -->
+  } @else {
+
+
+  <!-- ===========================================================
+       🖥️ DESKTOP BOARD PRINCIPAL
+       =========================================================== -->
+  <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
+
+    <!-- Selector de tirada -->
+    <div class="spread-select">
+      <span class="label">Elige tirada</span>
+      <div class="select-wrap">
+        <select [(ngModel)]="spreadId"
+                (ngModelChange)="onSpreadChange()"
+                [disabled]="dealing">
+
+          @if (spreads?.length) {
+            @for (def of spreads; track def.id) {
+              <option [value]="def.id">{{ def.name }}</option>
+            }
+          } @else {
+            <option value="celtic-cross-10">Cruz Celta</option>
+            <option value="ppf-3">Pasado - Presente - Futuro</option>
+            <option value="free">Libre</option>
+          }
+        </select>
+        <span class="caret">&#9662;</span>
       </div>
     </div>
-  }
 
-  <!-- PANEL DERECHO -->
-  @if (!isMobile && !showInterpretation) {
-    <aside class="panel">
-      <h3>Lectura</h3>
-      <div class="cards-list">
-        @for (pc of activeCards; track pc.position) {
-          <div
-            class="card-chip"
-            (click)="openCardMeaning(pc)"
-            [class.reversed]="pc.reversed">
-            <span class="num">#{{ pc.position }}</span>
-            <span class="name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</span>
-            @if (pc.reversed) { <span class="rev">↓</span> }
-          </div>
+
+    <!-- Cápsulas de capas -->
+    @if (isFree && layers.length > 1) {
+      <div class="layer-pills">
+        @for (layer of layers; let i = $index; track layer.id) {
+          <button type="button"
+                  (click)="switchLayer(i)"
+                  [class.active]="i === activeLayer">
+            Capa {{ layer.id }}
+          </button>
         }
       </div>
+    }
 
-      <div class="context-wrap">
-        <div class="context-area">
-          <label for="contextInput" class="context-label">🪶 Contexto o pregunta:</label>
-          <textarea
-            id="contextInput"
-            [(ngModel)]="userContextInput"
-            rows="4"
-            placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."></textarea>
-        </div>
 
-        <div class="context-action">
-          <button class="btn-papiro" (click)="confirmContext()">📜 Interpretar tirada</button>
-        </div>
+    <!-- Mensaje si no hay cartas -->
+    @if (!activeCards.length && deckReady && !dealing) {
+      <p class="board-empty">Haz clic en el mazo para comenzar una lectura.</p>
+    }
+
+
+    <!-- Slots -->
+    <div
+      class="slot"
+      *ngFor="let slot of slots; trackBy: trackSlot"
+      [style.--x]="slot.x + '%'"
+      [style.--y]="slot.y + '%'"
+      [style.--r]="slot.r + 'deg'"
+      [attr.data-pos]="slot.position">
+    </div>
+
+
+    <!-- Cartas activas -->
+    <div
+      class="card"
+      *ngFor="let pc of activeCards; trackBy: trackCard"
+      cdkDrag
+      (cdkDragEnded)="onDragEnd(pc, $event)"
+      [class.dealt]="pc.dealt"
+      [class.faceup]="pc.faceup"
+      [class.reversed]="pc.reversed"
+      [style.--x]="pc.x + '%'"
+      [style.--y]="pc.y + '%'"
+      [style.--r]="pc.r + 'deg'"
+      [style.z-index]="pc.z">
+
+      <div class="card-inner" (click)="onCardClick(pc, $event)">
+        <img class="back" [src]="backUrl" alt="Carta boca abajo" draggable="false" />
+        <img class="front" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" draggable="false" />
       </div>
-    </aside>
-  }
-</div>
+    </div>
 
-<!-- Overlay del significado de carta -->
+
+    <!-- Acciones debajo del tablero -->
+    <div class="board-actions">
+      <button class="btn-main"
+              (click)="hacerTirada()"
+              [disabled]="!canDeal">
+        @if (dealing) { Barajando... } @else { Nueva tirada }
+      </button>
+
+      <button class="btn-main secondary"
+              (click)="openContextModal()"
+              [disabled]="!activeCards.length">
+        Interpretar
+      </button>
+    </div>
+
+
+    <!-- Mazo físico -->
+    <div class="deck-pile"
+         (click)="onDeckClick()"
+         [class.shuffle]="deckShuffling || loadingDeck">
+
+      <img *ngFor="let deck of deckStack; trackBy: trackDeck"
+           [src]="backUrl"
+           alt="Mazo" />
+
+      <div class="deck-label">
+        @if (loadingDeck) { Cargando }
+        @else { {{ deckCount }} cartas }
+      </div>
+    </div>
+
+  </section> <!-- /board -->
+
+
+
+  <!-- ===========================================================
+       💰 DRUCOINS HUD (DESKTOP)
+       =========================================================== -->
+  <div class="drucoins-hud" title="Tus tiradas disponibles">
+    <img class="coin"
+         src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" />
+    <div class="counter">
+      <strong>{{ quota?.remaining ?? '--' }}</strong>
+      <small>/{{ quota?.monthly ?? '--' }}</small>
+    </div>
+  </div>
+
+
+
+  <!-- ===========================================================
+       📚 PANEL DERECHO — Listado de cartas + contexto
+       =========================================================== -->
+  @if (!showInterpretation) {
+  <aside class="panel">
+
+    <h3>Lectura</h3>
+
+    <div class="cards-list">
+      @for (pc of activeCards; track pc.position) {
+        <div class="card-chip"
+             (click)="openCardMeaning(pc)"
+             [class.reversed]="pc.reversed">
+          <span class="num">#{{ pc.position }}</span>
+          <span class="name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</span>
+          @if (pc.reversed) { <span class="rev">↓</span> }
+        </div>
+      }
+    </div>
+
+    <div class="context-wrap">
+      <div class="context-area">
+        <label class="context-label">🪶 Contexto o pregunta:</label>
+        <textarea
+          [(ngModel)]="userContextInput"
+          rows="4"
+          placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional...">
+        </textarea>
+      </div>
+
+      <div class="context-action">
+        <button class="btn-papiro" (click)="confirmContext()">
+          📜 Interpretar tirada
+        </button>
+      </div>
+    </div>
+
+  </aside>
+  }
+
+} <!-- FIN DE DESKTOP @else -->
+
+
+</div> <!-- /layout -->
+
+
+
+<!-- ===========================================================
+     🗂️ HISTORIAL (MÓVIL Y DESKTOP)
+     =========================================================== -->
+@if (showHistory) {
+  <div class="history-overlay" (click)="closeHistory()">
+    <div class="history-panel" (click)="$event.stopPropagation()">
+
+      <header>
+        <h3>Historial de lecturas</h3>
+        <button type="button" class="close" (click)="closeHistory()">×</button>
+      </header>
+
+      <section class="history-body">
+        @if (!historyList.length) {
+          <p class="history-empty">Todavía no tienes lecturas guardadas.</p>
+        } @else {
+          <ul class="history-list">
+            @for (item of historyList; track item.id) {
+              <li>
+                <div class="info">
+                  <strong>{{ item.spreadLabel }}</strong>
+                  <small>{{ item.ts ? formatTs(item.ts) : '' }}</small>
+                </div>
+
+                <div class="actions">
+                  <button (click)="loadHistory(item)">Cargar</button>
+                  <button (click)="deleteHistory(item.id)">Eliminar</button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+    </div>
+  </div>
+}
+
+
+
+<!-- ===========================================================
+     📖 SIGNIFICADO DE CARTA (OVERLAY)
+     =========================================================== -->
 @if (showCardOverlay) {
   <div class="card-meaning-overlay" (click)="closeCardOverlay()">
     <div class="meaning-box" (click)="$event.stopPropagation()">
+
       <header>
         <h3>{{ overlayCardTitle }}</h3>
-        <button (click)="closeCardOverlay()" class="close">×</button>
+        <button class="close" (click)="closeCardOverlay()">×</button>
       </header>
 
       <article>
@@ -297,14 +518,20 @@
           <p [innerHTML]="overlayCardMeaning"></p>
         }
       </article>
+
     </div>
   </div>
 }
 
-<!-- Modal interpretación -->
+
+
+<!-- ===========================================================
+     🔮 MODAL DE INTERPRETACIÓN (IA)
+     =========================================================== -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
     <div class="interpret-container" (click)="$event.stopPropagation()">
+
       <header class="interpret-header">
         <span class="icon">🔮</span>
         <h2>Interpretación</h2>
@@ -312,7 +539,9 @@
       </header>
 
       <div class="interpret-body">
+
         <article class="interpret-text" [innerHTML]="interpretationSafe"></article>
+
         <aside class="interpret-rail">
           <h4>Cartas</h4>
           <ul>
@@ -321,23 +550,21 @@
             }
           </ul>
         </aside>
+
       </div>
+
     </div>
   </div>
 }
 
-<!-- Loader -->
+
+
+<!-- ===========================================================
+     🧙‍♂️ LOADING (IA INTERPRETANDO)
+     =========================================================== -->
 @if (loadingInterpret) {
-  <div class="loading-overlay" aria-live="polite" aria-busy="true">
+  <div class="loading-overlay" aria-busy="true">
     <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
     <p>El mago está interpretando tu lectura…</p>
   </div>
 }
-
-<!-- MENÚ MOBILE -->
-<div class="mobile-menu" *ngIf="isMobile">
-  <button (click)="openHistory()"></button>
-  <button (click)="openSavedReadings()"></button>
-  <button (click)="toggleSettings()"></button>
-</div>
-

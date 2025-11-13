@@ -1,0 +1,13 @@
+<div class="hanging-menu" [class.open]="open">
+  <button type="button" class="hanger-tab" (click)="toggle()">
+    <span class="rope"></span>
+    <span class="label">{{ title }}</span>
+    <span class="caret" [class.open]="open">⌄</span>
+  </button>
+
+  <div class="sheet" [class.open]="open">
+    <div class="sheet-inner" (click)="onContentClick($event)">
+      <ng-content></ng-content>
+    </div>
+  </div>
+</div>
