@@ -2,7 +2,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
+import { environment } from '/../../environments/environment';
 
 import {
   Auth,
@@ -57,7 +57,7 @@ export class AuthService {
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
 
-    this.authFlowstarted = true;
+    
     try {
       const res = await this.http
         .post<{ ok: boolean; token?: string }>(
@@ -105,7 +105,6 @@ export class AuthService {
   // Login con Google
   // -----------------------
   async loginWithGoogle(): Promise<User | null> {
-    this.authFlowstarted = true;
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(this.auth, provider);
