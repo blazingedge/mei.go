@@ -159,7 +159,7 @@ export class AuthService {
         return false;
       }
 
-      const res = await fetch(`${environment.API_BASE}terms/accept`, {
+      const res = await fetch(`${environment.API_BASE}/terms/accept`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
