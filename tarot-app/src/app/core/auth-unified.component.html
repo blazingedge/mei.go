@@ -58,7 +58,9 @@
 
 <!-- 🔮 Modal DEBE IR AQUÍ, FUERA del auth-layout -->
 <app-terms-modal
-  [visible]="showTerms"
+  *ngIf="showTerms"
+  [visible]="true"
   (accepted)="onTermsAccepted()"
   (closed)="onTermsClosed()">
 </app-terms-modal>
+
