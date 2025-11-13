@@ -162,15 +162,49 @@ setTimeout(() => {
   }
 
   // avisamos al AuthService para que el guard / otros lo sepan
-  this.auth.markTermsAccepted();
+  this.auth.markTermsAcceptedRemote();
 
   this.showTerms = false;
   this.router.navigate(['/spreads']);
 }
 
 
-markTermsAccepted() {
-  this.termsAcceptedSubject.next(true);
+
+// ⬇️ Nuevo método
+async markTermsAcceptedRemote(): Promise<boolean> {
+  try {
+    const token = await this.getIdToken();
+    if (!token) {
+      console.warn('⚠️ No hay token Firebase todavía, no puedo registrar T&C');
+      return false;
+    }
+
+    const res = await fetch(`${environment.API_BASE}/api/terms/accept`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        version: '1.0',
+        acceptedAt: Date.now()
+      })
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('❌ Error registrando T&C:', data);
+      return false;
+    }
+
+    // 🔥 marca internamente como aceptado
+    this.termsAcceptedSubject.next(true);
+    return true;
+
+  } catch (err) {
+    console.error('💥 markTermsAcceptedRemote error:', err);
+    return false;
+  }
 }
 
 
