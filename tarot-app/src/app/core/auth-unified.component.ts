@@ -1,266 +1,201 @@
-import { Component, AfterViewInit, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { LogoComponent } from './logo.component';
-import { AuthService } from './auth/auth.service';
-import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
-import { environment } from '../../environments/environment';
-import { TermsModalComponent } from '../components/terms-modal.component';
+// src/app/core/services/auth.service.ts
+import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
-@Component({
-  standalone: true,
-  selector: 'app-auth-unified',
-  imports: [
-    CommonModule,
-    FormsModule,
-    LogoComponent,
-    IntroParticlesComponent,
-    TermsModalComponent
-  ],
-  templateUrl: './auth-unified.component.html',
-  styleUrls: ['./auth-unified.component.scss']
-})
-export class AuthUnifiedComponent implements AfterViewInit, OnInit {
+import {
+  Auth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  User,
+  onAuthStateChanged
+} from '@angular/fire/auth';
 
-  // ----------------------------------------------------
-  // Estado
-  // ----------------------------------------------------
-  showIntro = true;
-  showTerms = false;
-  acceptedTerms = false;
+@Injectable({ providedIn: 'root' })
+export class AuthService {
 
-  loading = false;
-  loginError = '';
-  regError = '';
+  // -----------------------
+  // FLAGS Y ESTADO
+  // -----------------------
+  public authFlowStarted = false;   // <-- CORREGIDO Y ESTANDARIZADO
+  private workerToken: string | null = null;
 
-  login = { email: '', password: '' };
-  register = { email: '', password: '', confirm: '' };
+  private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
+  termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
-  constructor(private auth: AuthService, private router: Router) {}
+  constructor(private http: HttpClient, private auth: Auth) {
 
-  // ============================================================================
-  // 🎬 INTRO
-  // ============================================================================
-  ngAfterViewInit() {
-    this.playIntro();
-
-    const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
-
-    if (intro) {
-      intro.addEventListener('animationend', () => {
-        intro.style.display = 'none';
-        intro.style.pointerEvents = 'none';
-        this.showIntro = false;
-      });
-    }
-
-    setTimeout(() => {
-      const el = document.querySelector('.intro-overlay') as HTMLElement | null;
-      if (el) {
-        el.style.display = 'none';
-        el.style.pointerEvents = 'none';
-      }
-      this.showIntro = false;
-    }, 6000);
-  }
-
-  async playIntro() {
-    const audio = new Audio('assets/audio/el-meigo.mp3');
-    audio.volume = 0.55;
-    try {
-      await audio.play();
-    } catch {
-      console.warn('🔇 Autoplay bloqueado');
-    }
-  }
-
-  // ============================================================================
-  // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
-  // ============================================================================
-  ngOnInit() {
-    this.auth.termsAccepted$.subscribe((accepted) => {
-      const user = this.auth.currentUser;
-
-      if (!user) return;                       // No usuario → no hacer nada
-      if (!this.auth.authFlowStarted) return;  // No iniciamos un login → no mostrar modal
-
-      if (!accepted) {
-        this.showTerms = true;
-      }
-    });
-  }
-
-  // ============================================================================
-  // 🔐 LOGIN CLÁSICO
-  // ============================================================================
-  async onLogin() {
-    this.auth.authFlowStarted = true;
-    this.loginError = '';
-
-    if (!this.login.email || !this.login.password) {
-      this.loginError = 'Completa todos los campos';
-      return;
-    }
-
-    this.loading = true;
-
-    try {
-      const ok = await this.auth.login(this.login.email, this.login.password);
-      if (!ok) throw new Error('Credenciales inválidas');
-
-      await this.afterAuth();
-    } catch (e: any) {
-      this.loginError = e.message || 'Error al iniciar sesión';
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  // ============================================================================
-  // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
-  // ============================================================================
-  private async afterAuth() {
-
-    // esperar a que Firebase setee correctamente el currentUser
-    await new Promise(res => setTimeout(res, 250));
-
-    const user = this.auth.currentUser;
-    if (!user) return;
-
-    const accepted = await this.auth.checkTerms(user.uid);
-
-    if (!accepted) {
-      this.showTerms = true;
-      return;
-    }
-
-    this.router.navigate(['/spreads']);
-  }
-
-  // ============================================================================
-  // 📝 REGISTRO
-  // ============================================================================
-  async onRegister() {
-    if (!this.acceptedTerms) {
-      alert('Debes aceptar los Términos y Condiciones antes de registrarte.');
-      return;
-    }
-
-    this.regError = '';
-
-    const tokenEl = document.querySelector(
-      'input[name="cf-turnstile-response"]'
-    ) as HTMLInputElement | null;
-
-    const turnstileToken = tokenEl?.value || '';
-
-    if (!turnstileToken) {
-      this.regError = 'Debes completar el CAPTCHA.';
-      return;
-    }
-
-    this.loading = true;
-
-    try {
-      const vr = await fetch(`${environment.API_BASE}/captcha/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken })
-      });
-
-      if (!vr.ok) throw new Error('Captcha inválido.');
-
-      const ok = await this.auth.register(
-        this.register.email,
-        this.register.password
-      );
-
-      if (!ok) throw new Error('No se pudo registrar');
-
-      alert('Registro completado. Ahora puedes iniciar sesión.');
-    } catch (e: any) {
-      this.regError = e.message || 'Error al registrar';
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  // ============================================================================
-  // 🔑 LOGIN GOOGLE
-  // ============================================================================
-  async authGoogle() {
-    this.auth.authFlowStarted = true;
-    this.loading = true;
-
-    try {
-      const user = await this.auth.loginWithGoogle();
+    // ⭐ Listener de Firebase
+    onAuthStateChanged(this.auth, async (user) => {
       if (!user) return;
 
-      await this.afterAuth();
-    } finally {
-      this.loading = false;
-    }
-  }
+      // Cuando Firebase cambia de usuario, verificamos términos
+      const accepted = await this.checkTerms(user.uid);
 
-  // ============================================================================
-  // 📜 TÉRMINOS Y CONDICIONES
-  // ============================================================================
-  openTerms() {
-    this.showTerms = true;
-  }
-
-  async onTermsAccepted() {
-    const ok = await this.auth.markTermsAcceptedRemote();
-
-    if (!ok) {
-      alert('No se pudieron guardar los términos. Intenta de nuevo.');
-      return;
-    }
-
-    this.auth.markTermsAccepted();
-    this.acceptedTerms = true;
-    this.showTerms = false;
-
-    this.router.navigate(['/spreads']);
-  }
-
-  onTermsClosed() {
-    this.showTerms = false;
-  }
-
-  // ============================================================================
-  // FACEBOOK
-  // ============================================================================
-  authFacebook() {
-    alert('Aún no está implementado 😅');
-  }
-}
-
-// ======================================================
-// 🌐 CALLBACK TURNSTILE
-// ======================================================
-declare global {
-  interface Window {
-    onCaptchaVerified: (token: string) => void;
-  }
-}
-
-window.onCaptchaVerified = async (token: string) => {
-  console.log('Turnstile token:', token);
-
-  try {
-    const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
+      // Emitimos resultado al flujo
+      this.termsAcceptedSubject.next(accepted);
     });
-
-    const data = await res.json();
-    if (!data.ok) {
-      alert('Verifica que no eres un robot.');
-    }
-  } catch (err) {
-    console.error('Turnstile error:', err);
   }
-};
+
+  // -----------------------
+  // Utils
+  // -----------------------
+  get currentUser(): User | null {
+    return this.auth.currentUser ?? null;
+  }
+
+  async getIdToken(): Promise<string | null> {
+    const user = this.currentUser;
+
+    if (user) {
+      try {
+        return await user.getIdToken();
+      } catch (err) {
+        console.warn('⚠️ No se pudo obtener token Firebase:', err);
+      }
+    }
+
+    return this.workerToken;
+  }
+
+  // -----------------------
+  // LOGIN WORKER
+  // -----------------------
+  async login(email: string, password: string): Promise<boolean> {
+    try {
+      const res = await this.http
+        .post<{ ok: boolean; token?: string }>(
+          `${environment.API_BASE}/auth/login`,
+          { email, password },
+          { withCredentials: true }
+        )
+        .toPromise();
+
+      if (res?.ok && res.token) {
+        this.workerToken = res.token;
+        return true;
+      }
+      return false;
+
+    } catch (err) {
+      console.error('❌ Error en login:', err);
+      return false;
+    }
+  }
+
+  // -----------------------
+  // REGISTER WORKER
+  // -----------------------
+  async register(email: string, password: string): Promise<boolean> {
+    try {
+      const res = await this.http
+        .post<{ ok: boolean }>(
+          `${environment.API_BASE}/auth/register`,
+          { email, password },
+          { withCredentials: true }
+        )
+        .toPromise();
+
+      return !!res?.ok;
+
+    } catch (err) {
+      console.error('❌ Error en register:', err);
+      return false;
+    }
+  }
+
+  // -----------------------
+  // LOGIN GOOGLE
+  // -----------------------
+  async loginWithGoogle(): Promise<User | null> {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(this.auth, provider);
+
+      // Guardar token Firebase como token worker temporal
+      const token = await result.user.getIdToken();
+      this.workerToken = token;
+
+      return result.user;
+
+    } catch (err) {
+      console.error('❌ Error Google Auth:', err);
+      return null;
+    }
+  }
+
+  // -----------------------
+  // CHECK TERMS
+  // -----------------------
+  async checkTerms(uid: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${environment.API_BASE}/terms/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid })
+      });
+
+      if (!res.ok) {
+        console.warn('⚠️ /api/terms/check → status', res.status);
+        return false;
+      }
+
+      const j = await res.json().catch(() => null);
+      return !!j?.accepted;
+
+    } catch (err) {
+      console.error('💥 Error en checkTerms:', err);
+      return false;
+    }
+  }
+
+  // -----------------------
+  // REGISTER TERMS ACCEPT
+  // -----------------------
+  async markTermsAcceptedRemote(): Promise<boolean> {
+    try {
+      const token = await this.getIdToken();
+      if (!token) {
+        console.warn('⚠️ No hay token para registrar T&C');
+        return false;
+      }
+
+      const res = await fetch(`${environment.API_BASE}/terms/accept`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          version: '1.0',
+          acceptedAt: Date.now()
+        })
+      });
+
+      const data = await res.json();
+      if (!data.ok) return false;
+
+      this.termsAcceptedSubject.next(true);
+      return true;
+
+    } catch (err) {
+      console.error('💥 markTermsAcceptedRemote error:', err);
+      return false;
+    }
+  }
+
+  markTermsAccepted() {
+    this.termsAcceptedSubject.next(true);
+  }
+
+  // -----------------------
+  // LOGOUT
+  // -----------------------
+  async logout(): Promise<void> {
+    this.workerToken = null;
+    await signOut(this.auth);
+    this.termsAcceptedSubject.next(false);
+  }
+}
