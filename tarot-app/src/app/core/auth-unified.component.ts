@@ -79,17 +79,20 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
   ngOnInit() {
-    this.auth.termsAccepted$.subscribe((accepted) => {
-      const user = this.auth.currentUser;
+  this.auth.termsAccepted$.subscribe((accepted) => {
+    const user = this.auth.currentUser;
 
-      if (!user) return;                       // No usuario → no hacer nada
-      if (!this.auth.authFlowStarted) return;  // No iniciamos un login → no mostrar modal
+    if (!user) return; // si no hay usuario, no mostramos nada
 
-      if (!accepted) {
-        this.showTerms = true;
-      }
-    });
-  }
+    // si el login está en curso y NO aceptó → mostrar modal
+    if (!accepted) {
+      this.showTerms = true;
+    }
+  });
+}
+
+
+
 
   // ============================================================================
   // 🔐 LOGIN CLÁSICO
@@ -121,22 +124,21 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit {
   // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
   private async afterAuth() {
+  await new Promise(res => setTimeout(res, 300));
 
-    // esperar a que Firebase setee correctamente el currentUser
-    await new Promise(res => setTimeout(res, 250));
+  const user = this.auth.currentUser;
+  if (!user) return;
 
-    const user = this.auth.currentUser;
-    if (!user) return;
+  const accepted = await this.auth.checkTerms(user.uid);
 
-    const accepted = await this.auth.checkTerms(user.uid);
-
-    if (!accepted) {
-      this.showTerms = true;
-      return;
-    }
-
-    this.router.navigate(['/spreads']);
+  if (!accepted) {
+    this.showTerms = true;
+    return;
   }
+
+  this.router.navigate(['/spreads']);
+}
+
 
   // ============================================================================
   // 📝 REGISTRO
