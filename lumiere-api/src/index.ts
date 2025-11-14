@@ -1,4 +1,4 @@
-// src/index.ts
+﻿// src/index.ts
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
@@ -17,7 +17,7 @@ const PROD_ORIGINS = [
 ];
 
 const CDN_BASE =
-  'https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1'; // R2 público
+  'https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1'; // R2 pÃºblico
 
 type Bindings = {
   DB: D1Database;
@@ -27,6 +27,13 @@ type Bindings = {
   TURNSTILE_SECRET: string;
 };
 const app = new Hono<{ Bindings: Bindings }>();
+
+type PlanId = 'luz' | 'sabiduria' | 'quantico';
+const PLAN_LIMITS: Record<PlanId, { monthly: number }> = {
+  luz: { monthly: 2 },
+  sabiduria: { monthly: 1000000 },
+  quantico: { monthly: Number.MAX_SAFE_INTEGER },
+} as const;
 
 
 function nowYm()
@@ -38,7 +45,7 @@ function nowYm()
 // CORS (global) + OPTIONS
 // ===========
 // =====================
-// 🔍 ENV & UTILS
+// ðŸ” ENV & UTILS
 // =====================
 
 
@@ -58,21 +65,21 @@ function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
   const isDev = isDevEnv(req, env);
   const allowed = isDev ? LOCAL_ORIGINS : PROD_ORIGINS;
 
-  // 🔹 Normaliza equivalentes localhost / 127.0.0.1
+  // ðŸ”¹ Normaliza equivalentes localhost / 127.0.0.1
   const normalized = origin.replace('127.0.0.1', 'localhost');
   if (allowed.some(o => o.replace('127.0.0.1', 'localhost') === normalized)) {
-    return origin; // ✅ devuelve exactamente el origin que pidió el browser
+    return origin; // âœ… devuelve exactamente el origin que pidiÃ³ el browser
   }
 
-  // 🔹 En producción, solo devuelve la coincidencia exacta
+  // ðŸ”¹ En producciÃ³n, solo devuelve la coincidencia exacta
   if (!isDev && allowed.includes(origin)) return origin;
 
-  // 🔹 Fallback seguro (primero válido o '*')
+  // ðŸ”¹ Fallback seguro (primero vÃ¡lido o '*')
   return allowed[0] ?? '*';
 }
 
-// ✅ helper: asegurar plan del usuario
-async function ensureUserPlan(env: Env, uid: string): Promise<'luz' | 'sabiduria' | 'quantico'> {
+// âœ… helper: asegurar plan del usuario
+async function ensureUserPlan(env: Env, uid: string): Promise<PlanId> {
   const row = await env.DB.prepare('SELECT plan FROM users WHERE uid=?').bind(uid).first<{ plan: string }>();
   if (row?.plan) return row.plan as any;
 
@@ -83,8 +90,8 @@ async function ensureUserPlan(env: Env, uid: string): Promise<'luz' | 'sabiduria
   return 'luz';
 }
 
-// ✅ helper: asegurar fila de cuota del mes
-async function ensureQuotaRow(env: Env, uid: string, plan: 'luz' | 'sabiduria' | 'quantico', period: string) {
+// âœ… helper: asegurar fila de cuota del mes
+async function ensureQuotaRow(env: Env, uid: string, plan: PlanId, period: string) {
   const row = await env.DB.prepare('SELECT monthly_limit, used FROM quotas WHERE uid=? AND period=?')
     .bind(uid, period)
     .first<{ monthly_limit: number; used: number }>();
@@ -99,6 +106,132 @@ async function ensureQuotaRow(env: Env, uid: string, plan: 'luz' | 'sabiduria' |
   return { monthly, used: 0 };
 }
 
+function getNextResetDate(): string {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return next.toISOString().slice(0, 10);
+}
+
+async function getUserQuotaState(env: Env, uid: string) {
+  const plan = await ensureUserPlan(env, uid);
+  const period = nowYm();
+  const { monthly, used } = await ensureQuotaRow(env, uid, plan, period);
+  const remaining = Math.max(monthly - used, 0);
+  return { plan, monthly, used, remaining, nextResetDate: getNextResetDate() };
+}
+
+async function checkAndConsumeQuota(env: Env, uid: string): Promise<boolean> {
+  if (uid === 'guest') return true;
+  const period = nowYm();
+  const plan = await ensureUserPlan(env, uid);
+  const { monthly, used } = await ensureQuotaRow(env, uid, plan, period);
+  if (monthly - used <= 0) return false;
+
+  await env.DB.prepare(
+    'UPDATE quotas SET used = used + 1, updated_at=? WHERE uid=? AND period=?'
+  ).bind(Date.now(), uid, period).run();
+
+  return true;
+}
+
+async function addQuotaCredits(env: Env, uid: string, amount: number) {
+  if (amount <= 0 || uid === 'guest') return;
+  const plan = await ensureUserPlan(env, uid);
+  const period = nowYm();
+  await ensureQuotaRow(env, uid, plan, period);
+  await env.DB.prepare(
+    'UPDATE quotas SET used = MAX(used - ?, 0), updated_at=? WHERE uid=? AND period=?'
+  ).bind(amount, Date.now(), uid, period).run();
+}
+
+async function setUserPlan(env: Env, uid: string, plan: PlanId) {
+  await ensureUserPlan(env, uid);
+  await env.DB.prepare(
+    'UPDATE users SET plan = ?, updated_at=? WHERE uid=?'
+  ).bind(plan, Date.now(), uid).run();
+}
+
+async function resetQuotaForPlan(env: Env, uid: string, plan: PlanId) {
+  const period = nowYm();
+  await ensureQuotaRow(env, uid, plan, period);
+  await env.DB.prepare(
+    'UPDATE quotas SET monthly_limit = ?, used = 0, updated_at=? WHERE uid=? AND period=?'
+  ).bind(PLAN_LIMITS[plan].monthly, Date.now(), uid, period).run();
+}
+
+type ReadingBlockReason = 'quota' | 'drucoins';
+async function canDoReading(
+  env: Env,
+  uid: string,
+  opts?: { isMaster?: boolean }
+): Promise<{ allowed: boolean; reason?: ReadingBlockReason }> {
+  if (opts?.isMaster) return { allowed: true };
+  if (!uid || uid === 'guest') return { allowed: true };
+
+  const quota = await getUserQuotaState(env, uid);
+  if (quota.remaining <= 0) return { allowed: false, reason: 'quota' };
+
+  const balance = await getDrucoinBalance(env, uid);
+  if (balance <= 0) return { allowed: false, reason: 'drucoins' };
+
+  return { allowed: true };
+}
+
+let drucoinTableReady = false;
+async function ensureDrucoinTable(env: Env) {
+  if (drucoinTableReady) return;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS drucoins (
+      uid TEXT PRIMARY KEY,
+      balance INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER
+    )
+  `).run();
+  drucoinTableReady = true;
+}
+
+async function ensureDrucoinWallet(env: Env, uid: string) {
+  await ensureDrucoinTable(env);
+  await env.DB.prepare('INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?,?,?)')
+    .bind(uid, 0, Date.now())
+    .run();
+}
+
+async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
+  await ensureDrucoinWallet(env, uid);
+  const row = await env.DB.prepare('SELECT balance FROM drucoins WHERE uid=?').bind(uid).first<{ balance: number }>();
+  return row?.balance ?? 0;
+}
+
+async function addDrucoins(env: Env, uid: string, amount: number): Promise<number> {
+  if (amount <= 0) return getDrucoinBalance(env, uid);
+  await ensureDrucoinWallet(env, uid);
+  await env.DB.prepare('UPDATE drucoins SET balance = balance + ?, updated_at=? WHERE uid=?')
+    .bind(amount, Date.now(), uid)
+    .run();
+  return getDrucoinBalance(env, uid);
+}
+
+async function useDrucoins(env: Env, uid: string, amount = 1): Promise<boolean> {
+  if (amount <= 0) return true;
+  await ensureDrucoinWallet(env, uid);
+  const row = await env.DB.prepare('SELECT balance FROM drucoins WHERE uid=?').bind(uid).first<{ balance: number }>();
+  const balance = row?.balance ?? 0;
+  if (balance < amount) return false;
+
+  await env.DB.prepare('UPDATE drucoins SET balance = balance - ?, updated_at=? WHERE uid=?')
+    .bind(amount, Date.now(), uid)
+    .run();
+  return true;
+}
+
+async function hasAcceptedTerms(env: Env, uid: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    'SELECT 1 FROM terms_acceptance WHERE uid = ? LIMIT 1'
+  ).bind(uid).first();
+  return !!row;
+}
+
 app.get('/api/quota', async (c) => {
   try {
     const authHeader = c.req.header('Authorization') || '';
@@ -108,15 +241,130 @@ app.get('/api/quota', async (c) => {
     const apiKey = c.env.FIREBASE_API_KEY || '';
     const verified = await verifyFirebaseIdToken(token, apiKey);
     const uid = verified.uid;
+    const quota = await getUserQuotaState(c.env, uid);
 
-    const plan = await ensureUserPlan(c.env, uid);
-    const period = nowYm();
-    const { monthly, used } = await ensureQuotaRow(c.env, uid, plan, period);
-
-    return c.json({ ok: true, plan, monthly, remaining: Math.max(0, monthly - used), period });
+    return c.json({ ok: true, quota });
   } catch (err: any) {
-    console.error('💥 /api/quota error:', err);
+    console.error('ðŸ’¥ /api/quota error:', err);
     return c.json({ ok: false, error: String(err) }, 500);
+  }
+});
+
+app.get('/api/session/validate', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, reason: 'invalid_token' }, 401);
+
+    try {
+      const apiKey = c.env.FIREBASE_API_KEY || '';
+      const verified = await verifyFirebaseIdToken(token, apiKey);
+      const uid = verified.uid;
+      const email = verified.email;
+
+      const quota = await getUserQuotaState(c.env, uid);
+      const balance = await getDrucoinBalance(c.env, uid);
+      const needsTerms = !(await hasAcceptedTerms(c.env, uid));
+
+      return c.json({
+        ok: true,
+        uid,
+        email,
+        plan: quota.plan,
+        quotas: {
+          monthly: quota.monthly,
+          used: quota.used,
+          remaining: quota.remaining,
+          period: nowYm(),
+        },
+        drucoins: {
+          balance,
+        },
+        needsTerms,
+      });
+    } catch {
+      return c.json({ ok: false, reason: 'invalid_token' }, 401);
+    }
+  } catch (err: any) {
+    console.error('💥 /api/session/validate error:', err);
+    return c.json({ ok: false, reason: 'internal_error' }, 500);
+  }
+});
+
+app.post('/api/subscriptions/check', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const quota = await getUserQuotaState(c.env, uid);
+    const drucoins = await getDrucoinBalance(c.env, uid);
+
+    return c.json({
+      ok: true,
+      plan: quota.plan,
+      isLuz: quota.plan === 'luz',
+      isSabiduria: quota.plan === 'sabiduria',
+      isQuantico: quota.plan === 'quantico',
+      hasDonations: drucoins > 0,
+      drucoins,
+      quota,
+    });
+  } catch (err: any) {
+    console.error('💥 /api/subscriptions/check error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
+
+
+app.post('/api/subscriptions/sabiduria/activate', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    await setUserPlan(c.env, uid, 'sabiduria');
+    await resetQuotaForPlan(c.env, uid, 'sabiduria');
+    const balance = await addDrucoins(c.env, uid, 30);
+
+    return c.json({ ok: true, plan: 'sabiduria', balance });
+  } catch (err: any) {
+    console.error('💥 /api/subscriptions/sabiduria error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
+
+app.post('/api/subscriptions/premium/activate', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    await setUserPlan(c.env, uid, 'quantico');
+    await resetQuotaForPlan(c.env, uid, 'quantico');
+    const balance = await addDrucoins(c.env, uid, 60);
+
+    return c.json({
+      ok: true,
+      message: 'Pronto daremos más información en nuestro vlog.',
+      plan: 'quantico',
+      balance,
+    });
+  } catch (err: any) {
+    console.error('💥 /api/subscriptions/premium error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
   }
 });
 
@@ -125,7 +373,7 @@ app.use('*', cors({
     const env = c.env as any;
     const isDev = !env.ENV || env.ENV === 'development';
 
-    // ✔ En desarrollo permite localhost
+    // âœ” En desarrollo permite localhost
     if (isDev) {
       const localAllowed = ['http://localhost:4200', 'http://127.0.0.1:4200'];
       if (!origin) return localAllowed[0];
@@ -135,7 +383,7 @@ app.use('*', cors({
       return ok ? origin : localAllowed[0];
     }
 
-    // ✔ En producción permitir:
+    // âœ” En producciÃ³n permitir:
     //    - dominio principal
     //    - cualquier preview *.mei-go.pages.dev
     if (!origin) return 'https://mei-go.pages.dev';
@@ -144,7 +392,7 @@ app.use('*', cors({
 
     if (origin.endsWith('.mei-go.pages.dev')) return origin;
 
-    // ❌ cualquier otro → bloquear
+    // âŒ cualquier otro â†’ bloquear
     return 'https://mei-go.pages.dev';
   },
 
@@ -153,6 +401,98 @@ app.use('*', cors({
   credentials: false,
   maxAge: 86400,
 }));
+
+app.post('/api/drucoins/add', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const { amount = 0 } = await c.req.json<{ amount?: number }>().catch(() => ({ amount: 0 }));
+    if (!amount || amount <= 0) {
+      return c.json({ ok: false, error: 'invalid_amount' }, 400);
+    }
+
+    const donationCoins = 2;
+    await addQuotaCredits(c.env, uid, 2);
+    const balance = await addDrucoins(c.env, uid, donationCoins);
+    return c.json({ ok: true, balance, granted: donationCoins });
+  } catch (err: any) {
+    console.error('💥 /api/drucoins/add error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
+
+
+app.post('/api/drucoins/purchase', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const { amount = 0 } = await c.req.json<{ amount?: number }>().catch(() => ({ amount: 0 }));
+    const packs: Record<number, number> = { 1: 2, 2: 5, 5: 15 };
+    const granted = packs[amount] ?? 0;
+    if (!granted) {
+      return c.json({ ok: false, error: 'invalid_amount' }, 400);
+    }
+
+    const balance = await addDrucoins(c.env, uid, granted);
+    return c.json({ ok: true, balance, granted });
+  } catch (err: any) {
+    console.error('💥 /api/drucoins/purchase error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
+
+app.post('/api/drucoins/use', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const { amount = 1 } = await c.req.json<{ amount?: number }>().catch(() => ({ amount: 1 }));
+    const okUse = await useDrucoins(c.env, uid, amount || 1);
+    if (!okUse) {
+      return c.json({ ok: false, error: 'sin_drucoins', message: 'Sin drucoins suficientes.' }, 402);
+    }
+    const balance = await getDrucoinBalance(c.env, uid);
+    return c.json({ ok: true, balance });
+  } catch (err: any) {
+    console.error('💥 /api/drucoins/use error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
+
+app.get('/api/drucoins/balance', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const balance = await getDrucoinBalance(c.env, uid);
+    return c.json({ ok: true, balance });
+  } catch (err: any) {
+    console.error('💥 /api/drucoins/balance error:', err);
+    return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
+  }
+});
 
 
 
@@ -227,13 +567,13 @@ app.post('/captcha/verify', async (c) => {
 
     const data = await resp.json<any>();
     if (!data.success) {
-      console.warn('⚠️ Turnstile falló:', data['error-codes']);
+      console.warn('âš ï¸ Turnstile fallÃ³:', data['error-codes']);
       return c.json({ ok: false }, 400);
     }
 
     return c.json({ ok: true });
   } catch (err: any) {
-    console.error('💥 Error verificando captcha:', err);
+    console.error('ðŸ’¥ Error verificando captcha:', err);
     return c.json({ ok: false, error: err.message || 'internal error' }, 500);
   }
 });
@@ -264,7 +604,7 @@ const SUIT_ES: Record<Suit, string> = {
 // === Nombres de archivos EXACTOS (R2) ===
 // === Archivos por palo ===
 
-// 🔥 Bastos
+// ðŸ”¥ Bastos
 const FILES_WANDS = [
   'asdebastos.webp','dosdebastos.webp','tresdebastos.webp','cuatrodebastos.webp',
   'cincodebastos.webp','seisdebastos.webp','sietedebastos.webp','ochodebastos.webp',
@@ -272,7 +612,7 @@ const FILES_WANDS = [
   'caballerodebastos.webp','reinadebastos.webp','reydebastos.webp',
 ] as const;
 
-// ⚔️ Espadas
+// âš”ï¸ Espadas
 const FILES_SWORDS = [
   'asdeespadas.webp','dosdeespadas.webp','tresdeespadas.webp','cuatrodeespadas.webp',
   'cincodeespadas.webp','seisdeespadas.webp','sietedeespadas.webp','ochodeespadas.webp',
@@ -280,7 +620,7 @@ const FILES_SWORDS = [
   'caballerodeespadas.webp','reinadeespadas.webp','reydeespadas.webp',
 ] as const;
 
-// 💧 Copas
+// ðŸ’§ Copas
 const FILES_CUPS = [
   'asdecopas.webp','dosdecopas.webp','tresdecopas.webp','cuatrodecopas.webp',
   'cincodecopas.webp','seisdecopas.webp','sietedecopas.webp','ochodecopas.webp',
@@ -288,7 +628,7 @@ const FILES_CUPS = [
   'caballerodecopas.webp','reinadecopas.webp','reydecopas.webp',
 ] as const;
 
-// 🪙 Pentáculos
+// ðŸª™ PentÃ¡culos
 const FILES_PENTS = [
   'asdepentaculos.webp','dosdepentaculos.webp','tresdepentaculos.webp','cuatrodepentaculos.webp',
   'cincodepentaculos.webp','seisdepentaculos.webp','sietedepentaculos.webp','ochodepentaculos.webp',
@@ -296,7 +636,7 @@ const FILES_PENTS = [
   'caballerodepentaculos.webp','reinadepentaculos.webp','reydepentaculos.webp',
 ] as const;
 
-// 🌟 Arcanos Mayores
+// ðŸŒŸ Arcanos Mayores
 const FILES_MAJOR = [
   'elloco.webp','elmago.webp','lagransacerdotisa.webp','laemperatriz.webp','elemperador.webp',
   'elpapa.webp','losenamorados.webp','elcarro.webp','lafuerza.webp','elermitano.webp',
@@ -304,7 +644,7 @@ const FILES_MAJOR = [
   'eldiablo.webp','latorre.webp','laestrella.webp','laluna.webp','elsol.webp','eljuicio.webp','elmundo.webp',
 ] as const;
 
-// === Construcción del mazo completo ===
+// === ConstrucciÃ³n del mazo completo ===
 function buildDeckFromFiles(): CardMeta[] {
   const out: CardMeta[] = [];
   const sets: [readonly string[], Suit][] = [
@@ -381,21 +721,21 @@ const cardNamesEs: Record<string, string> = {
   'swords-13': 'Reina de Espadas',
   'swords-14': 'Rey de Espadas',
 
-  // Pentáculos
-  'pentacles-01': 'As de Pentáculos',
-  'pentacles-02': 'Dos de Pentáculos',
-  'pentacles-03': 'Tres de Pentáculos',
-  'pentacles-04': 'Cuatro de Pentáculos',
-  'pentacles-05': 'Cinco de Pentáculos',
-  'pentacles-06': 'Seis de Pentáculos',
-  'pentacles-07': 'Siete de Pentáculos',
-  'pentacles-08': 'Ocho de Pentáculos',
-  'pentacles-09': 'Nueve de Pentáculos',
-  'pentacles-10': 'Diez de Pentáculos',
-  'pentacles-11': 'Sota de Pentáculos',
-  'pentacles-12': 'Caballero de Pentáculos',
-  'pentacles-13': 'Reina de Pentáculos',
-  'pentacles-14': 'Rey de Pentáculos',
+  // PentÃ¡culos
+  'pentacles-01': 'As de PentÃ¡culos',
+  'pentacles-02': 'Dos de PentÃ¡culos',
+  'pentacles-03': 'Tres de PentÃ¡culos',
+  'pentacles-04': 'Cuatro de PentÃ¡culos',
+  'pentacles-05': 'Cinco de PentÃ¡culos',
+  'pentacles-06': 'Seis de PentÃ¡culos',
+  'pentacles-07': 'Siete de PentÃ¡culos',
+  'pentacles-08': 'Ocho de PentÃ¡culos',
+  'pentacles-09': 'Nueve de PentÃ¡culos',
+  'pentacles-10': 'Diez de PentÃ¡culos',
+  'pentacles-11': 'Sota de PentÃ¡culos',
+  'pentacles-12': 'Caballero de PentÃ¡culos',
+  'pentacles-13': 'Reina de PentÃ¡culos',
+  'pentacles-14': 'Rey de PentÃ¡culos',
 
   // Arcanos mayores
   'major-00': 'El Loco',
@@ -407,7 +747,7 @@ const cardNamesEs: Record<string, string> = {
   'major-06': 'Los Enamorados',
   'major-07': 'El Carro',
   'major-08': 'La Fuerza',
-  'major-09': 'El Ermitaño',
+  'major-09': 'El ErmitaÃ±o',
   'major-10': 'La Rueda de la Fortuna',
   'major-11': 'La Justicia',
   'major-12': 'El Colgado',
@@ -427,7 +767,7 @@ function stripAccentsLower(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-// util simple para verificar Firebase ID token (sin librerías pesadas)
+// util simple para verificar Firebase ID token (sin librerÃ­as pesadas)
 async function verifyFirebaseIdToken(idToken: string, apiKey: string) {
   const resp = await fetch(
     `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${apiKey}`,
@@ -475,7 +815,7 @@ function parseMetaFromFilename(file: string): { rank?: number; suit?: Suit } {
   else if (
     tokens.some(t =>
       [
-        // 🜂 Todos los Arcanos Mayores
+        // ðŸœ‚ Todos los Arcanos Mayores
         'loco', 'mago', 'sacerdotisa', 'emperatriz', 'emperador',
         'pap', 'hierofante', 'enamorados', 'carro', 'fuerza',
         'ermitano', 'rueda', 'justicia', 'colgado', 'muerte',
@@ -528,7 +868,7 @@ function fileToCardMeta(file: string, forcedSuit?: Suit): CardMeta | null {
   const suit = forcedSuit ?? parsed.suit;
   let rank = parsed.rank;
 
-  // 🪶 Forzar rank en arcanos mayores según su posición en FILES_MAJOR
+  // ðŸª¶ Forzar rank en arcanos mayores segÃºn su posiciÃ³n en FILES_MAJOR
   if (suit === 'major') {
     const index = FILES_MAJOR.indexOf(file);
     if (index >= 0) rank = index; // 0..21
@@ -575,7 +915,7 @@ app.get('/api/spreads', (c) =>
     },
     {
       id: 'ppf-3',
-      name: 'Pasado · Presente · Futuro',
+      name: 'Pasado Â· Presente Â· Futuro',
       positions: [1, 2, 3].map((i) => ({
         index: i,
         label: `${i}`,
@@ -628,12 +968,12 @@ function shuffle<T>(arr: T[], rnd: () => number) {
 
 
 // =====================
-// /api/draw — Genera una tirada de cartas
+// /api/draw â€” Genera una tirada de cartas
 // =====================
 app.post('/api/draw', async (c) => {
   try {
     // ==============================
-    // 🔐 Autenticación Firebase
+    // ðŸ” AutenticaciÃ³n Firebase
     // ==============================
     let uid = 'guest';
     let email = 'guest';
@@ -650,12 +990,12 @@ app.post('/api/draw', async (c) => {
         email = verified.email;
         isMaster = isMasterUser(email);
       } catch (err) {
-        console.warn('⚠️ Token Firebase inválido:', err);
+        console.warn('âš ï¸ Token Firebase invÃ¡lido:', err);
       }
     }
 
     // ==============================
-    // 🧭 Cuerpo del request
+    // ðŸ§­ Cuerpo del request
     // ==============================
     const body = (await c.req.json().catch(() => ({}))) as {
       spreadId?: string;
@@ -667,9 +1007,10 @@ app.post('/api/draw', async (c) => {
     const spreadId = body.spreadId ?? 'celtic-cross-10';
     const allowsReversed = body.allowsReversed ?? true;
     const seed = body.seed ?? Date.now().toString();
+    const today = new Date().toISOString().slice(0, 10);
 
     // ==============================
-    // ⚙️ Detectar modo y rol
+    // âš™ï¸ Detectar modo y rol
     // ==============================
     const isDev =
       !c.env.ENV ||
@@ -677,41 +1018,57 @@ app.post('/api/draw', async (c) => {
       c.req.url.includes('127.0.0.1') ||
       c.req.url.includes('localhost');
 
-    if (isDev) console.log('🧠 [DRAW] Modo desarrollo detectado.');
-    if (isMaster) console.log('🌟 [DRAW] MasterUser detectado (sin límites).');
+    if (isDev) console.log('ðŸ§  [DRAW] Modo desarrollo detectado.');
+    if (isMaster) console.log('ðŸŒŸ [DRAW] MasterUser detectado (sin lÃ­mites).');
 
     // ==============================
-    // 📅 Control de límite diario
+    // ðŸ“… Control de lÃ­mite diario
     // ==============================
     // ==============================
-// 📅 Control de límite mensual por plan
+// ðŸ“… Control de lÃ­mite mensual por plan
 // ==============================
 let remaining = '∞';
 
-if (!isMaster && uid !== 'guest' && c.env.DB) {
-  const plan = await ensureUserPlan(c.env, uid);
-  const period = nowYm();
-  const q = await ensureQuotaRow(c.env, uid, plan, period);
 
-  if (q.used >= q.monthly) {
-    return c.json(
-      { ok: false, error: 'sin_cupo', message: 'Sin tiradas disponibles. Pasa a Sabiduría o dona.' },
-      402
-    );
+
+if (!isMaster && uid !== 'guest' && c.env.DB) {
+
+  const readingGate = await canDoReading(c.env, uid, { isMaster });
+
+  if (!readingGate.allowed) {
+
+    return c.json({ ok: false, reason: readingGate.reason }, 402);
+
   }
 
-  await c.env.DB.prepare(
-    'UPDATE quotas SET used = used + 1, updated_at=? WHERE uid=? AND period=?'
-  ).bind(Date.now(), uid, period).run();
 
-  remaining = String(Math.max(q.monthly - (q.used + 1), 0));
+
+  const allowed = await checkAndConsumeQuota(c.env, uid);
+
+  if (!allowed) {
+
+    return c.json({ ok: false, reason: 'quota' }, 402);
+
+  }
+
+
+
+  const quotaState = await getUserQuotaState(c.env, uid);
+
+  remaining = String(quotaState.remaining);
+
 }
+
+
+
 
 
     
 
-    // ==============================
-    // 🔮 Generar tirada
+
+
+// ==============================
+    // ðŸ”® Generar tirada
     // ==============================
     const count =
       spreadId === 'ppf-3' ? 3 :
@@ -747,10 +1104,10 @@ if (!isMaster && uid !== 'guest' && c.env.DB) {
       reversed: allowsReversed ? rnd() < reverseChance : false,
     }));
 
-    console.log(`[DRAW] Tirada (${email}) →`, cards.map(c => `${c.cardId}${c.reversed ? '↓' : '↑'}`).join(', '));
+    console.log(`[DRAW] Tirada (${email}) â†’`, cards.map(c => `${c.cardId}${c.reversed ? 'â†“' : 'â†‘'}`).join(', '));
 
     // ==============================
-    // 💾 Guardar tirada (solo usuarios reales)
+    // ðŸ’¾ Guardar tirada (solo usuarios reales)
     // ==============================
     try {
       if (c.env.DB && uid !== 'guest') {
@@ -762,11 +1119,11 @@ if (!isMaster && uid !== 'guest' && c.env.DB) {
         .run();
       }
     } catch (saveErr) {
-      console.warn('⚠️ [DRAW] No se pudo guardar la tirada:', saveErr);
+      console.warn('âš ï¸ [DRAW] No se pudo guardar la tirada:', saveErr);
     }
 
     // ==============================
-    // ✅ Respuesta final
+    // âœ… Respuesta final
     // ==============================
     return c.json({
       ok: true,
@@ -779,7 +1136,7 @@ if (!isMaster && uid !== 'guest' && c.env.DB) {
     });
 
   } catch (err: any) {
-    console.error('💥 [DRAW] Error interno:', err);
+    console.error('ðŸ’¥ [DRAW] Error interno:', err);
     return c.json({ ok: false, error: 'internal_error', message: String(err?.message ?? err) }, 500);
   }
 });
@@ -790,20 +1147,20 @@ if (!isMaster && uid !== 'guest' && c.env.DB) {
 
 
 // =====================
-// 🔮 /api/card-meaning — Significado de carta individual (Hugging Face nuevo router)
+// ðŸ”® /api/card-meaning â€” Significado de carta individual (Hugging Face nuevo router)
 // =====================
 app.post('/api/card-meaning', async (c) => {
   try {
     const { name, reversed } = await c.req.json<{ name: string; reversed?: boolean }>();
     const token = c.env.HF_TOKEN;
     if (!token)
-      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
+      return c.json({ ok: false, message: 'No se encontrÃ³ el token HF_TOKEN' }, 401);
 
     const prompt = `
-Eres un intérprete experto en tarot celta.
-Explica el significado simbólico de la carta **${name}**${reversed ? ' (invertida)' : ''}.
-Usa un tono reflexivo y espiritual, sin emojis ni autopromoción.
-Responde en formato **Markdown** con 2 o 3 párrafos cortos.
+Eres un intÃ©rprete experto en tarot celta.
+Explica el significado simbÃ³lico de la carta **${name}**${reversed ? ' (invertida)' : ''}.
+Usa un tono reflexivo y espiritual, sin emojis ni autopromociÃ³n.
+Responde en formato **Markdown** con 2 o 3 pÃ¡rrafos cortos.
 `;
 
     const response = await fetch(
@@ -825,7 +1182,7 @@ Responde en formato **Markdown** con 2 o 3 párrafos cortos.
 
     if (!response.ok) {
       const text = await response.text();
-      console.error('❌ Error HF:', response.status, text);
+      console.error('âŒ Error HF:', response.status, text);
       return c.json({ ok: false, message: `Error HF ${response.status}: ${text}` });
     }
 
@@ -833,13 +1190,13 @@ Responde en formato **Markdown** con 2 o 3 párrafos cortos.
     let meaning = result?.choices?.[0]?.text?.trim() || '';
 
     meaning = meaning
-      .replace(/(¡?Gracias[^]+$)/i, '')
-      .replace(/(Sígueme[^]+$)/i, '')
+      .replace(/(Â¡?Gracias[^]+$)/i, '')
+      .replace(/(SÃ­gueme[^]+$)/i, '')
       .replace(/\*{3,}/g, '**');
 
     return c.json({ ok: true, meaning });
   } catch (err: any) {
-    console.error('💥 [CARD-MEANING] Error interno:', err);
+    console.error('ðŸ’¥ [CARD-MEANING] Error interno:', err);
     return c.json({ ok: false, message: err?.message || String(err) }, 500);
   }
 });
@@ -883,7 +1240,7 @@ app.post('/api/history/save', async (c) => {
 
     return c.json({ ok: true });
   } catch (err) {
-    console.error('💥 /api/history/save error:', err);
+    console.error('ðŸ’¥ /api/history/save error:', err);
     return c.json({ ok: false, message: String(err) }, 500);
   }
 });
@@ -918,7 +1275,7 @@ app.get('/api/history/list', async (c) => {
 
     return c.json({ ok: true, history: list });
   } catch (err) {
-    console.error('💥 /api/history/list error:', err);
+    console.error('ðŸ’¥ /api/history/list error:', err);
     return c.json({ ok: false, message: String(err) }, 500);
   }
 });
@@ -929,13 +1286,13 @@ app.get('/api/history/list', async (c) => {
 
 
 
-// Proxy CDN: /cdn/* → R2 (maneja mayúsculas y minúsculas)
+// Proxy CDN: /cdn/* â†’ R2 (maneja mayÃºsculas y minÃºsculas)
 const R2_BASE = `${CDN_BASE}`;
 
-// ✅ Deja una sola definición de /cdn/*
-// y NO fuerces a minúsculas; además, reintenta con capitalización si 404
+// âœ… Deja una sola definiciÃ³n de /cdn/*
+// y NO fuerces a minÃºsculas; ademÃ¡s, reintenta con capitalizaciÃ³n si 404
 
-// ✅ CDN proxy limpio (sin reintentos ni mayúsculas)
+// âœ… CDN proxy limpio (sin reintentos ni mayÃºsculas)
 app.get('/cdn/*', async (c) => {
   const key = c.req.path.replace(/^\/cdn\//, ''); // ruta relativa dentro del bucket
   const url = `${CDN_BASE}/${encodeURI(key)}`;
@@ -943,13 +1300,13 @@ app.get('/cdn/*', async (c) => {
   try {
     const res = await fetch(url, {
       cf: {
-        cacheTtl: 60 * 60 * 24 * 30, // 30 días
+        cacheTtl: 60 * 60 * 24 * 30, // 30 dÃ­as
         cacheEverything: true,
       },
     });
 
     if (!res.ok) {
-      console.warn('⚠️ [CDN Proxy] 404 o error para', url);
+      console.warn('âš ï¸ [CDN Proxy] 404 o error para', url);
       return c.text('not found', 404, {
         'Access-Control-Allow-Origin': '*',
       });
@@ -969,7 +1326,7 @@ app.get('/cdn/*', async (c) => {
       },
     });
   } catch (err) {
-    console.error('💥 [CDN Proxy] Error al obtener', url, err);
+    console.error('ðŸ’¥ [CDN Proxy] Error al obtener', url, err);
     return c.text('cdn error', 502, {
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
@@ -978,7 +1335,7 @@ app.get('/cdn/*', async (c) => {
 });
 
 // =====================
-// 💾 /api/readings/save — Guarda interpretaciones generadas por IA
+// ðŸ’¾ /api/readings/save â€” Guarda interpretaciones generadas por IA
 // =====================
 app.post('/api/readings/save', async (c) => {
   try {
@@ -1010,16 +1367,16 @@ app.post('/api/readings/save', async (c) => {
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
-    // 🔢 Límite de lecturas guardadas (máx 5)
+    // ðŸ”¢ LÃ­mite de lecturas guardadas (mÃ¡x 5)
     const countRow = await c.env.DB.prepare(
       'SELECT COUNT(*) as count FROM readings WHERE uid = ?'
     ).bind(uid).first<{ count: number }>();
 
     if (countRow && countRow.count >= 5) {
-      return c.text('Has alcanzado el máximo (5). Pasa a Sabiduría o dona.', 402);
+      return c.text('Has alcanzado el mÃ¡ximo (5). Pasa a SabidurÃ­a o dona.', 402);
     }
 
-    // 💾 Guarda la lectura
+    // ðŸ’¾ Guarda la lectura
     const id = crypto.randomUUID();
     await c.env.DB.prepare(`
       INSERT INTO readings (id, uid, email, title, interpretation, cards_json, spreadId, created_at)
@@ -1030,7 +1387,7 @@ app.post('/api/readings/save', async (c) => {
 
     return c.json({ ok: true, id });
   } catch (err: any) {
-    console.error('💥 /api/readings/save error:', err);
+    console.error('ðŸ’¥ /api/readings/save error:', err);
     return c.json({ ok: false, message: err.message || String(err) }, 500);
   }
 });
@@ -1038,7 +1395,7 @@ app.post('/api/readings/save', async (c) => {
 
 
 // =====================
-// 🌙 /api/interpret — Interpretación completa de tirada (Hugging Face nuevo router)
+// ðŸŒ™ /api/interpret â€” InterpretaciÃ³n completa de tirada (Hugging Face nuevo router)
 // =====================
 app.post('/api/interpret', async (c) => {
   const controller = new AbortController();
@@ -1051,9 +1408,41 @@ app.post('/api/interpret', async (c) => {
       spreadId?: string;
     }>();
 
+    const authHeader = c.req.header('Authorization') || '';
+    const firebaseToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!firebaseToken) {
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    let uid = '';
+    let email = '';
+    let isMaster = false;
+    try {
+      const apiKey = c.env.FIREBASE_API_KEY || '';
+      const verified = await verifyFirebaseIdToken(firebaseToken, apiKey);
+      uid = verified.uid;
+      email = verified.email;
+      isMaster = isMasterUser(email);
+    } catch (err) {
+      console.error('💥 /api/interpret auth error:', err);
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const gate = await canDoReading(c.env, uid, { isMaster });
+    if (!gate.allowed) {
+      return c.json({ ok: false, reason: gate.reason }, 402);
+    }
+
+    if (!isMaster) {
+      const okUse = await useDrucoins(c.env, uid);
+      if (!okUse) {
+        return c.json({ ok: false, reason: 'drucoins' }, 402);
+      }
+    }
+
     const token = c.env.HF_TOKEN;
     if (!token)
-      return c.json({ ok: false, message: 'No se encontró el token HF_TOKEN' }, 401);
+      return c.json({ ok: false, message: 'No se encontrÃ³ el token HF_TOKEN' }, 401);
 
     const formattedCards = cards.map((c) => {
       const name = cardNamesEs[c.name] || c.name;
@@ -1064,26 +1453,26 @@ app.post('/api/interpret', async (c) => {
       spreadId === 'celtic-cross-10'
         ? 'Cruz Celta (10 cartas)'
         : spreadId === 'ppf-3'
-        ? 'Pasado · Presente · Futuro'
+        ? 'Pasado Â· Presente Â· Futuro'
         : 'Tirada libre';
 
-    // 💡 system prompt para guiar tono y formato
+    // ðŸ’¡ system prompt para guiar tono y formato
     const prompt = `
-Eres un guía espiritual celta que interpreta tiradas de tarot con tono sereno y simbólico.
-Usa **frases cortas y precisas** (máx. 2–3 líneas por párrafo).
+Eres un guÃ­a espiritual celta que interpreta tiradas de tarot con tono sereno y simbÃ³lico.
+Usa **frases cortas y precisas** (mÃ¡x. 2â€“3 lÃ­neas por pÃ¡rrafo).
 Evita repeticiones, redundancias o cierres extensos. 
-Responde con **3 párrafos máximo**, cada uno claro y distinto.
+Responde con **3 pÃ¡rrafos mÃ¡ximo**, cada uno claro y distinto.
 
-🧭 Tipo de tirada: ${spreadLabel}
-💫 Contexto del consultante: "${context || 'Sin contexto'}"
+ðŸ§­ Tipo de tirada: ${spreadLabel}
+ðŸ’« Contexto del consultante: "${context || 'Sin contexto'}"
 
-Cartas extraídas:
+Cartas extraÃ­das:
 ${formattedCards.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 
-Tu misión:
+Tu misiÃ³n:
 1. Resume el mensaje central.
-2. Explica brevemente las energías o aprendizajes de cada una de las cartas.
-3. Cierra con una frase esperanzadora o sabia (una sola oración).
+2. Explica brevemente las energÃ­as o aprendizajes de cada una de las cartas.
+3. Cierra con una frase esperanzadora o sabia (una sola oraciÃ³n).
 
 No incluyas saludos, repeticiones ni despedidas.
 `;
@@ -1111,16 +1500,16 @@ No incluyas saludos, repeticiones ni despedidas.
 
     if (!response.ok) {
       const text = await response.text();
-      console.error('❌ Error HF:', response.status, text);
+      console.error('âŒ Error HF:', response.status, text);
       return c.json({ ok: false, message: `Error HF ${response.status}: ${text}` });
     }
 
     const result = await response.json();
     let interpretation = result?.choices?.[0]?.text?.trim() || '';
 
-    // ✂️ Post-procesado: elimina firmas o repeticiones
+    // âœ‚ï¸ Post-procesado: elimina firmas o repeticiones
     interpretation = interpretation
-      .replace(/(¡?Gracias[^]+$)/i, '') // corta despedidas
+      .replace(/(Â¡?Gracias[^]+$)/i, '') // corta despedidas
       .replace(/(\*{2,}.*Licencia.*$)/i, '')
       .replace(/\*{3,}/g, '**')
       .replace(/(_{2,})/g, '')
@@ -1128,7 +1517,7 @@ No incluyas saludos, repeticiones ni despedidas.
 
     return c.json({ ok: true, interpretation });
   } catch (err: any) {
-    console.error('💥 [INTERPRET ERROR]:', err);
+    console.error('ðŸ’¥ [INTERPRET ERROR]:', err);
     return c.json({ ok: false, message: err?.message || String(err) });
   }
 });
@@ -1137,7 +1526,7 @@ No incluyas saludos, repeticiones ni despedidas.
 
 
 // =====================
-// 📜 /api/terms/accept — Registrar aceptación de términos
+// ðŸ“œ /api/terms/accept â€” Registrar aceptaciÃ³n de tÃ©rminos
 // =====================
 app.post('/api/terms/accept', async (c) => {
   try {
@@ -1146,7 +1535,7 @@ app.post('/api/terms/accept', async (c) => {
     const authHeader = c.req.header('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-    // 🔐 Identificar usuario
+    // ðŸ” Identificar usuario
     let uid = 'guest';
     if (token) {
       try {
@@ -1154,11 +1543,11 @@ app.post('/api/terms/accept', async (c) => {
         const verified = await verifyFirebaseIdToken(token, apiKey);
         uid = verified.uid;
       } catch {
-        console.warn('⚠️ Token inválido o expirado, se registra como invitado.');
+        console.warn('âš ï¸ Token invÃ¡lido o expirado, se registra como invitado.');
       }
     }
 
-    // 🔍 Metadatos
+    // ðŸ” Metadatos
     const ip_address =
       c.req.header('CF-Connecting-IP') ||
       c.req.header('X-Forwarded-For') ||
@@ -1168,7 +1557,7 @@ app.post('/api/terms/accept', async (c) => {
     const user_agent = c.req.header('User-Agent') || 'unknown';
     const timestamp = acceptedAt ?? Date.now();
 
-    // 💾 Guarda o actualiza aceptación (por UID + versión)
+    // ðŸ’¾ Guarda o actualiza aceptaciÃ³n (por UID + versiÃ³n)
     await c.env.DB.prepare(`
       INSERT OR REPLACE INTO terms_acceptance (uid, accepted_at, version, ip_address, user_agent)
       VALUES (?, ?, ?, ?, ?)
@@ -1176,13 +1565,13 @@ app.post('/api/terms/accept', async (c) => {
 
     return c.json({ ok: true, uid, version, accepted_at: timestamp });
   } catch (err: any) {
-    console.error('💥 /api/terms/accept error:', err);
+    console.error('ðŸ’¥ /api/terms/accept error:', err);
     return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
   }
 });
 
 // =====================
-// 📘 /api/terms/check — consulta si aceptó T&C
+// ðŸ“˜ /api/terms/check â€” consulta si aceptÃ³ T&C
 // =====================
 app.post('/api/terms/check', async (c) => {
   try {
@@ -1195,10 +1584,65 @@ app.post('/api/terms/check', async (c) => {
 
     return c.json({ accepted: !!row });
   } catch (err: any) {
-    console.error('💥 /api/terms/check error:', err);
+    console.error('ðŸ’¥ /api/terms/check error:', err);
     return c.json({ accepted: false });
   }
 });
+
+app.get('/api/terms/needs', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ needs: true }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    try {
+      const verified = await verifyFirebaseIdToken(token, apiKey);
+      const uid = verified.uid;
+
+      const row = await c.env.DB.prepare(
+        'SELECT accepted_at FROM terms_acceptance WHERE uid = ?'
+      ).bind(uid).first();
+
+      return c.json({ needs: !row });
+    } catch {
+      return c.json({ needs: true }, 401);
+    }
+  } catch (err: any) {
+    console.error('💥 /api/terms/needs error:', err);
+    return c.json({ needs: true }, 500);
+  }
+});
+
+app.get('/api/reading/check', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, reason: 'invalid_token' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    try {
+      const verified = await verifyFirebaseIdToken(token, apiKey);
+      const uid = verified.uid;
+      const email = verified.email;
+
+      const gate = await canDoReading(c.env, uid, { isMaster: isMasterUser(email) });
+      if (gate.allowed) return c.json({ ok: true });
+
+      const reason = gate.reason === 'quota' ? 'no_quota' : 'no_drucoins';
+      const message =
+        gate.reason === 'quota' ? 'Sin tiradas disponibles' : 'No tienes Drucoins';
+
+      return c.json({ ok: false, reason, message }, 402);
+    } catch {
+      return c.json({ ok: false, reason: 'invalid_token' }, 401);
+    }
+  } catch (err: any) {
+    console.error('💥 /api/reading/check error:', err);
+    return c.json({ ok: false, reason: 'internal_error' }, 500);
+  }
+});
+
 
 
 
@@ -1221,13 +1665,13 @@ function getUserRole(email?: string): 'master' | 'freemium' | 'guest' {
 
 
 // =====================
-// 🔧 Middleware final CORS Fix
+// ðŸ”§ Middleware final CORS Fix
 // =====================
 
 app.get('/debug/env', (c) => {
   return c.json({
-    HF2_TOKEN: c.env.HF2_TOKEN ? '✅ cargado' : '❌ vacío',
-    HF_TOKEN: c.env.HF_TOKEN ? '✅ cargado' : '❌ vacío',
+    HF2_TOKEN: c.env.HF2_TOKEN ? 'âœ… cargado' : 'âŒ vacÃ­o',
+    HF_TOKEN: c.env.HF_TOKEN ? 'âœ… cargado' : 'âŒ vacÃ­o',
     ENV: c.env.ENV || 'no definido',
   });
 });
@@ -1235,3 +1679,9 @@ app.get('/debug/env', (c) => {
 
 
 export default app;
+
+
+
+
+
+
