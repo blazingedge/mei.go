@@ -1,20 +1,17 @@
-import { inject } from '@angular/core';
+﻿import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
+import { SessionService } from '../app/core/services/session.service';
 
 export const AuthGuard: CanActivateFn = async () => {
   const router = inject(Router);
-  const auth = inject(Auth);
+  const session = inject(SessionService);
 
-  return new Promise<boolean>((resolve) => {
-    const unsub = auth.onAuthStateChanged((user) => {
-      unsub();
-      if (user) {
-        resolve(true); // ✅ acceso permitido
-      } else {
-        router.navigate(['/login']); // 🚫 redirige al login
-        resolve(false);
-      }
-    });
-  });
+  const status = await session.validate();
+  if (status === 'valid') {
+    return true;
+  }
+
+  router.navigate(['/login']);
+  return false;
 };
+

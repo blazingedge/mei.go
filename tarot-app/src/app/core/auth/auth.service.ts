@@ -1,4 +1,4 @@
-// src/app/core/services/auth.service.ts
+﻿// src/app/core/services/auth.service.ts
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
@@ -12,6 +12,15 @@ import {
   User,
   onAuthStateChanged
 } from '@angular/fire/auth';
+import { browserLocalPersistence, setPersistence } from 'firebase/auth';
+
+export type PlanId = 'luz' | 'sabiduria' | 'quantico';
+
+export interface SessionSnapshot {
+  user?: { uid: string; email: string; plan: PlanId };
+  quota?: { monthly: number; used: number; remaining: number; period: string };
+  drucoins?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -25,16 +34,35 @@ export class AuthService {
   private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
   termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
+  private userSubject = new BehaviorSubject<{ uid: string; email: string; plan: PlanId } | null>(null);
+  user$ = this.userSubject.asObservable();
+
+  private planSubject = new BehaviorSubject<PlanId | null>(null);
+  plan$ = this.planSubject.asObservable();
+
+  private quotaSubject = new BehaviorSubject<{ monthly: number; used: number; remaining: number; period: string } | null>(null);
+  quota$ = this.quotaSubject.asObservable();
+
+  private quotaRemainingSubject = new BehaviorSubject<number>(0);
+  quotaRemaining$ = this.quotaRemainingSubject.asObservable();
+
+  private drucoinBalanceSubject = new BehaviorSubject<number>(0);
+  drucoinBalance$ = this.drucoinBalanceSubject.asObservable();
+
   constructor(private http: HttpClient, private auth: Auth) {
 
-    // ⭐ Listener de Firebase
+    setPersistence(this.auth, browserLocalPersistence).catch(err =>
+      console.warn('No se pudo configurar la persistencia de Firebase:', err)
+    );
+
     onAuthStateChanged(this.auth, async (user) => {
-      if (!user) return;
+      if (!user) {
+        this.clearSessionState();
+        this.termsAcceptedSubject.next(false);
+        return;
+      }
 
-      // Cuando Firebase cambia de usuario, verificamos términos
       const accepted = await this.checkTerms(user.uid);
-
-      // Emitimos resultado al flujo
       this.termsAcceptedSubject.next(accepted);
     });
   }
@@ -53,7 +81,7 @@ export class AuthService {
       try {
         return await user.getIdToken();
       } catch (err) {
-        console.warn('⚠️ No se pudo obtener token Firebase:', err);
+        console.warn('âš ï¸ No se pudo obtener token Firebase:', err);
       }
     }
 
@@ -80,7 +108,7 @@ export class AuthService {
       return false;
 
     } catch (err) {
-      console.error('❌ Error en login:', err);
+      console.error('âŒ Error en login:', err);
       return false;
     }
   }
@@ -101,7 +129,7 @@ export class AuthService {
       return !!res?.ok;
 
     } catch (err) {
-      console.error('❌ Error en register:', err);
+      console.error('âŒ Error en register:', err);
       return false;
     }
   }
@@ -121,7 +149,7 @@ export class AuthService {
       return result.user;
 
     } catch (err) {
-      console.error('❌ Error Google Auth:', err);
+      console.error('âŒ Error Google Auth:', err);
       return null;
     }
   }
@@ -138,7 +166,7 @@ export class AuthService {
       });
 
       if (!res.ok) {
-        console.warn('⚠️ /api/terms/check → status', res.status);
+        console.warn('âš ï¸ /api/terms/check â†’ status', res.status);
         return false;
       }
 
@@ -146,7 +174,7 @@ export class AuthService {
       return !!j?.accepted;
 
     } catch (err) {
-      console.error('💥 Error en checkTerms:', err);
+      console.error('ðŸ’¥ Error en checkTerms:', err);
       return false;
     }
   }
@@ -158,7 +186,7 @@ export class AuthService {
     try {
       const token = await this.getIdToken();
       if (!token) {
-        console.warn('⚠️ No hay token para registrar T&C');
+        console.warn('âš ï¸ No hay token para registrar T&C');
         return false;
       }
 
@@ -181,13 +209,50 @@ export class AuthService {
       return true;
 
     } catch (err) {
-      console.error('💥 markTermsAcceptedRemote error:', err);
+      console.error('ðŸ’¥ markTermsAcceptedRemote error:', err);
       return false;
     }
   }
 
   markTermsAccepted() {
     this.termsAcceptedSubject.next(true);
+  }
+
+  applySessionSnapshot(snapshot: SessionSnapshot | null) {
+    if (!snapshot || !snapshot.user) {
+      this.clearSessionState();
+      return;
+    }
+
+    this.userSubject.next(snapshot.user);
+    this.planSubject.next(snapshot.user.plan);
+
+    if (snapshot.quota) {
+      this.quotaSubject.next(snapshot.quota);
+      this.quotaRemainingSubject.next(snapshot.quota.remaining);
+    } else {
+      this.quotaSubject.next(null);
+      this.quotaRemainingSubject.next(0);
+    }
+
+    if (typeof snapshot.drucoins === 'number') {
+      this.drucoinBalanceSubject.next(snapshot.drucoins);
+    } else {
+      this.drucoinBalanceSubject.next(0);
+    }
+  }
+
+  clearSessionState() {
+    this.userSubject.next(null);
+    this.planSubject.next(null);
+    this.quotaSubject.next(null);
+    this.quotaRemainingSubject.next(0);
+    this.drucoinBalanceSubject.next(0);
+  }
+
+  requireTermsAcceptance() {
+    this.authFlowStarted = true;
+    this.termsAcceptedSubject.next(false);
   }
 
   // -----------------------
@@ -197,5 +262,7 @@ export class AuthService {
     this.workerToken = null;
     await signOut(this.auth);
     this.termsAcceptedSubject.next(false);
+    this.clearSessionState();
   }
 }
+

@@ -8,6 +8,7 @@ import { IntroParticlesComponent } from './intro-particles/intro-partilces.compo
 import { environment } from '../../environments/environment';
 import { TermsModalComponent } from '../components/terms-modal.component';
 import { Subject, takeUntil } from 'rxjs';
+import { SessionService } from './services/session.service';
 
 @Component({
   standalone: true,
@@ -39,7 +40,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   register = { email: '', password: '', confirm: '' };
   private destroy$ = new Subject<void>();
 
-  constructor(private auth: AuthService, private router: Router) {}
+  constructor(
+    private auth: AuthService,
+    private router: Router,
+    private sessionService: SessionService
+  ) {}
 
   // ============================================================================
   // 🎬 INTRO
@@ -139,22 +144,19 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
   private async afterAuth() {
-    await new Promise(res => setTimeout(res, 300));
+    const status = await this.sessionService.validate(true);
 
-    const user = this.auth.currentUser;
-    if (!user) {
-      this.auth.authFlowStarted = false;
+    if (status === 'valid') {
+      this.finishAuthFlow();
       return;
     }
 
-    const accepted = await this.auth.checkTerms(user.uid);
-
-    if (!accepted) {
+    if (status === 'needs-terms') {
       this.showTerms = true;
       return;
     }
 
-    this.finishAuthFlow();
+    this.auth.authFlowStarted = false;
   }
 
   private finishAuthFlow() {
@@ -254,7 +256,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.auth.markTermsAccepted();
     this.acceptedTerms = true;
     this.showTerms = false;
-
+    await this.sessionService.validate(true);
     this.finishAuthFlow();
   }
 

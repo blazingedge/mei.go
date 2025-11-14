@@ -1,4 +1,4 @@
-  import { Component, OnInit, inject, NgZone, ChangeDetectorRef } from '@angular/core';
+﻿  import { Component, OnInit, inject, NgZone, ChangeDetectorRef } from '@angular/core';
   import { CommonModule } from '@angular/common';
   import { FormsModule } from '@angular/forms';
   import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
@@ -13,6 +13,7 @@
   import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
   import { HangingMenuComponent } from './components/hanging-menu.component';
   import { AuthService } from './core/auth/auth.service';
+  import { SessionService } from './core/services/session.service';
   import { Router } from '@angular/router';
   
 
@@ -37,7 +38,7 @@ type Placed = {
   const PLAN_LIMITS = {
   luz:       { monthly: 1 },   // 1 tirada (puedes cambiar a 1/mes)
   sabiduria: { monthly: 30 },
-  quantico:  { monthly: 9999 } // o “Infinity” si prefieres
+  quantico:  { monthly: 9999 } // o â€œInfinityâ€ si prefieres
 } as const;
   
   const HISTORY_KEY = 'tarot-history-v1';
@@ -56,6 +57,7 @@ type Placed = {
     private auth  = inject(Auth);
     private breakpointObserver = inject(BreakpointObserver);
     private authService = inject(AuthService);
+    private sessionService = inject(SessionService);
     private router = inject(Router);
     // ===== estado principal =====
     spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
@@ -90,7 +92,7 @@ type Placed = {
     loading= false;
     showHistory = false;
     historyList: HistoryEntry[] = [];
-    interpretationSafe: SafeHtml = ''; // versión HTML segura para [innerHTML]
+    interpretationSafe: SafeHtml = ''; // versiÃ³n HTML segura para [innerHTML]
     lastDraw: DrawCard[] = [];   
     showContextModal = false;
     userContextInput = '';
@@ -98,10 +100,10 @@ type Placed = {
     showBookPanel = false;
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
-      { label: 'Configuración', action: 'settings' },
+      { label: 'ConfiguraciÃ³n', action: 'settings' },
       { label: 'Lecturas guardadas', action: 'saved' },
       { label: 'Premium / Drucoins', action: 'premium' },
-      { label: 'Cerrar sesión', action: 'logout' }
+      { label: 'Cerrar sesiÃ³n', action: 'logout' }
     ];
     readonly deckStack = Array.from({ length: 5 }, (_, i) => i);
   
@@ -118,7 +120,8 @@ type Placed = {
   overlayCardMeaning = '';
   loadingCardMeaning = false;
   quota: { remaining: number; monthly: number } | null = null;
-  // 🌙 Abre y actualiza el significado de una carta
+  drucoinBalance = 0;
+  // ðŸŒ™ Abre y actualiza el significado de una carta
   async openCardMeaning(pc: any) {
     try {
       const cardName =
@@ -127,7 +130,7 @@ type Placed = {
       this.overlayCardTitle = cardName;
       this.overlayCardMeaning = 'Consultando significado...';
       this.loadingCardMeaning = true;
-      this.cdr.detectChanges(); // 👈 fuerza refresco inmediato del overlay
+      this.cdr.detectChanges(); // ðŸ‘ˆ fuerza refresco inmediato del overlay
       const res = await fetch(
         'https://lumiere-api.laife91.workers.dev/api/card-meaning',
         {
@@ -141,25 +144,25 @@ type Placed = {
       );
       if (!res.ok) {
         const errText = await res.text();
-        console.error('⚠️ Error al obtener significado:', res.status, errText);
-        this.overlayCardMeaning = `❌ Error ${res.status}: ${errText}`;
+        console.error('âš ï¸ Error al obtener significado:', res.status, errText);
+        this.overlayCardMeaning = `âŒ Error ${res.status}: ${errText}`;
         this.loadingCardMeaning = false;
-        this.cdr.detectChanges(); // 👈 refresca estado de error
+        this.cdr.detectChanges(); // ðŸ‘ˆ refresca estado de error
         return;
       }
       const data = await res.json();
       const meaning =
         data.meaning ||
         data.message ||
-        'No se recibió interpretación del servidor.';
+        'No se recibiÃ³ interpretaciÃ³n del servidor.';
       this.overlayCardMeaning = meaning;
     } catch (err: any) {
-      console.error('💥 Error openCardMeaning:', err);
+      console.error('ðŸ’¥ Error openCardMeaning:', err);
       this.overlayCardMeaning =
-        '❌ Error interno: ' + (err.message || 'desconocido');
+        'âŒ Error interno: ' + (err.message || 'desconocido');
     } finally {
       this.loadingCardMeaning = false;
-      this.cdr.detectChanges(); // 👈 fuerza actualización final
+      this.cdr.detectChanges(); // ðŸ‘ˆ fuerza actualizaciÃ³n final
     }
   }
   trackById(index: number, item: { id: string }): string {
@@ -168,7 +171,7 @@ type Placed = {
 toggleBookPanel() {
   this.showBookPanel = !this.showBookPanel;
 }
-  // 🌙 Cierra el overlay
+  // ðŸŒ™ Cierra el overlay
   closeCardOverlay() {
     this.showCardOverlay = false;
     this.overlayCardTitle = '';
@@ -176,6 +179,7 @@ toggleBookPanel() {
     this.loadingCardMeaning = false;
   }
     async ngOnInit(){
+      await this.sessionService.validate(true);
       this.resolveBgInBackground();
       await this.loadDeckFirst();
       this.rebuildSlots();
@@ -195,23 +199,47 @@ toggleBookPanel() {
       await this.refreshQuota()
       
     }
-    async refreshQuota(){
-  try{
-    const user = this.auth.currentUser;
-    const token = user ? await user.getIdToken(true) : '';
-    const res = await fetch(`${environment.API_BASE}/quota`, {
-      headers: token ? {Authorization:`Bearer ${token}`} : {}
-    });
-    if(res.ok){
-      this.quota = await res.json();
-      this.cdr.markForCheck();
-    }
-  }catch(e){ console.warn('quota?', e); }
+    async refreshQuota(force = false){
+  await this.sessionService.validate(true);
+  this.cdr.markForCheck();
 }
-// Hook: después de una tirada exitosa, refresca
+
+    private async ensureReadingAllowance(): Promise<boolean> {
+  try {
+    const token = await this.authService.getIdToken();
+    if (!token) {
+      await this.router.navigate(['/login']);
+      return false;
+    }
+
+    const res = await fetch(`${environment.API_BASE}/reading/check`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) return true;
+
+    if (res.status === 402) {
+      const payload = await res.json().catch(() => ({}));
+      alert(payload?.message || 'No tienes tiradas o Drucoins suficientes.');
+      return false;
+    }
+
+    if (res.status === 401) {
+      await this.authService.logout();
+      await this.router.navigate(['/login']);
+      return false;
+    }
+
+    return false;
+  } catch (err) {
+    console.error('reading check error', err);
+    return false;
+  }
+}
+// Hook: despuÃ©s de una tirada exitosa, refresca
 private async afterSuccessfulDraw()
 {
-  await this.refreshQuota();
+  await this.refreshQuota(true);
 }
     private resolveBgInBackground(){
       for(const url of this.bgCandidates){
@@ -221,6 +249,7 @@ private async afterSuccessfulDraw()
       }
     }
   async runInterpretation() {
+  if (!(await this.ensureReadingAllowance())) return;
   try {
     this.loadingInterpret = true;
     this.aiResponse = '';
@@ -230,15 +259,33 @@ private async afterSuccessfulDraw()
       name: c.cardId,
       reversed: c.reversed
     }));
+
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser ? await firebaseUser.getIdToken(true) : await this.authService.getIdToken();
+    if (!token) {
+      await this.router.navigate(['/login']);
+      return;
+    }
+
     const res = await fetch(`${environment.API_BASE}/interpret`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
       body: JSON.stringify({
         context: this.userContext,
         cards,
         spreadId: this.spreadId
       })
     });
+
+    if (res.status === 402) {
+      const payload = await res.json().catch(() => ({}));
+      alert(payload?.message || 'No puedes interpretar la tirada en este momento.');
+      return;
+    }
+
     const data = await res.json();
     if (data.ok && data.interpretation) {
       this.interpretationText = data.interpretation;
@@ -246,10 +293,9 @@ private async afterSuccessfulDraw()
         this.toHtml(data.interpretation)
       );
       this.showInterpretation = true;
-      // 💾 Llamada automática al guardar lectura
       await this.saveReading();
     } else {
-      alert('No se recibió interpretación 😅');
+      alert('No se recibió interpretación.');
     }
   } catch (err) {
     alert('Error interpretando la tirada.');
@@ -263,7 +309,7 @@ async saveReading() {
   try {
     const user = this.auth.currentUser;
     if (!user) {
-      alert('Inicia sesión para guardar lecturas.');
+      alert('Inicia sesiÃ³n para guardar lecturas.');
       return;
     }
     const token = await user.getIdToken(true);
@@ -287,11 +333,11 @@ async saveReading() {
     });
     if (res.status === 402) {
       const msg = await res.text();
-      alert(msg || 'Has alcanzado el máximo (5). Pasa a Sabiduría o dona para ampliar.');
+      alert(msg || 'Has alcanzado el mÃ¡ximo (5). Pasa a SabidurÃ­a o dona para ampliar.');
       return;
     }
     if (!res.ok) throw new Error(await res.text());
-    alert('✅ Lectura guardada.');
+    alert('âœ… Lectura guardada.');
   } catch (e: any) {
     alert('No se pudo guardar. ' + (e?.message || ''));
   }
@@ -302,14 +348,30 @@ async saveReading() {
         this.toHtml(this.interpretationText)
       );
     }
-    constructor(
-    private sanitizer: DomSanitizer
-  ) {
-    this.backUrl =
-      environment.CARD_BACK_URL ||
-      `${environment.CDN_BASE}/cards/contracara.webp`;
-    this.observeViewport();
-  }
+  constructor(
+  private sanitizer: DomSanitizer
+) {
+  this.backUrl =
+    environment.CARD_BACK_URL ||
+    `${environment.CDN_BASE}/cards/contracara.webp`;
+  this.observeViewport();
+
+    this.authService.quota$
+      .pipe(takeUntilDestroyed())
+      .subscribe(quota => {
+        this.quota = quota
+          ? { monthly: quota.monthly, remaining: quota.remaining }
+          : null;
+        this.cdr.markForCheck();
+      });
+
+    this.authService.drucoinBalance$
+      .pipe(takeUntilDestroyed())
+      .subscribe(balance => {
+        this.drucoinBalance = balance ?? 0;
+        this.cdr.markForCheck();
+      });
+}
 
     private observeViewport() {
     this.isMobile = this.breakpointObserver.isMatched(this.viewportQuery);
@@ -388,7 +450,7 @@ async saveReading() {
     onSpreadChange(){
       this.spreadLabel =
         this.spreadId==='celtic-cross-10' ? 'Cruz Celta' :
-        this.spreadId==='ppf-3'           ? 'Pasado · Presente · Futuro' : 'Libre';
+        this.spreadId==='ppf-3'           ? 'Pasado Â· Presente Â· Futuro' : 'Libre';
       this.rebuildSlots();
       this.placed = [];
       if (this.isFree){
@@ -402,7 +464,7 @@ async saveReading() {
     }
     getFrontUrl(cardId?: string): string | undefined {
     if (!cardId) return undefined;
-    // 🧩 Mapa de alias para las cartas de la corte (Page, Knight, Queen, King)
+    // ðŸ§© Mapa de alias para las cartas de la corte (Page, Knight, Queen, King)
     const aliasMap: Record<string, string> = {
       // Bastos
       'wands-11': 'pagedebastos',
@@ -419,24 +481,24 @@ async saveReading() {
       'cups-12': 'reydecopas',
       'cups-13': 'reinadecopas',
       'cups-14': 'reydecopas',
-      // Pentáculos
+      // PentÃ¡culos
       'pentacles-11': 'pagedepentaculos',
       'pentacles-12': 'reydepentaculos',
       'pentacles-13': 'reinadepentaculos',
       'pentacles-14': 'reydepentaculos',
     };
-    // 🧠 Reemplazar ID si corresponde a alias
+    // ðŸ§  Reemplazar ID si corresponde a alias
     const fixedId = aliasMap[cardId] ?? cardId;
     // Buscar la carta en el deckMap
     const meta = this.deckMap.get(fixedId);
-    // Validación y logging de diagnóstico
+    // ValidaciÃ³n y logging de diagnÃ³stico
     if (!meta) {
-      console.warn(`⚠️ Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
+      console.warn(`âš ï¸ Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
       return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
     }
     // Validar que la URL sea correcta
     if (!meta.imageUrl) {
-      console.warn(`⚠️ Carta sin imageUrl asignada: ${fixedId}`);
+      console.warn(`âš ï¸ Carta sin imageUrl asignada: ${fixedId}`);
       return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
     }
     return meta.imageUrl;
@@ -447,9 +509,9 @@ async saveReading() {
       const start=this.deckProgress, steps=20, inc=(target-start)/steps, dt=Math.max(12,ms/steps);
       let i=0; const t=setInterval(()=>{ this.deckProgress = Math.min(100, Math.round(start+inc*++i)); if(i>=steps) clearInterval(t); }, dt);
     }
-    // 🔮 ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
+    // ðŸ”® ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
     // ======================================================================
-  // 🎴 FUNCIÓN DEBUG — hace logging, regula ritmo y usa placeholders si falla
+  // ðŸŽ´ FUNCIÃ“N DEBUG â€” hace logging, regula ritmo y usa placeholders si falla
   // ======================================================================
   openContextModal() {
     // Reinicia el campo del contexto cada vez que se abre el modal
@@ -457,27 +519,28 @@ async saveReading() {
     this.showContextModal = true;
   }
   confirmContext() {
-    // Guarda lo que el usuario escribió y cierra el modal
+    // Guarda lo que el usuario escribiÃ³ y cierra el modal
     this.userContext = this.userContextInput.trim();
     this.showContextModal = false;
-    // Validación
+    // ValidaciÃ³n
     if (!this.userContext) {
       alert('Por favor, escribe tu contexto o pregunta antes de continuar.');
       return;
     }
-    // Ahora sí ejecuta la IA
+    // Ahora sÃ­ ejecuta la IA
     this.runInterpretation();
   }
   async hacerTirada() {
     if (!this.canDeal) return;
-    console.groupCollapsed('%c[🔮 hacerTirada: inicio]', 'color:violet');
+    if (!(await this.ensureReadingAllowance())) return;
+    console.groupCollapsed('%c[ðŸ”® hacerTirada: inicio]', 'color:violet');
     this.dealing = true;
     this.placed = [];
     try {
       const user = this.auth.currentUser;
       const uid = user?.uid ?? 'guest';
       const token = user ? await user.getIdToken(true) : '';
-      console.log('🪄 Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
+      console.log('ðŸª„ Solicitando tirada para UID:', uid, 'Spread:', this.spreadId);
       const res: DrawResult = await this.api.drawWithAuth(this.spreadId, uid, token);
       if (!res?.cards?.length) throw new Error('No se recibieron cartas del servidor');
       const validCards = res.cards.filter(c => !!c.cardId);
@@ -498,19 +561,19 @@ async saveReading() {
       console.table(withPos.map(c => ({
         pos: c.position, id: c.cardId, r: c.r, x: c.x, y: c.y
       })));
-      // Precargar imágenes
+      // Precargar imÃ¡genes
       const fronts = withPos.map(pc => this.getFrontUrl(pc.cardId)).filter(Boolean) as string[];
       const preloadRes = await this.loader.preloadAll([this.backUrl, ...fronts], 45000, {
         ignoreErrors: true,
       });
-      console.log('🖼️ Preload completado:', preloadRes);
-      // Si alguna carta no cargó, reemplazar con placeholder
+      console.log('ðŸ–¼ï¸ Preload completado:', preloadRes);
+      // Si alguna carta no cargÃ³, reemplazar con placeholder
       const placeholder = `${environment.CDN_BASE}/cards/contracara.webp`;
       const failFlat = preloadRes.fail ?? [];
       withPos.forEach(pc => {
         const url = this.getFrontUrl(pc.cardId);
         if (!url || failFlat.includes(url)) {
-          console.warn(`⚠️ Carta ${pc.cardId} falló en preload, usando placeholder`);
+          console.warn(`âš ï¸ Carta ${pc.cardId} fallÃ³ en preload, usando placeholder`);
           this.deckMap.set(pc.cardId, {
             id: pc.cardId,
             imageUrl: placeholder,
@@ -524,10 +587,10 @@ async saveReading() {
       const fps = await this.getApproxFPS();
       if (fps < 50) baseDelay = 180;
       if (fps < 30) baseDelay = 250;
-      console.log('🎞️ FPS aproximado:', fps, '→ baseDelay:', baseDelay);
+      console.log('ðŸŽžï¸ FPS aproximado:', fps, 'â†’ baseDelay:', baseDelay);
       document.body.classList.add('spread-active');
       // =============================
-      // Animación concurrente segura
+      // AnimaciÃ³n concurrente segura
       // =============================
       this.zone.runOutsideAngular(async () => {
         const tasks = withPos.map((pc, i) =>
@@ -542,11 +605,11 @@ async saveReading() {
               this.zone.run(() => {
                 pc.faceup = true;
                 this.cdr.detectChanges();
-                console.log(`🃏 Carta girada: #${pc.position} (${pc.cardId})`);
+                console.log(`ðŸƒ Carta girada: #${pc.position} (${pc.cardId})`);
               });
               resolve();
             } catch (e) {
-              console.error('❌ Error animando carta', pc.cardId, e);
+              console.error('âŒ Error animando carta', pc.cardId, e);
               resolve();
             }
           })
@@ -556,14 +619,14 @@ async saveReading() {
         this.zone.run(() => {
           const pending = this.placed.filter(c => !c.faceup);
           if (pending.length) {
-            console.warn('🔁 Reintentando girar cartas pendientes:', pending.map(c => c.cardId));
+            console.warn('ðŸ” Reintentando girar cartas pendientes:', pending.map(c => c.cardId));
             pending.forEach(c => (c.faceup = true));
             this.cdr.detectChanges();
           }
           // Validar deckMap
           const missingMeta = this.placed.filter(c => !this.deckMap.get(c.cardId));
           if (missingMeta.length) {
-            console.warn('⚠️ Cartas sin meta en deckMap:', missingMeta.map(c => c.cardId));
+            console.warn('âš ï¸ Cartas sin meta en deckMap:', missingMeta.map(c => c.cardId));
           }
           this.dealing = false;
           this.saveToHistory();
@@ -575,7 +638,7 @@ async saveReading() {
         });
       });
     } catch (err: any) {
-      console.error('❌ Error en hacerTirada:', err);
+      console.error('âŒ Error en hacerTirada:', err);
       this.deckError = err.message;
       this.dealing = false;
       console.groupEnd();
@@ -594,7 +657,7 @@ async saveReading() {
     const list = this.readHistory();
     list.unshift(entry);
     this.writeHistory(list);
-    // 🌐 Si hay usuario logueado, sincroniza al backend
+    // ðŸŒ Si hay usuario logueado, sincroniza al backend
     const user = this.auth.currentUser;
     if (user) {
       try {
@@ -608,13 +671,13 @@ async saveReading() {
           body: JSON.stringify(entry),
         });
       } catch (err) {
-        console.warn('⚠️ No se pudo sincronizar historial remoto:', err);
+        console.warn('âš ï¸ No se pudo sincronizar historial remoto:', err);
       }
     }
   }
   savedList: { id:string; title:string; ts:number }[] = [];
   openSavedReadings(){
-  // Reusa tu modal de historial o crea otro modal rápido
+  // Reusa tu modal de historial o crea otro modal rÃ¡pido
   this.openHistory(); // si quieres, por ahora reusamos el mismo mientras creas el modal propio
 }
   private getApproxFPS(): Promise<number> {
@@ -693,7 +756,7 @@ async saveReading() {
     prevCard(){ const arr=this.activeCards; if(!arr.length) return; this.focusIdx=(this.focusIdx-1+arr.length)%arr.length; this.bumpZ(arr,this.focusIdx); }
     nextCard(){ const arr=this.activeCards; if(!arr.length) return; this.focusIdx=(this.focusIdx+1)%arr.length; this.bumpZ(arr,this.focusIdx); }
     private bumpZ(arr:Placed[], i:number){ const maxZ=Math.max(...arr.map(p=>p.z)); arr[i].z=maxZ+1; }
-    // Mazo: decide acción
+    // Mazo: decide acciÃ³n
     onDeckClick(){
       if(!this.canDeal){ this.toggleShuffle(); return; }
       if(this.spreadId==='celtic-cross-10'){
@@ -738,23 +801,23 @@ async saveReading() {
       if(id==='ppf-3')          return this.ppf3();
       return this.free9();
     }
-  /** 📜 Layout para la Cruz Celta (10 cartas) */
-  /** 📜 Layout para la Cruz Celta (10 cartas) — versión centrada verticalmente */
+  /** ðŸ“œ Layout para la Cruz Celta (10 cartas) */
+  /** ðŸ“œ Layout para la Cruz Celta (10 cartas) â€” versiÃ³n centrada verticalmente */
   private celticCross10() {
-    const Cx = 45, Cy = 50; // ⬇️ antes 52 → sube todo el conjunto ~7%
+    const Cx = 45, Cy = 50; // â¬‡ï¸ antes 52 â†’ sube todo el conjunto ~7%
     const dx = 15, dy = 13; // ajuste suave entre cartas
-    const colX = 78;        // ligera reducción para centrar mejor
+    const colX = 78;        // ligera reducciÃ³n para centrar mejor
     const h = 12;           // menor altura vertical
     return [
-      // 🌟 Cruz central
+      // ðŸŒŸ Cruz central
       { position: 1, x: 50, y: 45, r: 0,  z: 28 },
       { position: 2, x: 50, y: 45, r: 90, z: 31 },
-      // 🔹 Cuatro alrededor de la cruz
+      // ðŸ”¹ Cuatro alrededor de la cruz
       { position: 3, x: Cx,      y: Cy + dy, r: 0, z: 19 }, // abajo
       { position: 4, x: Cx - dx, y: Cy,      r: 0, z: 19 }, // izquierda
       { position: 5, x: Cx,      y: Cy - dy, r: 0, z: 19 }, // arriba
       { position: 6, x: Cx + dx, y: Cy,      r: 0, z: 19 }, // derecha
-      // 🔸 Columna derecha (más arriba)
+      // ðŸ”¸ Columna derecha (mÃ¡s arriba)
       { position: 7, x: colX, y: Cy + h,   r: 0, z: 18 },
       { position: 8, x: colX, y: Cy,       r: 0, z: 18 },
       { position: 9, x: colX, y: Cy - h,   r: 0, z: 18 },
@@ -786,7 +849,7 @@ async saveReading() {
         list = data.history ?? [];
       }
     } catch (err) {
-      console.warn('⚠️ Error cargando historial remoto, uso local:', err);
+      console.warn('âš ï¸ Error cargando historial remoto, uso local:', err);
     }
   }
 
@@ -816,15 +879,15 @@ async saveReading() {
     }
     closeHistory() {
   this.showHistory = false;
-  // 🧹 Limpieza visual
+  // ðŸ§¹ Limpieza visual
   this.showCardOverlay = false;
   this.showInterpretation = false;
   this.layerOverlay = false;
   this.showContextModal = false;
-  // 💡 Asegura que el tablero recupere foco y sea clicable
+  // ðŸ’¡ Asegura que el tablero recupere foco y sea clicable
   document.body.classList.remove('modal-open', 'spread-complete');
   document.querySelector('.board')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  // 🔄 Refresca la vista por si Angular estaba dormido
+  // ðŸ”„ Refresca la vista por si Angular estaba dormido
   this.cdr.detectChanges();
 }
     openSubscription() {
@@ -873,7 +936,7 @@ toggleSettings() {
       }
     }
     async deleteHistory(id: string) {
-  if (!confirm('¿Eliminar esta lectura para siempre?')) return;
+  if (!confirm('Â¿Eliminar esta lectura para siempre?')) return;
 
   // 1) borra local
   const list = this.readHistory().filter(e => e.id !== id);
@@ -890,7 +953,7 @@ toggleSettings() {
         headers: { Authorization: `Bearer ${token}` }
       });
     } catch (err) {
-      console.warn('⚠️ No se pudo borrar en servidor:', err);
+      console.warn('âš ï¸ No se pudo borrar en servidor:', err);
     }
   }
 }
@@ -910,3 +973,5 @@ toggleSettings() {
     private writeHistory(list:HistoryEntry[]){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }catch{} }
   }
   
+
+

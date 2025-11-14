@@ -268,18 +268,18 @@ app.get('/api/session/validate', async (c) => {
 
       return c.json({
         ok: true,
-        uid,
-        email,
-        plan: quota.plan,
-        quotas: {
+        user: {
+          uid,
+          email,
+          plan: quota.plan,
+        },
+        quota: {
           monthly: quota.monthly,
           used: quota.used,
           remaining: quota.remaining,
           period: nowYm(),
         },
-        drucoins: {
-          balance,
-        },
+        drucoins: balance,
         needsTerms,
       });
     } catch {
