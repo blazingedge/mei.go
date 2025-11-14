@@ -11,6 +11,10 @@
   :host {
     --rail: 0px;
     --panel: 0px;
+      --ink: #f4f1e7;
+  --gold: #d8b565;
+  --bg-dark: #0b1120;
+  --bg-2: #0e1527;
   }
 
   .layout {
@@ -35,7 +39,21 @@
     flex-direction: column;
     gap: 1rem;
     padding: 0.75rem 0.85rem 4.5rem; /* espacio para menú inferior */
+    background: radial-gradient(circle at top, #10171f 0%, #080c15 55%, #05070b 100%);
+
   }
+
+  .mobile-layout::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/celtic-cloth.webp');
+  opacity: 0.15;
+  filter: blur(7px);
+  z-index: 0;
+}
+
 
   .mobile-top-bar {
     display: grid;
@@ -419,6 +437,7 @@
    * -------------------------------------------- */
   .history-overlay {
     position: fixed;
+    z-index: 1100 !important;
     inset: 0;
     background: rgba(5, 6, 12, 0.88);
     display: flex;
@@ -528,39 +547,40 @@
   /* --------------------------------------------
    *  MENÚ INFERIOR FIJO
    * -------------------------------------------- */
-  .bottom-menu {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0.75rem;
-    width: min(420px, 92vw);
-    margin: 0 auto;
-    padding: 0.5rem 1.5rem;
-    border-radius: 999px;
-    background: rgba(11,22,48,0.95);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(214,178,94,0.45);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.6);
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    z-index: 999;
-  }
+ .bottom-menu {
+  position: fixed;
+  bottom: .85rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 92vw);
+  padding: .55rem .9rem;
+  border-radius: 22px;
+  background: rgba(10,12,18,0.75);
+  box-shadow: 0 12px 26px rgba(0,0,0,0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(216,181,101,0.35);
+  display: flex;
+  justify-content: space-around;
+  z-index: 5000;
+}
 
-  .bottom-menu button {
-    flex: 1;
-    border-radius: 999px;
-    border: 1px solid rgba(214,178,94,0.55);
-    background: radial-gradient(circle at top, rgba(255,255,255,0.15), rgba(14,22,44,0.95));
-    box-shadow:
-      inset 0 2px 6px rgba(255,255,255,0.16),
-      0 4px 10px rgba(0,0,0,0.6);
-    color: var(--ink);
-    font-family: 'Cinzel', serif;
-    font-size: 0.8rem;
-    cursor: pointer;
-    padding: 0.35rem 0.5rem;
-  }
+.bottom-menu button {
+  flex: 1;
+  margin: 0 .2rem;
+  border-radius: 18px;
+  padding: .45rem 0;
+  border: 1px solid rgba(216,181,101,0.45);
+  background: radial-gradient(circle at top, rgba(35,39,50,0.65), rgba(7,9,15,0.9));
+  color: var(--ink);
+  font-family: 'Cinzel', serif;
+  font-size: .82rem;
+  transition: .18s;
+}
+.bottom-menu button:active {
+  transform: scale(.96);
+}
+
+
 
   /* Menú redondo alternativo (tus 3 iconos) */
   .mobile-menu {

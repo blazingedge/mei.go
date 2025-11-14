@@ -145,33 +145,49 @@
 
       @if (placed.length > 0) {
 
-        <!-- Vista previa de carta -->
-        <div class="card-preview">
-          <img
-            class="card-face"
-            [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-            alt="{{ placed[focusIdx]?.cardId }}"
-            (click)="openCardMeaning(placed[focusIdx])" />
-        </div>
+  <!-- Vista previa de carta -->
+  <div class="card-preview">
+    <img
+      class="card-face"
+      [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+      alt="{{ placed[focusIdx]?.cardId }}"
+      (click)="openCardMeaning(placed[focusIdx])" />
+  </div>
 
-        <!-- Vista previa de interpretación -->
-        <div class="interpret-preview">
-          <h4>Interpretación</h4>
-          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-        </div>
+  <!-- Vista previa de interpretación -->
+  @if (!showCardOverlay) {
+    <div class="interpret-preview">
+      <h4>Interpretación</h4>
+      <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+    </div>
+  } @else {
+    <!-- Estado vacío si no se muestra overlay -->
+    <div class="empty-mobile-state">
+      <p>Aún no hay cartas repartidas.</p>
+      <button type="button"
+              class="btn-main secondary"
+              (click)="hacerTirada()"
+              [disabled]="!canDeal">
+        Hacer tirada
+      </button>
+    </div>
+  }
 
-      } @else {
+} @else {
 
-        <!-- Estado vacío -->
-        <div class="empty-mobile-state">
-          <p>Aún no hay cartas repartidas.</p>
-          <button type="button" class="btn-main secondary"
-                  (click)="hacerTirada()" [disabled]="!canDeal">
-            Hacer tirada
-          </button>
-        </div>
+  <!-- Estado vacío cuando NO hay cartas -->
+  <div class="empty-mobile-state">
+    <p>Aún no hay cartas repartidas.</p>
+    <button type="button"
+            class="btn-main secondary"
+            (click)="hacerTirada()"
+            [disabled]="!canDeal">
+      Hacer tirada
+    </button>
+  </div>
 
-      }
+}
+
 
     </div>
 

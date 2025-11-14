@@ -14,6 +14,7 @@
   import { HangingMenuComponent } from './components/hanging-menu.component';
   import { AuthService } from './core/auth/auth.service';
   import { Router } from '@angular/router';
+  
 
 type Placed = {
     position: number;
@@ -43,7 +44,7 @@ type Placed = {
   @Component({
     selector: 'app-spreads',
     standalone: true,
-    imports: [CommonModule, FormsModule, DragDropModule, HangingMenuComponent],
+    imports: [CommonModule, FormsModule, DragDropModule],
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
   })
