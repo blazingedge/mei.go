@@ -250,47 +250,6 @@ app.get('/api/quota', async (c) => {
   }
 });
 
-app.get('/api/session/validate', async (c) => {
-  try {
-    const authHeader = c.req.header('Authorization') || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    if (!token) return c.json({ ok: false, reason: 'invalid_token' }, 401);
-
-    try {
-      const apiKey = c.env.FIREBASE_API_KEY || '';
-      const verified = await verifyFirebaseIdToken(token, apiKey);
-      const uid = verified.uid;
-      const email = verified.email;
-
-      const quota = await getUserQuotaState(c.env, uid);
-      const balance = await getDrucoinBalance(c.env, uid);
-      const needsTerms = !(await hasAcceptedTerms(c.env, uid));
-
-      return c.json({
-        ok: true,
-        user: {
-          uid,
-          email,
-          plan: quota.plan,
-        },
-        quota: {
-          monthly: quota.monthly,
-          used: quota.used,
-          remaining: quota.remaining,
-          period: nowYm(),
-        },
-        drucoins: balance,
-        needsTerms,
-      });
-    } catch {
-      return c.json({ ok: false, reason: 'invalid_token' }, 401);
-    }
-  } catch (err: any) {
-    console.error('💥 /api/session/validate error:', err);
-    return c.json({ ok: false, reason: 'internal_error' }, 500);
-  }
-});
-
 app.post('/api/subscriptions/check', async (c) => {
   try {
     const authHeader = c.req.header('Authorization') || '';
@@ -401,6 +360,47 @@ app.use('*', cors({
   credentials: false,
   maxAge: 86400,
 }));
+
+app.get('/api/session/validate', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, reason: 'invalid_token' }, 401);
+
+    try {
+      const apiKey = c.env.FIREBASE_API_KEY || '';
+      const verified = await verifyFirebaseIdToken(token, apiKey);
+      const uid = verified.uid;
+      const email = verified.email;
+
+      const quota = await getUserQuotaState(c.env, uid);
+      const balance = await getDrucoinBalance(c.env, uid);
+      const needsTerms = !(await hasAcceptedTerms(c.env, uid));
+
+      return c.json({
+        ok: true,
+        user: {
+          uid,
+          email,
+          plan: quota.plan,
+        },
+        quota: {
+          monthly: quota.monthly,
+          used: quota.used,
+          remaining: quota.remaining,
+          period: nowYm(),
+        },
+        drucoins: balance,
+        needsTerms,
+      });
+    } catch {
+      return c.json({ ok: false, reason: 'invalid_token' }, 401);
+    }
+  } catch (err: any) {
+    console.error('💥 /api/session/validate error:', err);
+    return c.json({ ok: false, reason: 'internal_error' }, 500);
+  }
+});
 
 app.post('/api/drucoins/add', async (c) => {
   try {
