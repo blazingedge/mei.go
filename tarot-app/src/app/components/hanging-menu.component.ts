@@ -24,13 +24,13 @@ export class HangingMenuComponent {
   }
 
   onContentClick(event: Event) {
-    const target = (event.target as HTMLElement).closest('[data-action]');
+    const target =
+      (event.target as HTMLElement)?.closest('[data-action]') || null;
+
     if (target) {
       const value = target.getAttribute('data-action') ?? '';
       this.action.emit(value);
-      if (this.closeOnSelect) {
-        this.close();
-      }
+      if (this.closeOnSelect) this.close();
     }
   }
 }

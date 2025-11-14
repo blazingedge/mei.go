@@ -150,21 +150,44 @@
     }
   }
 
-  /* === Botones fantasma (barajar / historial) === */
-  .rail-ghosts .ghost-btn{
-  width: 42px; height: 42px; border-radius: 10px; border: 1px solid rgba(0,0,0,.35);
-  background-color: rgba(255,255,255,0.25); background-size: cover; background-position:center;
+  /* === Botones fantasma (barajar / historial / guardadas) === */
+  .rail-ghosts {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;    /* 🔻 vertical */
+    align-items: center;
+    gap: 0.5rem;
+
+    .ghost-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.55);
+      background-color: rgba(255,255,255,0.18);
+      background-size: cover;
+      background-position: center;
+      box-shadow:
+        0 3px 0 rgba(0,0,0,0.7),
+        0 6px 14px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.35);
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+    }
+
+    .ghost-btn:hover {
+      transform: translateY(-2px) scale(1.04);
+      box-shadow:
+        0 4px 0 rgba(0,0,0,0.7),
+        0 10px 20px rgba(0,0,0,0.55),
+        inset 0 1px 0 rgba(255,255,255,0.45);
+      filter: saturate(1.1);
+    }
+
+    .ghost--shuffle  { background-image: url('/assets/ui/icons/shuffle.webp'); }
+    .ghost--history  { background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/historial.webp'); }
+    .ghost--saved    { background-image: url('/assets/ui/icons/saved.webp'); }
   }
-  .ghost--shuffle{
-  background-image: url('/assets/ui/icons/shuffle.webp'); /* genera con Sora y súbelo */
-  }
-  .ghost--history{
-  background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/historial.webp');
-  }
-.ghost--saved{
-  background-image: url('/assets/ui/icons/saved.webp'); /* genera con Sora y súbelo */
-  }
-}
+
 .rail-controls .seg {
      display: flex;
      flex-direction: column;
@@ -698,7 +721,35 @@
 .history-card header{ display:flex; align-items:center; justify-content:space-between; padding:.25rem .25rem .5rem; border-bottom:1px solid rgba(214,178,94,.25); }
 .history-card header .close{ background:transparent; color:#fff; border:0; font-size:1.4rem; line-height:1; }
 .history-list .meta{ display:flex; align-items:center; gap:.35rem; }
-.history-list .actions{ display:flex; gap:.35rem; }
+
+.history-list .actions button {
+  border-radius: 999px;
+  border: 1px solid rgba(214,178,94,0.55);
+  padding: 0.25rem 0.8rem;
+  font-size: 0.8rem;
+  font-family: 'Cinzel', serif;
+  background: rgba(8,11,24,0.9);
+  color: #eef2ff;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+}
+
+.history-list .actions button:hover {
+  background: radial-gradient(circle at top, #2b3048 0%, #0c0f1f 70%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.65);
+}
+
+.history-list .actions button.delete {
+  border-color: rgba(255,107,107,0.7);
+  color: #ffd2d2;
+}
+
+.history-list .actions button.delete:hover {
+  background: radial-gradient(circle at top, #5a171f 0%, #25060b 70%);
+}
+
+
 .history-card footer{ display:flex; justify-content:flex-end; gap:.5rem; }
 
 .history-modal.visible::before {

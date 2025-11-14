@@ -764,18 +764,48 @@ async saveReading() {
     private free9(){ const baseX=50,baseY=52,rand=(a:number,b:number)=>a+Math.random()*(b-a);
       return Array.from({length:9},(_,i)=>({position:i+1,x:baseX+rand(-6,6),y:baseY+rand(-6,6),r:rand(-8,8),z:20+i})); }
     // ---------- Historial ----------
-    openHistory(e?: MouseEvent){
+ async openHistory(e?: MouseEvent) {
   e?.stopPropagation();
   this.closeCardOverlay();
   this.showInterpretation = false;
-  let list = this.readHistory();
+
+  let list: HistoryEntry[] = [];
+
+  const user = this.auth.currentUser;
+
+  if (user) {
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch(`${environment.API_BASE}/history/list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        list = data.history ?? [];
+      }
+    } catch (err) {
+      console.warn('⚠️ Error cargando historial remoto, uso local:', err);
+    }
+  }
+
+  // fallback / sincroniza con localStorage
+  if (!list.length) {
+    list = this.readHistory();
+  }
+
   let changed = false;
-  list = list.map(e => { if(e.ts == null){ e.ts = Date.now(); changed = true; } return e; });
+  list = list.map(e => {
+    if (e.ts == null) { e.ts = Date.now(); changed = true; }
+    return e;
+  });
   if (changed) this.writeHistory(list);
+
   this.historyList = list;
   this.showHistory = true;
   this.cdr.detectChanges();
 }
+
     closeInterpret() {
     this.showInterpretation = false;
     document.body.classList.remove('modal-open');
@@ -841,7 +871,30 @@ toggleSettings() {
         await this.router.navigate(['/login']);
       }
     }
-    deleteHistory(id:string){ const list=this.readHistory().filter(e=>e.id!==id); this.writeHistory(list); this.historyList=list; }
+    async deleteHistory(id: string) {
+  if (!confirm('¿Eliminar esta lectura para siempre?')) return;
+
+  // 1) borra local
+  const list = this.readHistory().filter(e => e.id !== id);
+  this.writeHistory(list);
+  this.historyList = list;
+
+  // 2) intenta borrar remoto (si hay usuario)
+  const user = this.auth.currentUser;
+  if (user) {
+    try {
+      const token = await user.getIdToken(true);
+      await fetch(`${environment.API_BASE}/history/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.warn('⚠️ No se pudo borrar en servidor:', err);
+    }
+  }
+}
+
+    
     loadHistory(h:HistoryEntry){
       this.showHistory=false;
       this.spreadId=h.spreadId; this.spreadLabel=h.spreadLabel; this.onSpreadChange();
