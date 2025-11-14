@@ -41,11 +41,11 @@
 
 .auth-card {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   background: rgba(8,10,20,0.96);
   border: 1px solid rgba(214,178,94,0.45);
   border-radius: 24px;
-  
+  padding: 1.6rem 1.4rem 2.1rem;
   box-shadow: 0 18px 40px rgba(0,0,0,0.8);
   backdrop-filter: blur(6px);
 }
@@ -92,7 +92,7 @@ input {
    =========================================================== */
 
 .btn-main {
-  width: 44%;
+  width: 100%;
   padding: 0.55rem 0.8rem;
   font-size: 0.9rem;
   border-radius: 999px;
