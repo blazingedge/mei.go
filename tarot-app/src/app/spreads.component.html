@@ -80,6 +80,9 @@
         </div>
       }
 
+      <!-- Zona de donación (desktop rail) -->
+    
+
     </div>
   </aside>
 
@@ -108,7 +111,7 @@
         <label>Tipo de tirada</label>
         <div class="select-wrap">
           <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
-            @if (spreads?.length) {
+            @if (spreads.length) {
               @for (def of spreads; track def.id) {
                 <option [value]="def.id">{{ def.name }}</option>
               }
@@ -132,24 +135,8 @@
 
     </div>
 
-
-
-    <!-- ===========================================================
-         🪶 MENÚ COLGANTE (ÚNICO)
-         =========================================================== -->
-    <app-hanging-menu title="Grimorio" (action)="handleMenuAction($event)">
-      <ul class="hanging-menu-list">
-        @for (item of hangingMenuItems; track item.label) {
-          <li>
-            <button type="button" [attr.data-action]="item.action">
-              {{ item.label }}
-            </button>
-          </li>
-        }
-      </ul>
-    </app-hanging-menu>
-
-
+    <!-- (❌ Se ha eliminado el app-hanging-menu "Grimorio" aquí,
+         ya no aparece ese menú colgante en mobile) -->
 
     <!-- ===========================================================
          🃏 PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
@@ -188,8 +175,6 @@
 
     </div>
 
-
-
     <!-- ===========================================================
          🔢 CONTADOR DE CARTA
          =========================================================== -->
@@ -197,7 +182,8 @@
       Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
     </p>
 
-
+    <!-- Donación (mobile, discreta debajo del panel) -->
+   
 
     <!-- ===========================================================
          📘 BOOK PANEL (ÚNICO - MOBILE)
@@ -296,7 +282,7 @@
                 (ngModelChange)="onSpreadChange()"
                 [disabled]="dealing">
 
-          @if (spreads?.length) {
+          @if (spreads.length) {
             @for (def of spreads; track def.id) {
               <option [value]="def.id">{{ def.name }}</option>
             }
@@ -366,7 +352,8 @@
     <!-- Acciones debajo del tablero -->
     <div class="board-actions">
       <button class="btn-main"
-              (click)="hacerTirada()"
+              (click)="hacerTirada()
+              "
               [disabled]="!canDeal">
         @if (dealing) { Barajando... } @else { Nueva tirada }
       </button>
@@ -566,5 +553,27 @@
   <div class="loading-overlay" aria-busy="true">
     <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
     <p>El mago está interpretando tu lectura…</p>
+  </div>
+}
+
+
+
+<!-- ===========================================================
+     💸 MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
+     =========================================================== -->
+@if (quota && quota.remaining === 0)
+{
+  <div class="donation-overlay">
+    <div class="donation-modal" (click)="$event.stopPropagation()">
+      <h2>Sin tiradas disponibles</h2>
+      <p>
+        Este es un proyecto independiente. Tu donación (desde 1 €) ayuda a
+        mantener el servidor y seguir mejorando la experiencia de Meigo.
+      </p>
+      
+      <p class="donation-hint">
+        Un café multiplicado por cientos mantiene vivo el grimorio. 🔮
+      </p>
+    </div>
   </div>
 }
