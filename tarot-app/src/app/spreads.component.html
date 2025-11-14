@@ -269,15 +269,25 @@
 
   </div> <!-- /mobile-layout -->
 
+<!-- ===========================================================
+     📱 MENÚ INFERIOR (MOBILE — ICONOS)
+     =========================================================== -->
+<div class="bottom-menu--icons">
 
-  <!-- ===========================================================
-       📱 MENÚ INFERIOR (MOBILE)
-       =========================================================== -->
-  <div class="bottom-menu">
-    <button (click)="hacerTirada()">Tirada</button>
-    <button (click)="openHistory()">Historial</button>
-    <button (click)="toggleBookPanel()">Grimorio</button>
-  </div>
+  <button class="ghost-btn ghost--shuffle"
+          (click)="toggleShuffle()"
+          title="Barajar"></button>
+
+  <button class="ghost-btn ghost--history"
+          (click)="openHistory($event)"
+          title="Historial"></button>
+
+  <button class="ghost-btn ghost--saved"
+          (click)="toggleBookPanel()"
+          title="Grimorio"></button>
+
+</div>
+
 
 
 
