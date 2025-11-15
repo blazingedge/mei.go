@@ -222,27 +222,30 @@ export class AuthService {
     this.needsTermsSubject.next(false);
   }
 
-  async syncTermsStatus(): Promise<void> {
+  async syncTermsStatus(): Promise<boolean> {
     try {
       const token = await this.getIdToken();
-      if (!token) return;
+      if (!token) return false;
 
       const res = await fetch(`${environment.API_BASE}/terms/needs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!res.ok) return;
+      if (!res.ok) return false;
 
       const data = await res.json().catch(() => null);
       if (data?.needs) {
         this.needsTermsSubject.next(true);
         this.termsAcceptedSubject.next(false);
+        return true;
       } else {
         this.needsTermsSubject.next(false);
         this.termsAcceptedSubject.next(true);
+        return false;
       }
     } catch (err) {
       console.error('syncTermsStatus error:', err);
+      return false;
     }
   }
 

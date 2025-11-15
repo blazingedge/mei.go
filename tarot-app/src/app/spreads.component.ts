@@ -210,11 +210,12 @@ toggleBookPanel() {
         await this.router.navigate(['/login']);
         return;
       }
-      if (sessionStatus === 'needs-terms') {
+      const needsTerms =
+        sessionStatus === 'needs-terms' || (await this.authService.syncTermsStatus());
+      if (needsTerms) {
         this.showTermsModal = true;
         this.cdr.markForCheck();
       }
-      await this.authService.syncTermsStatus();
       this.resolveBgInBackground();
       await this.loadDeckFirst();
       this.rebuildSlots();

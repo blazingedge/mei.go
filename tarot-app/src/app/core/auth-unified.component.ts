@@ -145,13 +145,15 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ============================================================================
   private async afterAuth() {
     const status = await this.sessionService.validate(true);
+    const needsTerms = status === 'needs-terms' || (await this.auth.syncTermsStatus());
 
-    if (status === 'valid') {
+    if (!needsTerms && status === 'valid') {
       this.finishAuthFlow();
       return;
     }
 
-    if (status === 'needs-terms') {
+    if (needsTerms) {
+      this.auth.authFlowStarted = true;
       this.showTerms = true;
       return;
     }
