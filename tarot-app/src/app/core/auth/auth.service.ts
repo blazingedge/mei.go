@@ -222,6 +222,30 @@ export class AuthService {
     this.needsTermsSubject.next(false);
   }
 
+  async syncTermsStatus(): Promise<void> {
+    try {
+      const token = await this.getIdToken();
+      if (!token) return;
+
+      const res = await fetch(`${environment.API_BASE}/terms/needs`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => null);
+      if (data?.needs) {
+        this.needsTermsSubject.next(true);
+        this.termsAcceptedSubject.next(false);
+      } else {
+        this.needsTermsSubject.next(false);
+        this.termsAcceptedSubject.next(true);
+      }
+    } catch (err) {
+      console.error('syncTermsStatus error:', err);
+    }
+  }
+
   applySessionSnapshot(snapshot: SessionSnapshot | null) {
     if (!snapshot || !snapshot.user) {
       this.clearSessionState();

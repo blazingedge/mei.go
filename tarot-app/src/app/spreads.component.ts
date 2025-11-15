@@ -1,4 +1,4 @@
-﻿  import { Component, OnInit, inject, NgZone, ChangeDetectorRef } from '@angular/core';
+  import { Component, OnInit, inject, NgZone, ChangeDetectorRef, DestroyRef } from '@angular/core';
   import { CommonModule } from '@angular/common';
   import { FormsModule } from '@angular/forms';
   import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
@@ -66,6 +66,7 @@ type Placed = {
     private authService = inject(AuthService);
     private sessionService = inject(SessionService);
     private router = inject(Router);
+    private destroyRef = inject(DestroyRef);
     // ===== estado principal =====
     spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
     spreadLabel = 'Cruz Celta';
@@ -188,31 +189,15 @@ toggleBookPanel() {
     this.loadingCardMeaning = false;
   }
     async ngOnInit(){
-      this.authService.quota$
-        .pipe(takeUntilDestroyed())
-        .subscribe(quota => {
-          this.quota = quota
-            ? { monthly: quota.monthly, remaining: quota.remaining }
-            : null;
-          this.cdr.markForCheck();
-        });
-
-      this.authService.drucoinBalance$
-        .pipe(takeUntilDestroyed())
-        .subscribe(balance => {
-          this.drucoinBalance = balance ?? 0;
-          this.cdr.markForCheck();
-        });
-
       this.authService.needsTerms$
-        .pipe(takeUntilDestroyed())
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(needs => {
           this.showTermsModal = needs;
           this.cdr.markForCheck();
         });
 
       this.authService.termsAccepted$
-        .pipe(takeUntilDestroyed())
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(accepted => {
           if (accepted) {
             this.showTermsModal = false;
@@ -220,7 +205,16 @@ toggleBookPanel() {
           }
         });
 
-      await this.sessionService.validate(true);
+      const sessionStatus = await this.sessionService.validate(true);
+      if (sessionStatus === 'invalid') {
+        await this.router.navigate(['/login']);
+        return;
+      }
+      if (sessionStatus === 'needs-terms') {
+        this.showTermsModal = true;
+        this.cdr.markForCheck();
+      }
+      await this.authService.syncTermsStatus();
       this.resolveBgInBackground();
       await this.loadDeckFirst();
       this.rebuildSlots();
@@ -237,8 +231,7 @@ toggleBookPanel() {
       this.writeHistory(data.history); // sincroniza local
        }
       }
-      await this.refreshQuota()
-      
+      // quota stream already updates via session snapshot; extra refresh not needed here
     }
     async refreshQuota(force = false){
   await this.sessionService.validate(force);
@@ -247,7 +240,7 @@ toggleBookPanel() {
 
     private async ensureReadingAllowance(): Promise<boolean> {
   if (this.showTermsModal) {
-    alert('Debes aceptar los terminos y condiciones antes de continuar.');
+    alert('Debes aceptar los términos y condiciones antes de continuar.');
     return false;
   }
   try {
@@ -305,6 +298,7 @@ toggleBookPanel() {
 
     keepTermsModalOpen() {
   this.showTermsModal = true;
+  this.cdr.markForCheck();
 }
 // Hook: despuÃ©s de una tirada exitosa, refresca
 private async afterSuccessfulDraw()
@@ -427,7 +421,7 @@ async saveReading() {
   this.observeViewport();
 
     this.authService.quota$
-      .pipe(takeUntilDestroyed())
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(quota => {
         this.quota = quota
           ? { monthly: quota.monthly, remaining: quota.remaining }
@@ -436,7 +430,7 @@ async saveReading() {
       });
 
     this.authService.drucoinBalance$
-      .pipe(takeUntilDestroyed())
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(balance => {
         this.drucoinBalance = balance ?? 0;
         this.cdr.markForCheck();
@@ -448,7 +442,7 @@ async saveReading() {
 
     this.breakpointObserver
       .observe([this.viewportQuery])
-      .pipe(takeUntilDestroyed())
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ matches }) => {
         if (this.isMobile === matches) return;
         this.zone.run(() => {
@@ -1044,5 +1038,6 @@ toggleSettings() {
     private writeHistory(list:HistoryEntry[]){ try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }catch{} }
   }
   
+
 
 
