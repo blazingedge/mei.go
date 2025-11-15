@@ -6,9 +6,9 @@ import { LogoComponent } from './logo.component';
 import { AuthService } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
-import { TermsModalComponent } from '../components/terms-modal.component';
 import { Subject, takeUntil } from 'rxjs';
 import { SessionService } from './services/session.service';
+import { TermsCoordinatorService } from './services/terms-coordinator.service';
 
 @Component({
   standalone: true,
@@ -17,8 +17,7 @@ import { SessionService } from './services/session.service';
     CommonModule,
     FormsModule,
     LogoComponent,
-    IntroParticlesComponent,
-    TermsModalComponent
+    IntroParticlesComponent
   ],
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
@@ -29,7 +28,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // Estado
   // ----------------------------------------------------
   showIntro = true;
-  showTerms = false;
   acceptedTerms = false;
 
   loading = false;
@@ -43,7 +41,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   constructor(
     private auth: AuthService,
     private router: Router,
-    private sessionService: SessionService
+    private sessionService: SessionService,
+    private termsCoordinator: TermsCoordinatorService
   ) {}
 
   // ============================================================================
@@ -89,16 +88,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
-        if (!this.auth.authFlowStarted) {
-          this.showTerms = false;
-          return;
-        }
-
         if (accepted) {
-          this.showTerms = false;
-          this.finishAuthFlow();
-        } else {
-          this.showTerms = true;
+          this.acceptedTerms = true;
+          if (this.auth.authFlowStarted) {
+            this.finishAuthFlow();
+          }
         }
       });
   }
@@ -154,7 +148,10 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
     if (needsTerms) {
       this.auth.authFlowStarted = true;
-      this.showTerms = true;
+      const accepted = await this.termsCoordinator.openManualForResult();
+      if (!accepted) {
+        this.auth.authFlowStarted = false;
+      }
       return;
     }
 
@@ -241,29 +238,13 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   }
 
   // ============================================================================
-  // 📜 TÉRMINOS Y CONDICIONES
+  // ?? Terminos y Condiciones
   // ============================================================================
-  openTerms() {
-    this.showTerms = true;
-  }
-
-  async onTermsAccepted() {
-    const ok = await this.auth.markTermsAcceptedRemote();
-
-    if (!ok) {
-      alert('No se pudieron guardar los términos. Intenta de nuevo.');
-      return;
+  async openTerms() {
+    const accepted = await this.termsCoordinator.openManualForResult();
+    if (accepted) {
+      this.acceptedTerms = true;
     }
-
-    this.auth.markTermsAccepted();
-    this.acceptedTerms = true;
-    this.showTerms = false;
-    await this.sessionService.validate(true);
-    this.finishAuthFlow();
-  }
-
-  onTermsClosed() {
-    this.showTerms = false;
   }
 
   // ============================================================================

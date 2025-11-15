@@ -1,11 +1,11 @@
 ﻿<!-- ===========================================================
-     🎭 LAYOUT GENERAL — Rail / Board / Panel
+     ?? LAYOUT GENERAL — Rail / Board / Panel
      =========================================================== -->
 
 <div class="layout">
 
   <!-- ===========================================================
-       🧿 RAIL IZQUIERDO (SIEMPRE VISIBLE)
+       ?? RAIL IZQUIERDO (SIEMPRE VISIBLE)
        =========================================================== -->
   <aside class="rail rail--beige">
 
@@ -41,8 +41,9 @@
               title="Historial"></button>
 
       <button class="ghost-btn ghost--saved"
-              disabled
-              title="Guardadas"></button>
+              type="button"
+              (click)="openSavedReadings()"
+              title="Interpretaciones guardadas"></button>
     </div>
 
     <!-- Controles -->
@@ -89,14 +90,14 @@
 
 
   <!-- ===========================================================
-       📱 MOBILE LAYOUT
+       ?? MOBILE LAYOUT
        =========================================================== -->
   @if (isMobile) {
 
   <div class="mobile-layout">
 
     <!-- ===========================================================
-         🔝 TOP BAR (MOBILE) — Drucoins + Selector + Logout
+         ?? TOP BAR (MOBILE) — Drucoins + Selector + Logout
          =========================================================== -->
     <div class="mobile-top-bar">
 
@@ -135,11 +136,11 @@
 
     </div>
 
-    <!-- (❌ Se ha eliminado el app-hanging-menu "Grimorio" aquí,
+    <!-- (? Se ha eliminado el app-hanging-menu "Grimorio" aquí,
          ya no aparece ese menú colgante en mobile) -->
 
     <!-- ===========================================================
-         🃏 PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
+         ?? PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
          =========================================================== -->
     <div class="mobile-card-panel" [class.empty]="!placed.length">
 
@@ -191,17 +192,26 @@
     </div>
 
     <!-- ===========================================================
-         🔢 CONTADOR DE CARTA
+         ?? CONTADOR DE CARTA
          =========================================================== -->
     <p class="mobile-card-counter">
       Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
     </p>
 
+    <div class="mobile-action-group">
+      <button type="button"
+              class="btn-main"
+              (click)="startInterpretation()"
+              [disabled]="!activeCards.length">
+        ?? Interpretar tirada
+      </button>
+    </div>
+
     <!-- Donación (mobile, discreta debajo del panel) -->
    
 
     <!-- ===========================================================
-         📘 BOOK PANEL (ÚNICO - MOBILE)
+         ?? BOOK PANEL (ÚNICO - MOBILE)
          =========================================================== -->
     <div class="book-panel" [class.open]="showBookPanel">
 
@@ -238,7 +248,7 @@
 
 
     <!-- ===========================================================
-         🎠 MOBILE CAROUSEL — SIEMPRE QUE HAYA CARTAS
+         ?? MOBILE CAROUSEL — SIEMPRE QUE HAYA CARTAS
          =========================================================== -->
     @if (placed.length > 0) {
       <div class="mobile-carousel">
@@ -269,7 +279,7 @@
   </div> <!-- /mobile-layout -->
 
 <!-- ===========================================================
-     📱 MENÚ INFERIOR (MOBILE — ICONOS)
+     ?? MENÚ INFERIOR (MOBILE — ICONOS)
      =========================================================== -->
 <div class="bottom-menu--icons">
 
@@ -295,7 +305,7 @@
 
 
   <!-- ===========================================================
-       🖥️ DESKTOP BOARD PRINCIPAL
+       ??? DESKTOP BOARD PRINCIPAL
        =========================================================== -->
   <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
 
@@ -383,11 +393,6 @@
         @if (dealing) { Barajando... } @else { Nueva tirada }
       </button>
 
-      <button class="btn-main secondary"
-              (click)="openContextModal()"
-              [disabled]="!activeCards.length">
-        Interpretar
-      </button>
     </div>
 
 
@@ -411,7 +416,7 @@
 
 
   <!-- ===========================================================
-       💰 DRUCOINS HUD (DESKTOP)
+       ?? DRUCOINS HUD (DESKTOP)
        =========================================================== -->
   <div class="drucoins-hud" title="Tus tiradas disponibles">
     <img class="coin"
@@ -425,7 +430,7 @@
 
 
   <!-- ===========================================================
-       📚 PANEL DERECHO — Listado de cartas + contexto
+       ?? PANEL DERECHO — Listado de cartas + contexto
        =========================================================== -->
   @if (!showInterpretation) {
   <aside class="panel">
@@ -439,14 +444,14 @@
              [class.reversed]="pc.reversed">
           <span class="num">#{{ pc.position }}</span>
           <span class="name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</span>
-          @if (pc.reversed) { <span class="rev">↓</span> }
+          @if (pc.reversed) { <span class="rev">?</span> }
         </div>
       }
     </div>
 
     <div class="context-wrap">
       <div class="context-area">
-        <label class="context-label">🪶 Contexto o pregunta:</label>
+        <label class="context-label">?? Contexto o pregunta:</label>
         <textarea
           [(ngModel)]="userContextInput"
           rows="4"
@@ -456,7 +461,7 @@
 
       <div class="context-action">
         <button class="btn-papiro" (click)="confirmContext()">
-          📜 Interpretar tirada
+          ?? Interpretar tirada
         </button>
       </div>
     </div>
@@ -468,11 +473,37 @@
 
 
 </div> <!-- /layout -->
+@if (showMobileInterpretModal) {
+  <div class="mobile-interpret-overlay" (click)="closeMobileInterpretation()">
+    <div class="mobile-interpret-panel" (click)="$event.stopPropagation()">
+      <header>
+        <h3>Interpretar tirada</h3>
+        <button type="button" class="close" (click)="closeMobileInterpretation()">×</button>
+      </header>
+
+      <label class="context-label">¿Qué deseas preguntar?</label>
+      <textarea [(ngModel)]="userContextInput"
+                rows="4"
+                placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional...">
+      </textarea>
+
+      <div class="actions">
+        <button type="button" class="btn-pill" (click)="closeMobileInterpretation()">Cancelar</button>
+        <button type="button"
+                class="btn-pill primary"
+                (click)="confirmMobileInterpretation()"
+                [disabled]="!userContextInput.trim()">
+          Interpretar
+        </button>
+      </div>
+    </div>
+  </div>
+}
 
 
 
 <!-- ===========================================================
-     🗂️ HISTORIAL (MÓVIL Y DESKTOP)
+     ??? HISTORIAL (MÓVIL Y DESKTOP)
      =========================================================== -->
 @if (showHistory) {
   <div class="history-overlay" (click)="closeHistory()">
@@ -509,17 +540,8 @@
   </div>
 }
 
-
-<app-terms-modal
-  [visible]="showTermsModal"
-  (accepted)="acceptTermsFromModal()"
-  (closed)="keepTermsModalOpen()">
-</app-terms-modal>
-
-
-
 <!-- ===========================================================
-     📖 SIGNIFICADO DE CARTA (OVERLAY)
+     ?? SIGNIFICADO DE CARTA (OVERLAY)
      =========================================================== -->
 @if (showCardOverlay) {
   <div class="card-meaning-overlay" (click)="closeCardOverlay()">
@@ -532,7 +554,7 @@
 
       <article>
         @if (loadingCardMeaning) {
-          <p><em>🔮 Consultando significado...</em></p>
+          <p><em>?? Consultando significado...</em></p>
         } @else {
           <p [innerHTML]="overlayCardMeaning"></p>
         }
@@ -545,14 +567,14 @@
 
 
 <!-- ===========================================================
-     🔮 MODAL DE INTERPRETACIÓN (IA)
+     ?? MODAL DE INTERPRETACIÓN (IA)
      =========================================================== -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
     <div class="interpret-container" (click)="$event.stopPropagation()">
 
       <header class="interpret-header">
-        <span class="icon">🔮</span>
+        <span class="icon">??</span>
         <h2>Interpretación</h2>
         <button class="close-btn" (click)="closeInterpret()">×</button>
       </header>
@@ -565,7 +587,7 @@
           <h4>Cartas</h4>
           <ul>
             @for (c of lastDraw; track c.cardId) {
-              <li>{{ c.cardId }} @if (c.reversed) { <span>↓</span> }</li>
+              <li>{{ c.cardId }} @if (c.reversed) { <span>?</span> }</li>
             }
           </ul>
         </aside>
@@ -579,7 +601,7 @@
 
 
 <!-- ===========================================================
-     🧙‍♂️ LOADING (IA INTERPRETANDO)
+     ????? LOADING (IA INTERPRETANDO)
      =========================================================== -->
 @if (loadingInterpret) {
   <div class="loading-overlay" aria-busy="true">
@@ -591,7 +613,7 @@
 
 
 <!-- ===========================================================
-     💸 MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
+     ?? MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
      =========================================================== -->
 @if (quota && quota.remaining === 0)
 {
@@ -604,8 +626,9 @@
       </p>
       
       <p class="donation-hint">
-        Un café multiplicado por cientos mantiene vivo el grimorio. 🔮
+        Un café multiplicado por cientos mantiene vivo el grimorio. ??
       </p>
     </div>
   </div>
 }
+

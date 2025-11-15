@@ -1614,6 +1614,78 @@ app.get('/api/terms/needs', async (c) => {
   }
 });
 
+app.get('/api/readings/list', async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, title, strftime('%s', created_at) as created_at
+         FROM readings WHERE uid = ?
+         ORDER BY datetime(created_at) DESC`
+    ).bind(uid).all();
+
+    const items = (results || []).map(row => ({
+      id: row.id,
+      title: row.title,
+      createdAt: row.created_at ? Number(row.created_at) * 1000 : Date.now()
+    }));
+
+    return c.json({ ok: true, items });
+  } catch (err: any) {
+    console.error('💥 /api/readings/list error:', err);
+    return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
+  }
+});
+
+app.get('/api/readings/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const verified = await verifyFirebaseIdToken(token, apiKey);
+    const uid = verified.uid;
+
+    const row = await c.env.DB.prepare(
+      `SELECT id, title, interpretation, cards_json, spreadId,
+              strftime('%s', created_at) as created_at
+         FROM readings WHERE id = ? AND uid = ?`
+    ).bind(id, uid).first();
+
+    if (!row) {
+      return c.json({ ok: false, error: 'not_found' }, 404);
+    }
+
+    let cards: any[] = [];
+    try {
+      cards = row.cards_json ? JSON.parse(row.cards_json) : [];
+    } catch {
+      cards = [];
+    }
+
+    return c.json({
+      ok: true,
+      id: row.id,
+      title: row.title,
+      interpretation: row.interpretation,
+      cards,
+      spreadId: row.spreadId,
+      createdAt: row.created_at ? Number(row.created_at) * 1000 : Date.now(),
+    });
+  } catch (err: any) {
+    console.error('💥 /api/readings/:id error:', err);
+    return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
+  }
+});
+
 app.get('/api/reading/check', async (c) => {
   try {
     const authHeader = c.req.header('Authorization') || '';
