@@ -126,10 +126,10 @@ type Placed = {
     savedError: string | null = null;
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
-      { label: 'ConfiguraciÃƒÂ³n', action: 'settings' },
+      { label: 'Configuracion', action: 'settings' },
       { label: 'Lecturas guardadas', action: 'saved' },
       { label: 'Premium / Drucoins', action: 'premium' },
-      { label: 'Cerrar sesiÃƒÂ³n', action: 'logout' }
+      { label: 'Cerrar sesion', action: 'logout' }
     ];
     readonly deckStack = Array.from({ length: 5 }, (_, i) => i);
   
@@ -170,8 +170,8 @@ type Placed = {
       );
       if (!res.ok) {
         const errText = await res.text();
-        console.error('Ã¢Å¡Â Ã¯Â¸Â Error al obtener significado:', res.status, errText);
-        this.overlayCardMeaning = `Ã¢ÂÅ’ Error ${res.status}: ${errText}`;
+        console.error('Error al obtener significado:', res.status, errText);
+        this.overlayCardMeaning = ` Error ${res.status}: ${errText}`;
         this.loadingCardMeaning = false;
         this.cdr.detectChanges(); // Ã°Å¸â€˜Ë† refresca estado de error
         return;
@@ -183,7 +183,7 @@ type Placed = {
         'No se recibiÃƒÂ³ interpretaciÃƒÂ³n del servidor.';
       this.overlayCardMeaning = meaning;
     } catch (err: any) {
-      console.error('Ã°Å¸â€™Â¥ Error openCardMeaning:', err);
+      console.error('Error openCardMeaning:', err);
       this.overlayCardMeaning =
         'Ã¢ÂÅ’ Error interno: ' + (err.message || 'desconocido');
     } finally {
