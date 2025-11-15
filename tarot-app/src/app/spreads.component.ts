@@ -12,6 +12,7 @@
   import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
   import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
   import { HangingMenuComponent } from './components/hanging-menu.component';
+  import { TermsModalComponent } from './components/terms-modal.component';
   import { AuthService } from './core/auth/auth.service';
   import { SessionService } from './core/services/session.service';
   import { Router } from '@angular/router';
@@ -45,7 +46,13 @@ type Placed = {
   @Component({
     selector: 'app-spreads',
     standalone: true,
-    imports: [CommonModule, FormsModule, DragDropModule],
+    imports: [
+      CommonModule,
+      FormsModule,
+      DragDropModule,
+      HangingMenuComponent,
+      TermsModalComponent
+    ],
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
   })
@@ -98,6 +105,8 @@ type Placed = {
     userContextInput = '';
     userContext = '';
     showBookPanel = false;
+    showTermsModal = false;
+    private termsModalBusy = false;
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
       { label: 'ConfiguraciÃ³n', action: 'settings' },
@@ -179,6 +188,38 @@ toggleBookPanel() {
     this.loadingCardMeaning = false;
   }
     async ngOnInit(){
+      this.authService.quota$
+        .pipe(takeUntilDestroyed())
+        .subscribe(quota => {
+          this.quota = quota
+            ? { monthly: quota.monthly, remaining: quota.remaining }
+            : null;
+          this.cdr.markForCheck();
+        });
+
+      this.authService.drucoinBalance$
+        .pipe(takeUntilDestroyed())
+        .subscribe(balance => {
+          this.drucoinBalance = balance ?? 0;
+          this.cdr.markForCheck();
+        });
+
+      this.authService.needsTerms$
+        .pipe(takeUntilDestroyed())
+        .subscribe(needs => {
+          this.showTermsModal = needs;
+          this.cdr.markForCheck();
+        });
+
+      this.authService.termsAccepted$
+        .pipe(takeUntilDestroyed())
+        .subscribe(accepted => {
+          if (accepted) {
+            this.showTermsModal = false;
+            this.cdr.markForCheck();
+          }
+        });
+
       await this.sessionService.validate(true);
       this.resolveBgInBackground();
       await this.loadDeckFirst();
@@ -200,11 +241,15 @@ toggleBookPanel() {
       
     }
     async refreshQuota(force = false){
-  await this.sessionService.validate(true);
+  await this.sessionService.validate(force);
   this.cdr.markForCheck();
 }
 
     private async ensureReadingAllowance(): Promise<boolean> {
+  if (this.showTermsModal) {
+    alert('Debes aceptar los terminos y condiciones antes de continuar.');
+    return false;
+  }
   try {
     const token = await this.authService.getIdToken();
     if (!token) {
@@ -235,6 +280,31 @@ toggleBookPanel() {
     console.error('reading check error', err);
     return false;
   }
+}
+
+
+    async acceptTermsFromModal() {
+  if (this.termsModalBusy) return;
+  this.termsModalBusy = true;
+  try {
+    const ok = await this.authService.markTermsAcceptedRemote();
+    if (!ok) {
+      alert('No se pudieron guardar los términos.');
+      return;
+    }
+    this.showTermsModal = false;
+    this.authService.authFlowStarted = false;
+    await this.refreshQuota(true);
+  } catch (err) {
+    console.error('terms accept error', err);
+    alert('Error guardando los términos. Intenta de nuevo.');
+  } finally {
+    this.termsModalBusy = false;
+  }
+}
+
+    keepTermsModalOpen() {
+  this.showTermsModal = true;
 }
 // Hook: despuÃ©s de una tirada exitosa, refresca
 private async afterSuccessfulDraw()
@@ -897,7 +967,8 @@ openProfile() {
   console.log("openProfile clicked");
 }
 openTerms() {
-  console.log("openTerms clicked");
+  this.showTermsModal = true;
+  this.cdr.markForCheck();
 }
 openPrivacy() {
   console.log("openPrivacy clicked");

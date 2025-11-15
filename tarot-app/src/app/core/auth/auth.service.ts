@@ -49,6 +49,9 @@ export class AuthService {
   private drucoinBalanceSubject = new BehaviorSubject<number>(0);
   drucoinBalance$ = this.drucoinBalanceSubject.asObservable();
 
+  private needsTermsSubject = new BehaviorSubject<boolean>(false);
+  needsTerms$ = this.needsTermsSubject.asObservable();
+
   constructor(private http: HttpClient, private auth: Auth) {
 
     setPersistence(this.auth, browserLocalPersistence).catch(err =>
@@ -205,7 +208,7 @@ export class AuthService {
       const data = await res.json();
       if (!data.ok) return false;
 
-      this.termsAcceptedSubject.next(true);
+      this.markTermsAccepted();
       return true;
 
     } catch (err) {
@@ -216,6 +219,7 @@ export class AuthService {
 
   markTermsAccepted() {
     this.termsAcceptedSubject.next(true);
+    this.needsTermsSubject.next(false);
   }
 
   applySessionSnapshot(snapshot: SessionSnapshot | null) {
@@ -252,6 +256,7 @@ export class AuthService {
 
   requireTermsAcceptance() {
     this.authFlowStarted = true;
+    this.needsTermsSubject.next(true);
     this.termsAcceptedSubject.next(false);
   }
 
@@ -262,6 +267,7 @@ export class AuthService {
     this.workerToken = null;
     await signOut(this.auth);
     this.termsAcceptedSubject.next(false);
+    this.needsTermsSubject.next(false);
     this.clearSessionState();
   }
 }

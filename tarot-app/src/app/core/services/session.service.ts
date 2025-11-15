@@ -33,7 +33,7 @@ export class SessionService {
 
   async bootstrap() {
     const result = await this.validate();
-    if (result === 'valid') {
+    if (result === 'valid' || result === 'needs-terms') {
       if (this.router.url === '/' || this.router.url === '/login') {
         this.router.navigate(['/spreads']);
       }
