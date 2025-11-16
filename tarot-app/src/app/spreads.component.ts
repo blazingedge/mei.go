@@ -60,7 +60,7 @@ type Placed = {
       CommonModule,
       FormsModule,
       DragDropModule,
-      HangingMenuComponent
+    
     ],
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
