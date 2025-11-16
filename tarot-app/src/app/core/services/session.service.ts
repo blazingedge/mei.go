@@ -33,14 +33,25 @@ export class SessionService {
 
   async bootstrap() {
     const result = await this.validate();
-    if (result === 'valid' || result === 'needs-terms') {
+
+    if (result === 'valid') {
       if (this.router.url === '/' || this.router.url === '/login') {
         this.router.navigate(['/spreads']);
       }
-    } else {
-      if (this.router.url !== '/login') {
+      return;
+    }
+
+    if (result === 'needs-terms') {
+      // Mantente en la pantalla actual (login) para que aparezca el modal.
+      if (this.router.url !== '/login' && this.router.url !== '/spreads') {
         this.router.navigate(['/login']);
       }
+      return;
+    }
+
+    // invalid
+    if (this.router.url !== '/login') {
+      this.router.navigate(['/login']);
     }
   }
 
