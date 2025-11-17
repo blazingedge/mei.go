@@ -49,8 +49,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // 🎬 INTRO
   // ============================================================================
   ngAfterViewInit() {
-    this.playIntro();
-
     const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
 
     if (intro) {
@@ -71,20 +69,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }, 7500);
   }
 
-  async playIntro() {
-    const audio = new Audio('assets/audio/el-meigo.mp3');
-    audio.volume = 0.55;
-    try {
-      await audio.play();
-    } catch {
-      console.warn('Autoplay bloqueado');
-    }
-  }
-
   // ============================================================================
   // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
   ngOnInit() {
+    this.resumeGoogleRedirect();
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
@@ -224,6 +213,10 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
     try {
       const user = await this.auth.loginWithGoogle();
+      if (user === 'redirect') {
+        this.loginError = 'Redirigiendo a Google...';
+        return;
+      }
       if (!user) {
         this.auth.authFlowStarted = false;
         return;
@@ -239,6 +232,16 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
         this.auth.authFlowStarted = false;
       }
     }
+  }
+
+  private async resumeGoogleRedirect() {
+    this.loading = true;
+    const user = await this.auth.completeGoogleRedirect();
+    if (user) {
+      this.auth.authFlowStarted = true;
+      await this.afterAuth();
+    }
+    this.loading = false;
   }
 
   private describeFirebaseError(err: any): string {

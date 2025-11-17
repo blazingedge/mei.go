@@ -11,12 +11,13 @@ import { TermsCoordinatorService } from './core/services/terms-coordinator.servi
   imports: [RouterOutlet, TermsModalComponent],
   template: `
     <router-outlet></router-outlet>
-    <app-terms-modal
-      *ngIf="termsVisible"
-      [visible]="termsVisible"
-      (accepted)="onTermsAccepted()"
-      (closed)="onTermsClosed()">
-    </app-terms-modal>
+    @if (termsVisible) {
+      <app-terms-modal
+        [visible]="termsVisible"
+        (accepted)="onTermsAccepted()"
+        (closed)="onTermsClosed()">
+      </app-terms-modal>
+    }
   `,
 })
 export class AppComponent implements OnInit {

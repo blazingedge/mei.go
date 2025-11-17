@@ -1,4 +1,4 @@
-﻿// src/app/core/services/auth.service.ts
+// src/app/core/services/auth.service.ts
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
@@ -8,6 +8,8 @@ import {
   Auth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   User,
   onAuthStateChanged
@@ -142,20 +144,45 @@ export class AuthService {
   // -----------------------
   // LOGIN GOOGLE
   // -----------------------
-  async loginWithGoogle(): Promise<User | null> {
+  async loginWithGoogle(): Promise<User | 'redirect'> {
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(this.auth, provider);
 
-      // Guardar token Firebase como token worker temporal
       const token = await result.user.getIdToken();
       this.workerToken = token;
 
       return result.user;
 
-    } catch (err) {
-      console.error('âŒ Error Google Auth:', err);
+    } catch (err: any) {
+      const code: string = err?.code || '';
+      if (
+        code.includes('popup-blocked') ||
+        code.includes('popup-closed') ||
+        code.includes('third-party-cookie') ||
+        code.includes('cors') ||
+        code.includes('cross-origin')
+      ) {
+        await signInWithRedirect(this.auth, provider);
+        return 'redirect';
+      }
+      console.error('Error Google Auth:', err);
       throw err;
+    }
+  }
+
+  async completeGoogleRedirect(): Promise<User | null> {
+    try {
+      const result = await getRedirectResult(this.auth);
+      if (result?.user) {
+        const token = await result.user.getIdToken();
+        this.workerToken = token;
+        return result.user;
+      }
+      return null;
+    } catch (err) {
+      console.error('Error Google redirect:', err);
+      return null;
     }
   }
 
