@@ -9,10 +9,10 @@ export class TermsCoordinatorService {
   private pendingResolver: ((accepted: boolean) => void) | null = null;
   private confirming = false;
 
-  readonly showModal$ = combineLatest([
-    this.auth.needsTerms$,
-    this.manualVisible$,
-  ]).pipe(map(([needs, manual]) => needs || manual));
+  readonly showModal$ = combineLatest({
+    needs: this.auth.needsTerms$,
+    manual: this.manualVisible$,
+  }).pipe(map(({ needs, manual }) => needs || manual));
 
   constructor(private auth: AuthService, private session: SessionService) {}
 
