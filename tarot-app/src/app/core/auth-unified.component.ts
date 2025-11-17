@@ -220,6 +220,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   async authGoogle() {
     this.auth.authFlowStarted = true;
     this.loading = true;
+    this.loginError = '';
 
     try {
       const user = await this.auth.loginWithGoogle();
@@ -229,12 +230,32 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
       }
 
       await this.afterAuth();
+    } catch (err: any) {
+      this.loginError = this.describeFirebaseError(err);
+      this.auth.authFlowStarted = false;
     } finally {
       this.loading = false;
       if (!this.auth.currentUser) {
         this.auth.authFlowStarted = false;
       }
     }
+  }
+
+  private describeFirebaseError(err: any): string {
+    const code: string = err?.code || err?.message || '';
+    if (code.includes('popup-blocked') || code.includes('popup-closed')) {
+      return 'El navegador bloqueó la ventana de Google. Activa las ventanas emergentes o inténtalo desde un modo sin bloqueadores.';
+    }
+
+    if (code.includes('unauthorized-domain')) {
+      return 'Google rechazó el dominio actual. Ve a Firebase > Authentication > Domains y añade "mei-go.pages.dev".';
+    }
+
+    if (code.includes('cross-origin')) {
+      return 'Otra cabecera (COOP/COEP) está bloqueando la comunicación con Google. Quita esas cabeceras o usa autenticación por redirección.';
+    }
+
+    return err?.message || 'No se pudo iniciar sesión con Google.';
   }
 
   // ============================================================================

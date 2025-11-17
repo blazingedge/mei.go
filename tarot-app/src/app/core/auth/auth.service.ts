@@ -62,11 +62,13 @@ export class AuthService {
       if (!user) {
         this.clearSessionState();
         this.termsAcceptedSubject.next(false);
+        this.needsTermsSubject.next(false);
         return;
       }
 
       const accepted = await this.checkTerms(user.uid);
       this.termsAcceptedSubject.next(accepted);
+      this.needsTermsSubject.next(!accepted);
     });
   }
 
@@ -153,7 +155,7 @@ export class AuthService {
 
     } catch (err) {
       console.error('âŒ Error Google Auth:', err);
-      return null;
+      throw err;
     }
   }
 
@@ -298,4 +300,5 @@ export class AuthService {
     this.clearSessionState();
   }
 }
+
 
