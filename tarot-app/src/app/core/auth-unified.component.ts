@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { LogoComponent } from './logo.component';
-import { AuthService } from './auth/auth.service';
+import { AuthService, GoogleLoginResult } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
 import { Subject, takeUntil } from 'rxjs';
@@ -212,7 +212,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.loginError = '';
 
     try {
-      const user = await this.auth.loginWithGoogle();
+      const user: GoogleLoginResult = await this.auth.loginWithGoogle();
       if (user === 'redirect') {
         this.loginError = 'Redirigiendo a Google...';
         return;

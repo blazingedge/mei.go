@@ -12,11 +12,12 @@ import {
   getRedirectResult,
   signOut,
   User,
-  onAuthStateChanged
+  onAuthStateChanged,
 } from '@angular/fire/auth';
 import { browserLocalPersistence, setPersistence } from 'firebase/auth';
 
 export type PlanId = 'luz' | 'sabiduria' | 'quantico';
+export type GoogleLoginResult = User | 'redirect';
 
 export interface SessionSnapshot {
   user?: { uid: string; email: string; plan: PlanId };
@@ -144,7 +145,7 @@ export class AuthService {
   // -----------------------
   // LOGIN GOOGLE
   // -----------------------
-  async loginWithGoogle(): Promise<User | 'redirect'> {
+  async loginWithGoogle(): Promise<GoogleLoginResult> {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(this.auth, provider);
@@ -153,7 +154,6 @@ export class AuthService {
       this.workerToken = token;
 
       return result.user;
-
     } catch (err: any) {
       const code: string = err?.code || '';
       if (
@@ -327,5 +327,3 @@ export class AuthService {
     this.clearSessionState();
   }
 }
-
-
