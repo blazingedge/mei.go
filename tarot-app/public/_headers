@@ -1,4 +1,4 @@
-/*
-  ! Cross-Origin-Opener-Policy
-  ! Cross-Origin-Embedder-Policy
-  ! Cross-Origin-Resource-Policy
+/* 
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Embedder-Policy: unsafe-none
+  Cross-Origin-Resource-Policy: cross-origin
