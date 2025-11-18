@@ -72,7 +72,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ============================================================================
   // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
-  ngOnInit() {
+  async ngOnInit() {
+    await this.resetPersistedSession();
     this.resumeGoogleRedirect();
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
@@ -84,6 +85,17 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
           }
         }
       });
+  }
+
+  private async resetPersistedSession() {
+    try {
+      await this.auth.logout();
+      try {
+        indexedDB.deleteDatabase('firebaseLocalStorageDb');
+      } catch {}
+    } catch (err) {
+      console.warn('No se pudo limpiar la sesión previa:', err);
+    }
   }
 
   ngOnDestroy() {
@@ -214,7 +226,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     try {
       const user: GoogleLoginResult = await this.auth.loginWithGoogle();
       if (user === 'redirect') {
-        this.loginError = 'Redirigiendo a Google...';
+        this.loginError =
+          'Tu navegador bloqueó la ventana de Google. Permite las ventanas emergentes para este sitio (icono de pop-ups junto a la barra de direcciones) o continúa en la pestaña nueva que se abrió.';
         return;
       }
       if (!user) {
@@ -247,7 +260,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   private describeFirebaseError(err: any): string {
     const code: string = err?.code || err?.message || '';
     if (code.includes('popup-blocked') || code.includes('popup-closed')) {
-      return 'El navegador bloqueó la ventana de Google. Activa las ventanas emergentes o inténtalo desde un modo sin bloqueadores.';
+      return 'El navegador bloqueó la ventana de Google. Activa las ventanas emergentes para este sitio (Chrome/Firefox) o usa el modo redirect.';
     }
 
     if (code.includes('unauthorized-domain')) {
