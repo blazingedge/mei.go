@@ -73,7 +73,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
   // ============================================================================
   async ngOnInit() {
-    await this.resetPersistedSession();
     this.resumeGoogleRedirect();
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
