@@ -1,57 +1,40 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, combineLatest, map } from 'rxjs';
-import { AuthService } from '../auth/auth.service';
-import { SessionService } from './session.service';
+import { BehaviorSubject } from 'rxjs';
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root'
+})
 export class TermsCoordinatorService {
-  private manualVisible$ = new BehaviorSubject(false);
-  private pendingResolver: ((accepted: boolean) => void) | null = null;
-  private confirming = false;
 
-  readonly showModal$ = combineLatest({
-    needs: this.auth.needsTerms$,
-    manual: this.manualVisible$,
-  }).pipe(map(({ needs, manual }) => needs || manual));
+  private _visible = new BehaviorSubject<boolean>(false);
+  visible$ = this._visible.asObservable();
 
-  constructor(private auth: AuthService, private session: SessionService) {}
+  private resolver: ((value: boolean) => void) | null = null;
 
-  openManual(): void {
-    this.manualVisible$.next(true);
-  }
+  constructor() {}
 
+  /** Abre el modal y devuelve promesa */
   openManualForResult(): Promise<boolean> {
-    this.openManual();
+    this._visible.next(true);
+
     return new Promise(resolve => {
-      this.pendingResolver = resolve;
+      this.resolver = resolve;
     });
   }
 
-  closeManual(): void {
-    this.manualVisible$.next(false);
-    if (this.pendingResolver) {
-      this.pendingResolver(false);
-      this.pendingResolver = null;
-    }
+  resolveAccept() {
+    if (this.resolver) this.resolver(true);
+    this.resolver = null;
+    this._visible.next(false);
   }
 
-  async confirmFromModal(): Promise<boolean> {
-    if (this.confirming) return false;
-    this.confirming = true;
-    try {
-      const ok = await this.auth.markTermsAcceptedRemote();
-      if (!ok) {
-        return false;
-      }
-      this.manualVisible$.next(false);
-      if (this.pendingResolver) {
-        this.pendingResolver(true);
-        this.pendingResolver = null;
-      }
-      await this.session.validate(true);
-      return true;
-    } finally {
-      this.confirming = false;
-    }
+  resolveCancel() {
+    if (this.resolver) this.resolver(false);
+    this.resolver = null;
+    this._visible.next(false);
+  }
+
+  close() {
+    this._visible.next(false);
   }
 }

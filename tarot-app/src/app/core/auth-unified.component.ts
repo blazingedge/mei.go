@@ -137,26 +137,32 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ============================================================================
   // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
-  private async afterAuth() {
-    const status = await this.sessionService.validate(true);
-    const needsTerms = status === 'needs-terms' || (await this.auth.syncTermsStatus());
+ private async afterAuth() {
+  const status = await this.sessionService.validate(true);
+  const needsTerms = status === 'needs-terms' || (await this.auth.syncTermsStatus());
 
-    if (!needsTerms && status === 'valid') {
-      this.finishAuthFlow();
-      return;
-    }
-
-    if (needsTerms) {
-      this.auth.authFlowStarted = true;
-      const accepted = await this.termsCoordinator.openManualForResult();
-      if (!accepted) {
-        this.auth.authFlowStarted = false;
-      }
-      return;
-    }
-
-    this.auth.authFlowStarted = false;
+  if (!needsTerms && status === 'valid') {
+    this.finishAuthFlow();
+    return;
   }
+
+  if (needsTerms) {
+    this.auth.authFlowStarted = true;
+
+    const accepted = await this.termsCoordinator.openManualForResult();
+
+
+    if (accepted) {
+      this.finishAuthFlow();
+    } else {
+      this.auth.authFlowStarted = false;
+    }
+    return;
+  }
+
+  this.auth.authFlowStarted = false;
+}
+
 
   private finishAuthFlow() {
     this.auth.authFlowStarted = false;

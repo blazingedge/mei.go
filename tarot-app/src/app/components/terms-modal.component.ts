@@ -1,6 +1,7 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TermsCoordinatorService } from '../core/services/terms-coordinator.service';
 
 @Component({
   selector: 'app-terms-modal',
@@ -10,19 +11,19 @@ import { FormsModule } from '@angular/forms';
   styleUrls: ['./terms-modal.component.scss']
 })
 export class TermsModalComponent {
-  @Input() visible = false;
-  @Output() accepted = new EventEmitter<void>();
-  @Output() closed = new EventEmitter<void>();
 
   checked = false;
 
-  confirm() {
-    this.accepted.emit();
+  constructor(public terms: TermsCoordinatorService) {}
+
+  accept() {
+    if (!this.checked) return;
+    this.terms.resolveAccept();
     this.checked = false;
   }
 
   close() {
-    this.closed.emit();
+    this.terms.resolveCancel();
     this.checked = false;
   }
 }

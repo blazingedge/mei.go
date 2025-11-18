@@ -246,7 +246,7 @@ toggleBookPanel() {
 
     private async ensureReadingAllowance(): Promise<boolean> {
   if (this.needsTerms) {
-    this.termsCoordinator.openManual();
+    
     alert('Debes aceptar los terminos y condiciones antes de continuar.');
     return false;
   }
@@ -572,8 +572,7 @@ async saveReading() {
     }
     // Ã°Å¸â€Â® ----------- HACER TIRADA (actualizado con Firebase y tipos correctos) -----------
     // ======================================================================
-  // Ã°Å¸Å½Â´ FUNCIÃƒâ€œN DEBUG Ã¢â‚¬â€ hace logging, regula ritmo y usa placeholders si falla
-  // ======================================================================
+   // ======================================================================
   startInterpretation() {
     if (!this.activeCards.length) return;
     if (this.isMobile) {
@@ -974,9 +973,7 @@ async saveReading() {
 openProfile() {
   console.log("openProfile clicked");
 }
-openTerms() {
-  this.termsCoordinator.openManual();
-}
+
 openPrivacy() {
   console.log("openPrivacy clicked");
 }

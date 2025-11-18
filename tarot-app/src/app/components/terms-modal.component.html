@@ -1,12 +1,16 @@
-<!-- terms-modal.component.html -->
-<div class="terms-overlay" *ngIf="visible" (click)="close()">
-  <div class="terms-box" (click)="$event.stopPropagation()">
+<div class="terms-overlay" *ngIf="(terms.visible$ | async)">
+
+  <div class="terms-box">
+
+    <!-- HEADER -->
     <header>
       <h2>Términos y Condiciones de Uso</h2>
       <button class="close" (click)="close()">×</button>
     </header>
 
+    <!-- CONTENT -->
     <div class="content">
+
       <p><strong>Última actualización:</strong> 12 de noviembre de 2025</p>
 
       <p>
@@ -23,131 +27,87 @@
         <strong>Meigo</strong> ofrece lecturas digitales de cartas de tarot
         y experiencias simbólicas de autoconocimiento. Las interpretaciones
         generadas por el sistema —incluyendo aquellas basadas en inteligencia
-        artificial o algoritmos predictivos— tienen carácter
-        <em>exclusivamente recreativo y espiritual</em>, sin pretender
-        sustituir orientación médica, psicológica, financiera ni legal.
+        artificial— tienen carácter <em>exclusivamente recreativo y espiritual</em>.
       </p>
 
       <h3>2. Registro y Uso</h3>
       <p>
-        El acceso básico a la aplicación puede realizarse de forma anónima.
-        No obstante, algunas funciones (como la sincronización de tiradas o
-        la gestión de suscripciones) requieren registro mediante
+        Algunas funciones requieren registro mediante
         <strong>Firebase Authentication</strong>. El usuario es responsable
-        de mantener la confidencialidad de sus credenciales y del uso que haga
-        del servicio.
+        de sus credenciales.
       </p>
 
       <ul>
-        <li>El usuario podrá guardar hasta 5 tiradas personales gratuitas.</li>
-        <li>Al superar ese límite, las más antiguas podrán eliminarse automáticamente.</li>
-        <li>Los modos “Sabiduría” o “Quántico” ofrecen ventajas adicionales de pago.</li>
+        <li>Hasta 5 tiradas personales gratuitas.</li>
+        <li>Las más antiguas podrán eliminarse automáticamente.</li>
+        <li>Los modos “Sabiduría” o “Quántico” ofrecen funciones premium.</li>
       </ul>
 
       <h3>3. Propiedad Intelectual</h3>
       <p>
-        Todos los contenidos visuales, textuales y audiovisuales de la
-        aplicación, incluidas las cartas, ilustraciones, nombres, símbolos,
-        efectos, interfaces y código, son propiedad intelectual del titular o
-        se utilizan bajo licencia. Queda prohibida su reproducción, distribución
-        o modificación sin autorización expresa.
+        Todo contenido visual, textual y audiovisual (cartas, ilustraciones,
+        símbolos, código, efectos) es propiedad del titular o se utiliza bajo
+        licencia. Su reproducción sin autorización está prohibida.
       </p>
 
       <h3>4. Limitación de Responsabilidad</h3>
       <p>
-        El uso del tarot en <strong>Meigo</strong> se ofrece únicamente como una
-        herramienta simbólica y reflexiva. De acuerdo con el consenso académico,
-        el valor de las prácticas adivinatorias no reside en una capacidad
-        predictiva sobrenatural demostrable, sino en su función
-        <em>simbólica, psicológica, social y cultural</em>.
-      </p>
-
-      <p>
-        Investigaciones en psicología cognitiva (IvT &amp; French, 2004) indican
-        que los resultados de las lecturas no difieren significativamente de los
-        obtenidos al azar, y que la percepción de precisión suele explicarse por
-        el <em>efecto Barnum</em>, es decir, la tendencia humana a aceptar
-        descripciones generales como si fueran personales.
-      </p>
-
-      <p>
-        Asimismo, diversos estudios humanísticos —incluyendo los realizados en la
-        <strong>Harvard Divinity School (Universidad de Harvard)</strong>—
-        han analizado el tarot y otras formas de adivinación como prácticas de
-        reflexión simbólica y de conexión con la imaginación y el tiempo no
-        lineal, sin atribuirles validez científica ni poder predictivo.
-      </p>
-
-      <p>
-        En consecuencia, <strong>Meigo</strong> no se hace responsable de las
-        decisiones, interpretaciones o acciones personales que los usuarios
-        tomen basándose en las lecturas obtenidas dentro de la aplicación.
+        Según estudios académicos (IvT &amp; French, 2004) y análisis de
+        la <strong>Harvard Divinity School</strong>, el tarot es una
+        práctica simbólica, no predictiva. <strong>Meigo</strong> no se
+        hace responsable de decisiones tomadas en base a las lecturas.
       </p>
 
       <h3>5. Servicios de Terceros</h3>
-      <p>La aplicación utiliza servicios de terceros para su funcionamiento:</p>
       <ul>
-        <li>
-          <strong>Cloudflare R2 y D1</strong>: almacenamiento de cartas,
-          imágenes y registro técnico de aceptación de términos.
-        </li>
-        <li>
-          <strong>Firebase (Google LLC)</strong>: autenticación y gestión
-          de usuarios.
-        </li>
-        <li>
-          <strong>Modelos de IA (Ollama / OpenAI / Hugging Face)</strong>:
-          generación de textos interpretativos automáticos.
-        </li>
+        <li><strong>Cloudflare R2/D1</strong>: almacenamiento y registro.</li>
+        <li><strong>Firebase</strong>: autenticación.</li>
+        <li><strong>HuggingFace / OpenAI / Ollama</strong>: modelos de IA.</li>
       </ul>
 
+      <h3>6. Datos Personales</h3>
       <p>
-        Estos servicios se ajustan al
-        <strong>Reglamento (UE) 2016/679 (RGPD)</strong> y a la
-        <strong>Ley Orgánica 3/2018 (LOPDGDD)</strong>.
+        Se tratarán exclusivamente para mantener la funcionalidad. No se
+        cederán a terceros salvo obligación legal.
       </p>
 
-      <h3>6. Datos Personales y Privacidad</h3>
+      <h3>7. Pagos y Reembolsos</h3>
       <p>
-        Los datos personales facilitados se tratarán únicamente con el fin de
-        gestionar la cuenta, guardar tiradas y mantener la funcionalidad del
-        servicio. No se cederán a terceros salvo obligación legal o necesidad
-        técnica vinculada a los servicios mencionados.
-      </p>
-
-      <h3>7. Pagos, Precios y Reembolsos</h3>
-      <p>
-        Algunos contenidos premium pueden requerir pago o suscripción. Las
-        operaciones se gestionarán mediante plataformas seguras (Stripe o PayPal).
+        Los contenidos premium podrán requerir suscripción. Los pagos se
+        gestionarán mediante Stripe o PayPal.
       </p>
 
       <h3>8. Conducta y Uso Fraudulento</h3>
       <ul>
-        <li>Uso fraudulento o manipulación indebida del servicio.</li>
-        <li>Creación de múltiples cuentas desde la misma IP.</li>
-        <li>Intentos de ingeniería inversa o extracción de datos.</li>
+        <li>Creación de múltiples cuentas para evadir límites.</li>
+        <li>Extracción de datos o ingeniería inversa.</li>
+        <li>Manipulación del sistema.</li>
       </ul>
 
-      <h3>9. Modificaciones y Actualizaciones</h3>
+      <h3>9. Modificaciones</h3>
       <p>
-        El titular podrá modificar estos términos o el diseño del servicio en
-        cualquier momento. Las versiones actualizadas estarán disponibles en
-        este mismo modal.
+        Se podrán modificar estos términos en cualquier momento.
       </p>
 
-      <h3>10. Ley Aplicable y Jurisdicción</h3>
+      <h3>10. Jurisdicción</h3>
       <p>
-        Estos términos se rigen por la legislación española. Cualquier controversia
-        se someterá a los Tribunales de Madrid (España).
+        Se aplicará la legislación española. Jurisdicción: Tribunales de Madrid.
       </p>
+
     </div>
 
-    <footer>
-      <label class="agree-line">
+    <!-- FOOTER -->
+    <div class="checkbox">
+      <label>
         <input type="checkbox" [(ngModel)]="checked" />
-        <span>Acepto los términos y condiciones de la aplicación.</span>
+        Acepto los Términos y Condiciones
       </label>
-      <button [disabled]="!checked" (click)="confirm()">Continuar</button>
-    </footer>
+    </div>
+
+    <div class="actions">
+      <button (click)="close()">Cancelar</button>
+      <button [disabled]="!checked" (click)="accept()">Aceptar</button>
+    </div>
+
   </div>
 </div>
