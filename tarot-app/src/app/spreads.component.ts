@@ -548,18 +548,18 @@ async saveReading() {
       'pentacles-13': 'reinadepentaculos',
       'pentacles-14': 'reydepentaculos',
     };
-    // Ã°Å¸Â§Â  Reemplazar ID si corresponde a alias
+    //  Reemplazar ID si corresponde a alias
     const fixedId = aliasMap[cardId] ?? cardId;
     // Buscar la carta en el deckMap
     const meta = this.deckMap.get(fixedId);
-    // ValidaciÃƒÂ³n y logging de diagnÃƒÂ³stico
+    // Validacion y logging de diagnostico
     if (!meta) {
-      console.warn(`Ã¢Å¡Â Ã¯Â¸Â Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
+      console.warn(` Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
       return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
     }
     // Validar que la URL sea correcta
     if (!meta.imageUrl) {
-      console.warn(`Ã¢Å¡Â Ã¯Â¸Â Carta sin imageUrl asignada: ${fixedId}`);
+      console.warn(` Carta sin imageUrl asignada: ${fixedId}`);
       return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
     }
     return meta.imageUrl;
@@ -834,7 +834,7 @@ async saveReading() {
     prevCard(){ const arr=this.activeCards; if(!arr.length) return; this.focusIdx=(this.focusIdx-1+arr.length)%arr.length; this.bumpZ(arr,this.focusIdx); }
     nextCard(){ const arr=this.activeCards; if(!arr.length) return; this.focusIdx=(this.focusIdx+1)%arr.length; this.bumpZ(arr,this.focusIdx); }
     private bumpZ(arr:Placed[], i:number){ const maxZ=Math.max(...arr.map(p=>p.z)); arr[i].z=maxZ+1; }
-    // Mazo: decide acciÃƒÂ³n
+    // Mazo: decide qué hacer al clicar
     onDeckClick(){
       if(!this.canDeal){ this.toggleShuffle(); return; }
       if(this.spreadId==='celtic-cross-10'){
@@ -879,23 +879,23 @@ async saveReading() {
       if(id==='ppf-3')          return this.ppf3();
       return this.free9();
     }
-  /** Ã°Å¸â€œÅ“ Layout para la Cruz Celta (10 cartas) */
-  /** Ã°Å¸â€œÅ“ Layout para la Cruz Celta (10 cartas) Ã¢â‚¬â€ versiÃƒÂ³n centrada verticalmente */
+  /**  Layout para la Cruz Celta (10 cartas) */
+ 
   private celticCross10() {
-    const Cx = 45, Cy = 50; // Ã¢Â¬â€¡Ã¯Â¸Â antes 52 Ã¢â€ â€™ sube todo el conjunto ~7%
+    const Cx = 45, Cy = 50; // antes 52 Ã¢â€ â€™ sube todo el conjunto ~7%
     const dx = 15, dy = 13; // ajuste suave entre cartas
-    const colX = 78;        // ligera reducciÃƒÂ³n para centrar mejor
+    const colX = 78;        // ligera reduccion para centrar mejor
     const h = 12;           // menor altura vertical
     return [
-      // Ã°Å¸Å’Å¸ Cruz central
+      // Cruz central
       { position: 1, x: 50, y: 45, r: 0,  z: 28 },
       { position: 2, x: 50, y: 45, r: 90, z: 31 },
-      // Ã°Å¸â€Â¹ Cuatro alrededor de la cruz
+      //  Cuatro alrededor de la cruz
       { position: 3, x: Cx,      y: Cy + dy, r: 0, z: 19 }, // abajo
       { position: 4, x: Cx - dx, y: Cy,      r: 0, z: 19 }, // izquierda
       { position: 5, x: Cx,      y: Cy - dy, r: 0, z: 19 }, // arriba
       { position: 6, x: Cx + dx, y: Cy,      r: 0, z: 19 }, // derecha
-      // Ã°Å¸â€Â¸ Columna derecha (mÃƒÂ¡s arriba)
+      //  Columna derecha (arriba)
       { position: 7, x: colX, y: Cy + h,   r: 0, z: 18 },
       { position: 8, x: colX, y: Cy,       r: 0, z: 18 },
       { position: 9, x: colX, y: Cy - h,   r: 0, z: 18 },

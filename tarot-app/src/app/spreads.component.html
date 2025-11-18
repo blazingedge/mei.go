@@ -1,11 +1,11 @@
 ﻿<!-- ===========================================================
-     ?? LAYOUT GENERAL — Rail / Board / Panel
+      LAYOUT GENERAL — Rail / Board / Panel
      =========================================================== -->
 
 <div class="layout">
 
   <!-- ===========================================================
-       ?? RAIL IZQUIERDO (SIEMPRE VISIBLE)
+        RAIL IZQUIERDO (SIEMPRE VISIBLE)
        =========================================================== -->
   <aside class="rail rail--beige">
 
@@ -90,14 +90,14 @@
 
 
   <!-- ===========================================================
-       ?? MOBILE LAYOUT
+        MOBILE LAYOUT
        =========================================================== -->
   @if (isMobile) {
 
   <div class="mobile-layout">
 
     <!-- ===========================================================
-         ?? TOP BAR (MOBILE) — Drucoins + Selector + Logout
+         TOP BAR (MOBILE) — Drucoins + Selector + Logout
          =========================================================== -->
     <div class="mobile-top-bar">
 
@@ -136,11 +136,9 @@
 
     </div>
 
-    <!-- (? Se ha eliminado el app-hanging-menu "Grimorio" aquí,
-         ya no aparece ese menú colgante en mobile) -->
 
     <!-- ===========================================================
-         ?? PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
+          PANEL PRINCIPAL DE CARTA + INTERPRETACIÓN
          =========================================================== -->
     <div class="mobile-card-panel" [class.empty]="!placed.length">
 
@@ -192,7 +190,7 @@
     </div>
 
     <!-- ===========================================================
-         ?? CONTADOR DE CARTA
+          CONTADOR DE CARTA
          =========================================================== -->
     <p class="mobile-card-counter">
       Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
@@ -211,7 +209,7 @@
    
 
     <!-- ===========================================================
-         ?? BOOK PANEL (ÚNICO - MOBILE)
+         BOOK PANEL (ÚNICO - MOBILE)
          =========================================================== -->
     <div class="book-panel" [class.open]="showBookPanel">
 
@@ -238,7 +236,7 @@
 
         <section>
           <h3>Información</h3>
-          <button (click)="openTerms()">Términos y condiciones</button>
+          
           <button (click)="openPrivacy()">Privacidad</button>
         </section>
       </div>
@@ -279,7 +277,7 @@
   </div> <!-- /mobile-layout -->
 
 <!-- ===========================================================
-     ?? MENÚ INFERIOR (MOBILE — ICONOS)
+     MENÚ INFERIOR (MOBILE — ICONOS)
      =========================================================== -->
 <div class="bottom-menu--icons">
 
@@ -416,7 +414,7 @@
 
 
   <!-- ===========================================================
-       ?? DRUCOINS HUD (DESKTOP)
+        DRUCOINS HUD (DESKTOP)
        =========================================================== -->
   <div class="drucoins-hud" title="Tus tiradas disponibles">
     <img class="coin"
@@ -430,7 +428,7 @@
 
 
   <!-- ===========================================================
-       ?? PANEL DERECHO — Listado de cartas + contexto
+        PANEL DERECHO — Listado de cartas + contexto
        =========================================================== -->
   @if (!showInterpretation) {
   <aside class="panel">
@@ -503,7 +501,7 @@
 
 
 <!-- ===========================================================
-     ??? HISTORIAL (MÓVIL Y DESKTOP)
+      HISTORIAL (MÓVIL Y DESKTOP)
      =========================================================== -->
 @if (showHistory) {
   <div class="history-overlay" (click)="closeHistory()">
@@ -541,7 +539,7 @@
 }
 
 <!-- ===========================================================
-     ?? SIGNIFICADO DE CARTA (OVERLAY)
+      SIGNIFICADO DE CARTA (OVERLAY)
      =========================================================== -->
 @if (showCardOverlay) {
   <div class="card-meaning-overlay" (click)="closeCardOverlay()">
@@ -554,7 +552,7 @@
 
       <article>
         @if (loadingCardMeaning) {
-          <p><em>?? Consultando significado...</em></p>
+          <p><em> Consultando significado...</em></p>
         } @else {
           <p [innerHTML]="overlayCardMeaning"></p>
         }
@@ -567,14 +565,14 @@
 
 
 <!-- ===========================================================
-     ?? MODAL DE INTERPRETACIÓN (IA)
+      MODAL DE INTERPRETACIÓN (IA)
      =========================================================== -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
     <div class="interpret-container" (click)="$event.stopPropagation()">
 
       <header class="interpret-header">
-        <span class="icon">??</span>
+        <span class="icon"></span>
         <h2>Interpretación</h2>
         <button class="close-btn" (click)="closeInterpret()">×</button>
       </header>
@@ -601,7 +599,7 @@
 
 
 <!-- ===========================================================
-     ????? LOADING (IA INTERPRETANDO)
+      LOADING (IA INTERPRETANDO)
      =========================================================== -->
 @if (loadingInterpret) {
   <div class="loading-overlay" aria-busy="true">
@@ -613,7 +611,7 @@
 
 
 <!-- ===========================================================
-     ?? MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
+     MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
      =========================================================== -->
 @if (quota && quota.remaining === 0)
 {
