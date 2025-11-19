@@ -14,6 +14,7 @@ import {
   User,
   onAuthStateChanged,
 } from '@angular/fire/auth';
+
 import { browserLocalPersistence, setPersistence } from 'firebase/auth';
 
 export type PlanId = 'luz' | 'sabiduria' | 'quantico';
@@ -21,7 +22,6 @@ export type GoogleLoginResult = User | 'redirect';
 
 export interface SessionSnapshot {
   user?: { uid: string; email: string; plan: PlanId };
-  quota?: { monthly: number; used: number; remaining: number; period: string };
   drucoins?: number;
 }
 
@@ -29,75 +29,77 @@ export interface SessionSnapshot {
 export class AuthService {
 
   // -----------------------
-  // FLAGS Y ESTADO
+  // ESTADO
   // -----------------------
-  public authFlowStarted = false;   // <-- CORREGIDO Y ESTANDARIZADO
+  public authFlowStarted = false;
   private workerToken: string | null = null;
 
   private termsAcceptedSubject = new BehaviorSubject<boolean>(false);
   termsAccepted$ = this.termsAcceptedSubject.asObservable();
 
-  private userSubject = new BehaviorSubject<{ uid: string; email: string; plan: PlanId } | null>(null);
-  user$ = this.userSubject.asObservable();
-
-  private planSubject = new BehaviorSubject<PlanId | null>(null);
-  plan$ = this.planSubject.asObservable();
-
-  private quotaSubject = new BehaviorSubject<{ monthly: number; used: number; remaining: number; period: string } | null>(null);
-  quota$ = this.quotaSubject.asObservable();
-
-  private quotaRemainingSubject = new BehaviorSubject<number>(0);
-  quotaRemaining$ = this.quotaRemainingSubject.asObservable();
+  private needsTermsSubject = new BehaviorSubject<boolean>(false);
+  needsTerms$ = this.needsTermsSubject.asObservable();
 
   private drucoinBalanceSubject = new BehaviorSubject<number>(0);
   drucoinBalance$ = this.drucoinBalanceSubject.asObservable();
 
-  private needsTermsSubject = new BehaviorSubject<boolean>(false);
-  needsTerms$ = this.needsTermsSubject.asObservable();
+  private userSubject = new BehaviorSubject<{ uid: string; email: string; plan: PlanId } | null>(null);
+  user$ = this.userSubject.asObservable();
 
   constructor(private http: HttpClient, private auth: Auth) {
 
+    // Persistencia Firebase
     setPersistence(this.auth, browserLocalPersistence).catch(err =>
-      console.warn('No se pudo configurar la persistencia de Firebase:', err)
+      console.warn('[Auth] Persistencia Firebase falló:', err)
     );
 
+    // Listener de login Firebase
     onAuthStateChanged(this.auth, async (user) => {
+      console.group('%c[AuthStateChanged]', 'color:#9cf');
+
       if (!user) {
+        console.warn('→ Usuario null: limpiando sesión');
         this.clearSessionState();
-        this.termsAcceptedSubject.next(false);
-        this.needsTermsSubject.next(false);
+        console.groupEnd();
         return;
       }
 
-      const accepted = await this.checkTerms(user.uid);
-      this.termsAcceptedSubject.next(accepted);
-      this.needsTermsSubject.next(!accepted);
+      const token = await user.getIdToken().catch(() => null);
+      this.workerToken = token;
+
+      console.log('→ Token obtenido');
+
+      // NUEVO FLUJO: llamar /api/terms/needs
+      const needs = await this.fetchNeedsTerms(token);
+      console.log('→ NeedsTerms?', needs);
+
+      this.needsTermsSubject.next(needs);
+      this.termsAcceptedSubject.next(!needs);
+
+      console.groupEnd();
     });
   }
 
   // -----------------------
-  // Utils
+  // UTILS
   // -----------------------
   get currentUser(): User | null {
     return this.auth.currentUser ?? null;
   }
 
   async getIdToken(): Promise<string | null> {
-    const user = this.currentUser;
+    const u = this.currentUser;
+    if (!u) return this.workerToken;
 
-    if (user) {
-      try {
-        return await user.getIdToken();
-      } catch (err) {
-        console.warn('âš ï¸ No se pudo obtener token Firebase:', err);
-      }
+    try {
+      return await u.getIdToken(true);
+    } catch {
+      return this.workerToken;
     }
-
-    return this.workerToken;
   }
 
   // -----------------------
-  // LOGIN WORKER
+  // LOGIN TRADICIONAL
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
     try {
@@ -109,20 +111,20 @@ export class AuthService {
         )
         .toPromise();
 
-      if (res?.ok && res.token) {
+      if (res?.ok && res?.token) {
         this.workerToken = res.token;
         return true;
       }
-      return false;
 
+      return false;
     } catch (err) {
-      console.error('âŒ Error en login:', err);
+      console.error('[Auth] login error:', err);
       return false;
     }
   }
 
   // -----------------------
-  // REGISTER WORKER
+  // REGISTRO TRADICIONAL
   // -----------------------
   async register(email: string, password: string): Promise<boolean> {
     try {
@@ -135,27 +137,26 @@ export class AuthService {
         .toPromise();
 
       return !!res?.ok;
-
     } catch (err) {
-      console.error('âŒ Error en register:', err);
+      console.error('[Auth] register error:', err);
       return false;
     }
   }
 
   // -----------------------
-  // LOGIN GOOGLE
+  // GOOGLE LOGIN
   // -----------------------
   async loginWithGoogle(): Promise<GoogleLoginResult> {
     const provider = new GoogleAuthProvider();
+
     try {
       const result = await signInWithPopup(this.auth, provider);
-
-      const token = await result.user.getIdToken();
-      this.workerToken = token;
-
+      this.workerToken = await result.user.getIdToken();
       return result.user;
+
     } catch (err: any) {
-      const code: string = err?.code || '';
+      const code = err?.code || '';
+
       if (
         code.includes('popup-blocked') ||
         code.includes('popup-closed') ||
@@ -166,7 +167,8 @@ export class AuthService {
         await signInWithRedirect(this.auth, provider);
         return 'redirect';
       }
-      console.error('Error Google Auth:', err);
+
+      console.error('[Auth] GoogleAuth error:', err);
       throw err;
     }
   }
@@ -175,109 +177,73 @@ export class AuthService {
     try {
       const result = await getRedirectResult(this.auth);
       if (result?.user) {
-        const token = await result.user.getIdToken();
-        this.workerToken = token;
+        this.workerToken = await result.user.getIdToken();
         return result.user;
       }
       return null;
     } catch (err) {
-      console.error('Error Google redirect:', err);
+      console.error('[Auth] Redirect error:', err);
       return null;
     }
   }
 
-  // -----------------------
-  // CHECK TERMS
-  // -----------------------
-  async checkTerms(uid: string): Promise<boolean> {
+  // ============================================================
+  //          TERMS — AHORA CON LOS ENDPOINTS CORRECTOS
+  // ============================================================
+
+  // ---- NUEVO: GET /api/terms/needs ----
+  private async fetchNeedsTerms(token: string | null): Promise<boolean> {
+    if (!token) return true;
+
     try {
-      const res = await fetch(`${environment.API_BASE}/terms/check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid })
+      const res = await fetch(`${environment.API_BASE}/terms/needs`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) {
-        console.warn('âš ï¸ /api/terms/check â†’ status', res.status);
-        return false;
-      }
+      if (!res.ok) return true;
 
-      const j = await res.json().catch(() => null);
-      return !!j?.accepted;
+      const data = await res.json().catch(() => null);
+      return !!data?.needs;
 
     } catch (err) {
-      console.error('ðŸ’¥ Error en checkTerms:', err);
-      return false;
+      console.error('[Terms] fetchNeedsTerms error:', err);
+      return true;
     }
   }
 
-  // -----------------------
-  // REGISTER TERMS ACCEPT
-  // -----------------------
-  async markTermsAcceptedRemote(): Promise<boolean> {
-    try {
-      const token = await this.getIdToken();
-      if (!token) {
-        console.warn('âš ï¸ No hay token para registrar T&C');
-        return false;
-      }
+  // ---- NUEVO: POST /terms/accept ----
+  async ensureTermsAcceptance(): Promise<boolean> {
+    const token = await this.getIdToken();
+    if (!token) return false;
 
+    try {
       const res = await fetch(`${environment.API_BASE}/terms/accept`, {
         method: 'POST',
         headers: {
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          version: '1.0',
-          acceptedAt: Date.now()
-        })
       });
-
-      const data = await res.json();
-      if (!data.ok) return false;
-
-      this.markTermsAccepted();
-      return true;
-
-    } catch (err) {
-      console.error('ðŸ’¥ markTermsAcceptedRemote error:', err);
-      return false;
-    }
-  }
-
-  markTermsAccepted() {
-    this.termsAcceptedSubject.next(true);
-    this.needsTermsSubject.next(false);
-  }
-
-  async syncTermsStatus(): Promise<boolean> {
-    try {
-      const token = await this.getIdToken();
-      if (!token) return false;
-
-      const res = await fetch(`${environment.API_BASE}/terms/needs`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      if (!res.ok) return false;
 
       const data = await res.json().catch(() => null);
-      if (data?.needs) {
-        this.needsTermsSubject.next(true);
-        this.termsAcceptedSubject.next(false);
-        return true;
-      } else {
-        this.needsTermsSubject.next(false);
+
+      if (data?.ok) {
         this.termsAcceptedSubject.next(true);
-        return false;
+        this.needsTermsSubject.next(false);
+        return true;
       }
+
+      return false;
+
     } catch (err) {
-      console.error('syncTermsStatus error:', err);
+      console.error('[Terms] ensureTermsAcceptance error:', err);
       return false;
     }
   }
 
+  // ============================================================
+  //               DRUCOINS + USER SNAPSHOT
+  // ============================================================
   applySessionSnapshot(snapshot: SessionSnapshot | null) {
     if (!snapshot || !snapshot.user) {
       this.clearSessionState();
@@ -285,37 +251,22 @@ export class AuthService {
     }
 
     this.userSubject.next(snapshot.user);
-    this.planSubject.next(snapshot.user.plan);
 
-    if (snapshot.quota) {
-      this.quotaSubject.next(snapshot.quota);
-      this.quotaRemainingSubject.next(snapshot.quota.remaining);
-    } else {
-      this.quotaSubject.next(null);
-      this.quotaRemainingSubject.next(0);
+    if (snapshot.drucoins !== undefined) {
+      this.updateDrucoinBalance(snapshot.drucoins);
     }
+  }
 
-    this.updateDrucoinBalance(snapshot.drucoins ?? 0);
+  updateDrucoinBalance(balance: number | null | undefined) {
+    const n = typeof balance === 'number' ? balance : 0;
+    this.drucoinBalanceSubject.next(Math.max(n, 0));
   }
 
   clearSessionState() {
     this.userSubject.next(null);
-    this.planSubject.next(null);
-    this.quotaSubject.next(null);
-    this.quotaRemainingSubject.next(0);
     this.updateDrucoinBalance(0);
-  }
-
-  updateDrucoinBalance(balance: number | null | undefined) {
-    const normalized =
-      typeof balance === 'number' && Number.isFinite(balance) ? balance : 0;
-    this.drucoinBalanceSubject.next(Math.max(0, normalized));
-  }
-
-  requireTermsAcceptance() {
-    this.authFlowStarted = true;
-    this.needsTermsSubject.next(true);
     this.termsAcceptedSubject.next(false);
+    this.needsTermsSubject.next(false);
   }
 
   // -----------------------
@@ -324,8 +275,20 @@ export class AuthService {
   async logout(): Promise<void> {
     this.workerToken = null;
     await signOut(this.auth);
-    this.termsAcceptedSubject.next(false);
-    this.needsTermsSubject.next(false);
     this.clearSessionState();
   }
+  
+  requireTermsAcceptance() {
+    this.needsTermsSubject.next(true);
+    this.termsAcceptedSubject.next(false);
+  }
+
+  markTermsAccepted() {
+    this.needsTermsSubject.next(false);
+    this.termsAcceptedSubject.next(true);
+  }
+
+
+
+
 }

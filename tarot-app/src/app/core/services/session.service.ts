@@ -1,3 +1,4 @@
+// src/app/core/services/session.service.ts
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -16,7 +17,6 @@ type SessionCheckResult = 'valid' | 'needs-terms' | 'invalid';
 interface SessionValidateResponse {
   ok: boolean;
   user?: { uid: string; email: string; plan: PlanId };
-  quota?: { monthly: number; used: number; remaining: number; period: string };
   drucoins?: number;
   needsTerms?: boolean;
 }
@@ -34,6 +34,9 @@ export class SessionService {
     private termsCoordinator: TermsCoordinatorService
   ) {}
 
+  // ============================================================
+  // BOOTSTRAP GENERAL
+  // ============================================================
   async bootstrap() {
     const result = await this.validate();
 
@@ -62,22 +65,21 @@ export class SessionService {
     }
   }
 
+  // ============================================================
+  // VALIDACIÓN DE SESIÓN
+  // ============================================================
   async validate(force = false): Promise<SessionCheckResult> {
     if (!force && this.pendingValidation) {
       return this.pendingValidation;
     }
 
     const task = this.performValidation();
-    if (!force) {
-      this.pendingValidation = task;
-    }
+    if (!force) this.pendingValidation = task;
 
     try {
       return await task;
     } finally {
-      if (!force) {
-        this.pendingValidation = null;
-      }
+      if (!force) this.pendingValidation = null;
     }
   }
 
@@ -100,20 +102,23 @@ export class SessionService {
         return 'invalid';
       }
 
+      // Aplicar snapshot a AuthService
       const snapshot: SessionSnapshot = {
         user: resp.user,
-        quota: resp.quota,
         drucoins: resp.drucoins ?? 0,
       };
+
       this.auth.applySessionSnapshot(snapshot);
 
-      if (resp.needsTerms) {
+      // Revisión de Términos
+      if (resp.needsTerms === true) {
         this.auth.requireTermsAcceptance();
         return 'needs-terms';
       }
 
       this.auth.markTermsAccepted();
       return 'valid';
+
     } catch (err: any) {
       if (err?.status === 401) {
         await this.auth.logout();
@@ -124,13 +129,15 @@ export class SessionService {
     }
   }
 
+  // ============================================================
+  // TÉRMINOS Y CONDICIONES
+  // ============================================================
   async ensureTermsAcceptance(): Promise<boolean> {
-    if (this.termsFlowPromise) {
-      return this.termsFlowPromise;
-    }
+    if (this.termsFlowPromise) return this.termsFlowPromise;
 
     const flow = this.runTermsFlow();
     this.termsFlowPromise = flow;
+
     try {
       return await flow;
     } finally {
@@ -141,11 +148,13 @@ export class SessionService {
   private async runTermsFlow(): Promise<boolean> {
     try {
       const accepted = await this.termsCoordinator.openForResult();
+
       if (!accepted) {
         return false;
       }
 
-      const remote = await this.auth.markTermsAcceptedRemote();
+      const remote = await this.auth.ensureTermsAcceptance();
+
       if (!remote) {
         this.auth.requireTermsAcceptance();
         return false;
@@ -153,8 +162,9 @@ export class SessionService {
 
       await this.validate(true);
       return true;
+
     } catch (err) {
-      console.error('Terms flow error', err);
+      console.error('Terms flow error:', err);
       this.auth.requireTermsAcceptance();
       return false;
     }
