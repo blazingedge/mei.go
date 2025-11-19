@@ -46,6 +46,8 @@ export class AuthService {
   private userSubject = new BehaviorSubject<{ uid: string; email: string; plan: PlanId } | null>(null);
   user$ = this.userSubject.asObservable();
 
+  
+
   constructor(private http: HttpClient, private auth: Auth) {
 
     // Persistencia Firebase
@@ -98,7 +100,25 @@ export class AuthService {
     }
   }
 
-  // -----------------------
+  async syncTermsStatus(): Promise<boolean> {
+  const token = await this.getIdToken();
+  if (!token) {
+    this.needsTermsSubject.next(true);
+    return true;
+  }
+
+  try {
+    const needs = await this.fetchNeedsTerms(token);
+    this.needsTermsSubject.next(needs);
+    this.termsAcceptedSubject.next(!needs);
+    return needs;
+  } catch {
+    this.needsTermsSubject.next(true);
+    return true;
+  }
+}
+
+      //
   // LOGIN TRADICIONAL
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
