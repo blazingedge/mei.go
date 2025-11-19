@@ -43,13 +43,13 @@
                 {
                   "type": "initial",
                   "maximumWarning": "800kb",
-                "maximumError": "1mb"
+                  "maximumError": "1mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "50kb",
+                  "maximumError": "200kb"
                 }
-                 {
-    "type": "anyComponentStyle",
-    "maximumWarning": "50kb",
-    "maximumError": "200kb"
-  }
               ],
               "outputHashing": "all",
               "fileReplacements": [
@@ -57,14 +57,16 @@
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.prod.ts"
                 }
-              ]
+              ],
+              "optimization": true,
+              "extractLicenses": true,
+              "sourceMap": false
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
             }
-            
           },
           "defaultConfiguration": "production"
         },
