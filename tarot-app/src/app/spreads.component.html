@@ -82,7 +82,7 @@
       }
 
       <!-- Zona de donación (desktop rail) -->
-    
+      <!-- (vacío de momento) -->
 
     </div>
   </aside>
@@ -144,48 +144,48 @@
 
       @if (placed.length > 0) {
 
-  <!-- Vista previa de carta -->
-  <div class="card-preview">
-    <img
-      class="card-face"
-      [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-      alt="{{ placed[focusIdx]?.cardId }}"
-      (click)="openCardMeaning(placed[focusIdx])" />
-  </div>
+        <!-- Vista previa de carta -->
+        <div class="card-preview">
+          <img
+            class="card-face"
+            [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+            alt="{{ placed[focusIdx]?.cardId }}"
+            (click)="openCardMeaning(placed[focusIdx])" />
+        </div>
 
-  <!-- Vista previa de interpretación -->
-  @if (!showCardOverlay) {
-    <div class="interpret-preview">
-      <h4>Interpretación</h4>
-      <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-    </div>
-  } @else {
-    <!-- Estado vacío si no se muestra overlay -->
-    <div class="empty-mobile-state">
-      <p>Aún no hay cartas repartidas.</p>
-      <button type="button"
-              class="btn-main secondary"
-              (click)="hacerTirada()"
-              [disabled]="!canDeal">
-        Hacer tirada
-      </button>
-    </div>
-  }
+        <!-- Vista previa de interpretación / significado -->
+        @if (!showCardOverlay) {
+          <div class="interpret-preview">
+            <h4>Interpretación</h4>
+            <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+          </div>
+        } @else {
+          <!-- Estado “sin contenido” mientras el overlay está activo -->
+          <div class="empty-mobile-state">
+            <p>Aún no hay cartas repartidas.</p>
+            <button type="button"
+                    class="btn-main secondary"
+                    (click)="hacerTirada()"
+                    [disabled]="!canDeal">
+              Hacer tirada
+            </button>
+          </div>
+        }
 
-} @else {
+      } @else {
 
-  <!-- Estado vacío cuando NO hay cartas -->
-  <div class="empty-mobile-state">
-    <p>Aún no hay cartas repartidas.</p>
-    <button type="button"
-            class="btn-main secondary"
-            (click)="hacerTirada()"
-            [disabled]="!canDeal">
-      Hacer tirada
-    </button>
-  </div>
+        <!-- Estado vacío cuando NO hay cartas -->
+        <div class="empty-mobile-state">
+          <p>Aún no hay cartas repartidas.</p>
+          <button type="button"
+                  class="btn-main secondary"
+                  (click)="hacerTirada()"
+                  [disabled]="!canDeal">
+            Hacer tirada
+          </button>
+        </div>
 
-}
+      }
 
     </div>
 
@@ -210,7 +210,7 @@
     </div>
 
     <!-- Donación (mobile, discreta debajo del panel) -->
-   
+    <!-- (pendiente de implementar) -->
 
     <!-- ===========================================================
          BOOK PANEL (ÚNICO - MOBILE)
@@ -240,7 +240,6 @@
 
         <section>
           <h3>Información</h3>
-          
           <button (click)="openPrivacy()">Privacidad</button>
         </section>
       </div>
@@ -250,7 +249,7 @@
 
 
     <!-- ===========================================================
-         ?? MOBILE CAROUSEL — SIEMPRE QUE HAYA CARTAS
+         MOBILE CAROUSEL — SIEMPRE QUE HAYA CARTAS
          =========================================================== -->
     @if (placed.length > 0) {
       <div class="mobile-carousel">
@@ -280,34 +279,31 @@
 
   </div> <!-- /mobile-layout -->
 
-<!-- ===========================================================
-     MENÚ INFERIOR (MOBILE — ICONOS)
-     =========================================================== -->
-<div class="bottom-menu--icons">
+  <!-- ===========================================================
+       MENÚ INFERIOR (MOBILE — ICONOS)
+       =========================================================== -->
+  <div class="bottom-menu--icons">
 
-  <button class="ghost-btn ghost--shuffle"
-          (click)="toggleShuffle()"
-          title="Barajar"></button>
+    <button class="ghost-btn ghost--shuffle"
+            (click)="toggleShuffle()"
+            title="Barajar"></button>
 
-  <button class="ghost-btn ghost--history"
-          (click)="openHistory($event)"
-          title="Historial"></button>
+    <button class="ghost-btn ghost--history"
+            (click)="openHistory($event)"
+            title="Historial"></button>
 
-  <button class="ghost-btn ghost--saved"
-          (click)="toggleBookPanel()"
-          title="Grimorio"></button>
+    <button class="ghost-btn ghost--saved"
+            (click)="toggleBookPanel()"
+            title="Grimorio"></button>
 
-</div>
-
-
-
+  </div>
 
   <!-- FIN DE MOBILE -->
   } @else {
 
 
   <!-- ===========================================================
-       ??? DESKTOP BOARD PRINCIPAL
+       DESKTOP BOARD PRINCIPAL
        =========================================================== -->
   <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
 
@@ -389,8 +385,7 @@
     <!-- Acciones debajo del tablero -->
     <div class="board-actions">
       <button class="btn-main"
-              (click)="hacerTirada()
-              "
+              (click)="hacerTirada()"
               [disabled]="!canDeal">
         @if (dealing) { Barajando... } @else { Nueva tirada }
       </button>
@@ -441,19 +436,20 @@
 
     <div class="cards-list">
       @for (pc of activeCards; track pc.position) {
-        <div class="card-chip"
-             (click)="openCardMeaning(pc)"
-             [class.reversed]="pc.reversed">
+        <button type="button"
+                class="card-chip"
+                (click)="openCardMeaning(pc)"
+                [class.reversed]="pc.reversed">
           <span class="num">#{{ pc.position }}</span>
           <span class="name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</span>
           @if (pc.reversed) { <span class="rev">?</span> }
-        </div>
+        </button>
       }
     </div>
 
     <div class="context-wrap">
       <div class="context-area">
-        <label class="context-label">?? Contexto o pregunta:</label>
+        <label class="context-label">Contexto o pregunta:</label>
         <textarea
           [(ngModel)]="userContextInput"
           rows="4"
@@ -465,7 +461,7 @@
         <button class="btn-papiro"
                 (click)="confirmContext()"
                 [disabled]="isInterpreting || !hasEnoughDrucoins">
-          ?? Interpretar tirada
+          Interpretar tirada
           <span class="cost-chip">-1 DruCoin</span>
         </button>
         @if (!hasEnoughDrucoins) {
@@ -481,6 +477,7 @@
 
 
 </div> <!-- /layout -->
+
 @if (showMobileInterpretModal) {
   <div class="mobile-interpret-overlay" (click)="closeMobileInterpretation()">
     <div class="mobile-interpret-panel" (click)="$event.stopPropagation()">
@@ -565,7 +562,7 @@
 
       <article>
         @if (loadingCardMeaning) {
-          <p><em> Consultando significado...</em></p>
+          <p><em>Consultando significado...</em></p>
         } @else {
           <p [innerHTML]="overlayCardMeaning"></p>
         }
@@ -626,8 +623,7 @@
 <!-- ===========================================================
      MODAL AUTO DE DONACIÓN (cuando no queden tiradas)
      =========================================================== -->
-@if (quota && quota.remaining === 0)
-{
+@if (quota && quota.remaining === 0) {
   <div class="donation-overlay">
     <div class="donation-modal" (click)="$event.stopPropagation()">
       <h2>Sin tiradas disponibles</h2>
@@ -635,7 +631,7 @@
         Este es un proyecto independiente. Tu donación (desde 1 €) ayuda a
         mantener el servidor y seguir mejorando la experiencia de Meigo.
       </p>
-      
+
       <p class="donation-hint">
         Un café multiplicado por cientos mantiene vivo el grimorio.
       </p>
