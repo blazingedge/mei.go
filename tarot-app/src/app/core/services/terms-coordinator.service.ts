@@ -52,6 +52,17 @@ export class TermsCoordinatorService {
     this.resolve(false);
   }
 
+  show() {
+  console.log('%c[TermsCoordinator] show()', 'color:#6ff');
+
+  // Si ya está visible → no lo muestra de nuevo
+  if (this.visibleSubject.value === true) return;
+
+  // Solo mostrar, sin crear promesa
+  this.visibleSubject.next(true);
+}
+
+
   // ======================================================
   // 🌟 Resolver promesa y limpiar estados
   // ======================================================

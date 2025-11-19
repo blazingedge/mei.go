@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TermsCoordinatorService } from '../core/services/terms-coordinator.service';
@@ -15,6 +15,12 @@ export class TermsModalComponent {
   checked = false;
 
   constructor(public terms: TermsCoordinatorService) {}
+
+  // Cerrar modal al presionar ESC (opcional)
+  @HostListener('document:keydown.escape')
+  onEsc() {
+    this.close();
+  }
 
   accept() {
     if (!this.checked) return;
