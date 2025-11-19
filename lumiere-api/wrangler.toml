@@ -6,6 +6,9 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# ID de tu cuenta (OBLIGATORIO para GitHub Actions)
+account_id = "493e88a4d1183b18984cfc5b311d3459"
+
 # =============================
 # 🧩 Configuración local (wrangler dev)
 # =============================
@@ -16,30 +19,21 @@ port = 8787
 # 🧱 Variables globales (dev + prod)
 # =============================
 [vars]
-# Detecta automáticamente el entorno
 ENV = "production"
 
-# Orígenes permitidos tanto en local como en Pages
-CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://6026a26f.mei-go.pages.dev"
+# ⚠️ LISTA FINAL DE ORÍGENES PERMITIDOS
+CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://*.mei-go.pages.dev"
 
+# ⚠️ ESTA CLAVE ESTABA MAL (TURNSTILE NO USA HEXA)
+TURNSTILE_SECRET = "0x4AAAAAACAX4iEbfnnt_c96NCHxHMNZuIg"
 
-
+# Firebase
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 
 # =============================
 # 🔗 Base de datos D1 (Cloudflare)
 # =============================
 [[d1_databases]]
-binding = "DB"
-database_name = "lumiere_db"
-database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
-[env.development]
-[env.development.vars]
-ENV = "development"
-CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200"
-FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
-
-[[env.development.d1_databases]]
 binding = "DB"
 database_name = "lumiere_db"
 database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
