@@ -7,7 +7,8 @@ export const AuthGuard: CanActivateFn = async () => {
   const session = inject(SessionService);
 
   const status = await session.validate();
-  if (status === 'valid' || status === 'needs-terms') {
+  if (status === 'ok' || status === 'needs-terms') {
+
     return true;
   }
 

@@ -11,7 +11,7 @@ import { TermsCoordinatorService } from './core/services/terms-coordinator.servi
   standalone: true,
   selector: 'app-root',
   imports: [
-    CommonModule,   // 👈 NECESARIO PARA *ngIf
+    CommonModule,   // Necesario para *ngIf
     RouterOutlet,
     TermsModalComponent
   ],
@@ -30,7 +30,8 @@ export class AppComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.session.bootstrap();
+
+    // 🔥 YA NO HACE FALTA bootstrap()
 
     this.termsCoordinator.visible$
       .pipe(takeUntilDestroyed(this.destroyRef))
