@@ -1,12 +1,5 @@
 :host {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  backdrop-filter: blur(6px);
-  background: rgba(0,0,0,0.65);
-  z-index: 99999;
+  display: contents;
 }
 
 
