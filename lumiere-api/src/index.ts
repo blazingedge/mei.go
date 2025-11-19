@@ -1414,63 +1414,120 @@ app.post('/api/interpret', async (c) => {
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
-    let uid = '';
-    let email = '';
-    let isMaster = false;
-    try {
-      const apiKey = c.env.FIREBASE_API_KEY || '';
-      const verified = await verifyFirebaseIdToken(firebaseToken, apiKey);
-      uid = verified.uid;
-      email = verified.email;
-      isMaster = isMasterUser(email);
-    } catch (err) {
-      console.error('💥 /api/interpret auth error:', err);
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const gate = await canDoReading(c.env, uid, { isMaster });
-
-    if (!gate.allowed) {
-
-      if (gate.reason === 'quota') {
-        return c.json({ ok: false, error: 'NO_QUOTA', message: 'Sin tiradas disponibles.' }, 402);
-      }
-
-      return c.json(
-        { ok: false, error: 'NO_DRUCOINS', message: 'No tienes DruCoins suficientes.', drucoins: 0 },
-        402
-      );
-
-    }
-
-
-
-    let drucoinsAfter: number | null = null;
-
-    if (!isMaster) {
-
-      const okUse = await useDrucoins(c.env, uid);
-
-      if (!okUse) {
-
-        const balance = await getDrucoinBalance(c.env, uid);
-        return c.json(
-          {
-            ok: false,
-            error: 'NO_DRUCOINS',
-            message: 'No tienes DruCoins suficientes.',
-            drucoins: balance
-          },
-          402
-        );
-
-      }
-
-      drucoinsAfter = await getDrucoinBalance(c.env, uid);
-
-    }
-
-
+    let uid = '';
+
+    let email = '';
+
+    let isMaster = false;
+
+    try {
+
+      const apiKey = c.env.FIREBASE_API_KEY || '';
+
+      const verified = await verifyFirebaseIdToken(firebaseToken, apiKey);
+
+      uid = verified.uid;
+
+      email = verified.email;
+
+      isMaster = isMasterUser(email);
+
+    } catch (err) {
+
+      console.error('💥 /api/interpret auth error:', err);
+
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+
+    }
+
+
+
+    const gate = await canDoReading(c.env, uid, { isMaster });
+
+
+
+    if (!gate.allowed) {
+
+
+
+      if (gate.reason === 'quota') {
+
+        return c.json({ ok: false, error: 'NO_QUOTA', message: 'Sin tiradas disponibles.' }, 402);
+
+      }
+
+
+
+      return c.json(
+
+        { ok: false, error: 'NO_DRUCOINS', message: 'No tienes DruCoins suficientes.', drucoins: 0 },
+
+        402
+
+      );
+
+
+
+    }
+
+
+
+
+
+
+
+    let drucoinsAfter: number | null = null;
+
+
+
+    if (!isMaster) {
+
+
+
+      const okUse = await useDrucoins(c.env, uid);
+
+
+
+      if (!okUse) {
+
+
+
+        const balance = await getDrucoinBalance(c.env, uid);
+
+        return c.json(
+
+          {
+
+            ok: false,
+
+            error: 'NO_DRUCOINS',
+
+            message: 'No tienes DruCoins suficientes.',
+
+            drucoins: balance
+
+          },
+
+          402
+
+        );
+
+
+
+      }
+
+
+
+      drucoinsAfter = await getDrucoinBalance(c.env, uid);
+
+
+
+    }
+
+
+
+
+
     const token = c.env.HF_TOKEN;
     if (!token)
       return c.json({ ok: false, message: 'No se encontrÃ³ el token HF_TOKEN' }, 401);
@@ -1561,7 +1618,13 @@ No incluyas saludos, repeticiones ni despedidas.
 
 
 // =====================
-// ðŸ“œ /api/terms/accept â€” Registrar aceptaciÃ³n de tÃ©rminos
+///api/terms/accept Registrar aceptaciÃ³n de tÃ©rminos
+// =====================
+// =====================
+// 📜 /api/terms/accept — Registrar aceptación de términos
+// =====================
+// =====================
+// 📜 /api/terms/accept — Registrar aceptación de términos + bonus DruCoins
 // =====================
 app.post('/api/terms/accept', async (c) => {
   try {
@@ -1570,7 +1633,7 @@ app.post('/api/terms/accept', async (c) => {
     const authHeader = c.req.header('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-    // ðŸ” Identificar usuario
+    // 🔐 Identificar usuario (solo tiene sentido con usuario real)
     let uid = 'guest';
     if (token) {
       try {
@@ -1578,11 +1641,15 @@ app.post('/api/terms/accept', async (c) => {
         const verified = await verifyFirebaseIdToken(token, apiKey);
         uid = verified.uid;
       } catch {
-        console.warn('âš ï¸ Token invÃ¡lido o expirado, se registra como invitado.');
+        console.warn('⚠️ /api/terms/accept: token inválido o expirado.');
       }
     }
 
-    // ðŸ” Metadatos
+    if (!uid || uid === 'guest') {
+      return c.json({ ok: false, message: 'invalid_user' }, 401);
+    }
+
+    // 🕵️ Metadatos
     const ip_address =
       c.req.header('CF-Connecting-IP') ||
       c.req.header('X-Forwarded-For') ||
@@ -1592,18 +1659,42 @@ app.post('/api/terms/accept', async (c) => {
     const user_agent = c.req.header('User-Agent') || 'unknown';
     const timestamp = acceptedAt ?? Date.now();
 
-    // ðŸ’¾ Guarda o actualiza aceptaciÃ³n (por UID + versiÃ³n)
+    // 🤔 ¿Ya había aceptado antes?
+    const prev = await c.env.DB.prepare(
+      'SELECT accepted_at FROM terms_acceptance WHERE uid = ?'
+    ).bind(uid).first<{ accepted_at: number }>();
+
+    // 💾 Guarda o actualiza aceptación
     await c.env.DB.prepare(`
       INSERT OR REPLACE INTO terms_acceptance (uid, accepted_at, version, ip_address, user_agent)
       VALUES (?, ?, ?, ?, ?)
     `).bind(uid, timestamp, version, ip_address, user_agent).run();
 
-    return c.json({ ok: true, uid, version, accepted_at: timestamp });
+    // 🎁 Bonus: 2 DruCoins solo la PRIMERA vez que acepta términos
+    let bonus = 0;
+    if (!prev) {
+      bonus = 2;
+      try {
+        await addDrucoins(c.env, uid, bonus);
+      } catch (bonusErr) {
+        console.warn('⚠️ /api/terms/accept: no se pudo otorgar los DruCoins iniciales:', bonusErr);
+      }
+    }
+
+    return c.json({
+      ok: true,
+      uid,
+      version,
+      accepted_at: timestamp,
+      bonusDrucoins: bonus,
+    });
   } catch (err: any) {
-    console.error('ðŸ’¥ /api/terms/accept error:', err);
+    console.error('💥 /api/terms/accept error:', err);
     return c.json({ ok: false, message: err.message || 'internal_error' }, 500);
   }
 });
+
+
 
 // =====================
 // ðŸ“˜ /api/terms/check â€” consulta si aceptÃ³ T&C

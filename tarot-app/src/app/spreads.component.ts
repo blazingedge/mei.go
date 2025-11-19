@@ -275,12 +275,28 @@ toggleBookPanel() {
       }
     }
 
-    private async ensureReadingAllowance(): Promise<boolean> {
+private async ensureReadingAllowance(): Promise<boolean> {
+  // 1) Si el backend dice que faltan T&C, lanzamos el flujo del modal
   if (this.needsTerms) {
-    
-    alert('Debes aceptar los terminos y condiciones antes de continuar.');
-    return false;
+    try {
+      const accepted = await this.sessionService.ensureTermsAcceptance();
+      this.needsTerms = !accepted;
+      this.cdr.markForCheck();
+
+      if (!accepted) {
+        alert('Debes aceptar los Términos y Condiciones para continuar.');
+        return false;
+      }
+      // si los aceptó, ya se hizo /terms/accept + /session/validate dentro de ensureTermsAcceptance()
+      // → AuthService ya tiene quota + drucoins actualizados
+    } catch (err) {
+      console.error('Terms flow error desde Spreads:', err);
+      alert('No se pudieron mostrar los Términos y Condiciones. Intenta de nuevo.');
+      return false;
+    }
   }
+
+  // 2) Ahora sí, comprobamos cuota + DruCoins en el backend
   try {
     const token = await this.authService.getIdToken();
     if (!token) {
@@ -315,6 +331,7 @@ toggleBookPanel() {
     return false;
   }
 }
+
 
 
 // Hook: despuÃƒÂ©s de una tirada exitosa, refresca
