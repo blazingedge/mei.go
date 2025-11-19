@@ -31,7 +31,7 @@ export class SessionService {
     private http: HttpClient,
     private auth: AuthService,
     private router: Router,
-    private termsCoordinator: TermsCoordinatorService
+    private terms: TermsCoordinatorService
   ) {}
 
   // ============================================================
@@ -132,22 +132,38 @@ export class SessionService {
   // ============================================================
   // TÉRMINOS Y CONDICIONES
   // ============================================================
-  async ensureTermsAcceptance(): Promise<boolean> {
-    if (this.termsFlowPromise) return this.termsFlowPromise;
+ async ensureTermsAcceptance(): Promise<boolean> {
+  console.log('[SessionService] ensureTermsAcceptance()');
 
-    const flow = this.runTermsFlow();
-    this.termsFlowPromise = flow;
+  // 1. Abrir modal y esperar resultado
+  const accepted = await this.terms.openForResult();
+  console.log('[SessionService] resultado del modal:', accepted);
 
-    try {
-      return await flow;
-    } finally {
-      this.termsFlowPromise = null;
-    }
+  if (!accepted) return false;
+
+  // 2. Registrar en backend
+  try {
+    const res = await fetch(`${environment.API_BASE}/terms/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    if (!res.ok) throw new Error('No se pudo registrar la aceptación');
+
+    console.log('[SessionService] aceptación confirmada en backend');
+    return true;
+
+  } catch (err) {
+    console.error('Error registrando términos:', err);
+    return false;
   }
+}
+
 
   private async runTermsFlow(): Promise<boolean> {
     try {
-      const accepted = await this.termsCoordinator.openForResult();
+      const accepted = await this.terms.openForResult();
 
       if (!accepted) {
         return false;
