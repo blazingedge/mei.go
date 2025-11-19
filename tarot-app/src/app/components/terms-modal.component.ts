@@ -18,12 +18,17 @@ export class TermsModalComponent {
 
   accept() {
     if (!this.checked) return;
-    this.terms.resolveAccept();
+    this.terms.accept();
+    this.checked = false;
+  }
+
+  cancel() {
+    this.terms.cancel();
     this.checked = false;
   }
 
   close() {
-    this.terms.resolveCancel();
+    this.terms.close();
     this.checked = false;
   }
 }

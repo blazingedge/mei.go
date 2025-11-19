@@ -6,56 +6,88 @@ import { BehaviorSubject } from 'rxjs';
 })
 export class TermsCoordinatorService {
 
-  private _visible = new BehaviorSubject<boolean>(false);
-  visible$ = this._visible.asObservable();
+  private visibleSubject = new BehaviorSubject<boolean>(false);
+  visible$ = this.visibleSubject.asObservable();
 
   private resolver: ((value: boolean) => void) | null = null;
-  private pendingPromise: Promise<boolean> | null = null;
+  private promise: Promise<boolean> | null = null;
 
   constructor() {}
 
+  // ======================================================
+  // 🌟 ABRIR MODAL Y ESPERAR RESULTADO
+  // ======================================================
   openForResult(): Promise<boolean> {
-    if (this.pendingPromise) {
-      return this.pendingPromise;
+    console.group('%c[TermsCoordinator] openForResult()', 'color:#f7d774');
+
+    // Si ya hay un flujo activo → devuélvelo
+    if (this.promise) {
+      console.log('→ Reutilizando promesa existente');
+      console.groupEnd();
+      return this.promise;
     }
 
-    this._visible.next(true);
+    // Crear nueva promesa de espera
+    this.promise = new Promise<boolean>(resolve => {
+      this.resolver = (result: boolean) => {
+        console.log('→ Resolviendo con:', result);
 
-    this.pendingPromise = new Promise(resolve => {
-      this.resolver = (value: boolean) => {
-        this.pendingPromise = null;
-        resolve(value);
+        this.resolver = null;
+        this.promise = null;
+
+        resolve(result);
       };
     });
 
-    return this.pendingPromise;
+    console.log('→ Mostrando modal');
+    this.visibleSubject.next(true);
+
+    console.groupEnd();
+    return this.promise;
   }
 
-  /** Compatibilidad con botones manuales */
-  openManualForResult(): Promise<boolean> {
-    return this.openForResult();
-  }
-
-  resolveAccept() {
+  // ======================================================
+  // 🌟 MÉTODOS DE RESOLUCIÓN
+  // ======================================================
+  accept() {
+    console.log('[TermsCoordinator] ACCEPT');
     this.resolve(true);
   }
 
-  resolveCancel() {
+  cancel() {
+    console.log('[TermsCoordinator] CANCEL');
     this.resolve(false);
   }
 
   close() {
+    console.log('[TermsCoordinator] CLOSE');
     this.resolve(false);
   }
 
   private resolve(result: boolean) {
+    console.group('%c[TermsCoordinator] resolve()', 'color:#96f');
+
+    // Ocultar modal inmediatamente
+    this.visibleSubject.next(false);
+
     if (this.resolver) {
+      console.log('→ Resolviendo promesa pendiente');
       const cb = this.resolver;
       this.resolver = null;
+      this.promise = null;
       cb(result);
     } else {
-      this.pendingPromise = null;
+      console.warn('⚠ resolve() llamado sin promesa');
+      this.promise = null;
     }
-    this._visible.next(false);
+
+    console.groupEnd();
+  }
+
+  // ======================================================
+  // 🌟 Compatibilidad (por si lo usas en otros contextos)
+  // ======================================================
+  openManualForResult(): Promise<boolean> {
+    return this.openForResult();
   }
 }
