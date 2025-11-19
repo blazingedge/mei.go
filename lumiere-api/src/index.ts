@@ -1429,16 +1429,47 @@ app.post('/api/interpret', async (c) => {
     }
 
     const gate = await canDoReading(c.env, uid, { isMaster });
+
     if (!gate.allowed) {
-      return c.json({ ok: false, reason: gate.reason }, 402);
+
+      if (gate.reason === 'quota') {
+        return c.json({ ok: false, error: 'NO_QUOTA', message: 'Sin tiradas disponibles.' }, 402);
+      }
+
+      return c.json(
+        { ok: false, error: 'NO_DRUCOINS', message: 'No tienes DruCoins suficientes.', drucoins: 0 },
+        402
+      );
+
     }
 
+
+
+    let drucoinsAfter: number | null = null;
+
     if (!isMaster) {
+
       const okUse = await useDrucoins(c.env, uid);
+
       if (!okUse) {
-        return c.json({ ok: false, reason: 'drucoins' }, 402);
+
+        const balance = await getDrucoinBalance(c.env, uid);
+        return c.json(
+          {
+            ok: false,
+            error: 'NO_DRUCOINS',
+            message: 'No tienes DruCoins suficientes.',
+            drucoins: balance
+          },
+          402
+        );
+
       }
+
+      drucoinsAfter = await getDrucoinBalance(c.env, uid);
+
     }
+
 
     const token = c.env.HF_TOKEN;
     if (!token)
@@ -1515,7 +1546,11 @@ No incluyas saludos, repeticiones ni despedidas.
       .replace(/(_{2,})/g, '')
       .replace(/[\*\_]{2,}\s*$/, '');
 
-    return c.json({ ok: true, interpretation });
+    return c.json({
+      ok: true,
+      interpretation,
+      drucoins: typeof drucoinsAfter === 'number' ? drucoinsAfter : undefined,
+    });
   } catch (err: any) {
     console.error('ðŸ’¥ [INTERPRET ERROR]:', err);
     return c.json({ ok: false, message: err?.message || String(err) });

@@ -77,12 +77,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
-        if (accepted) {
-          this.acceptedTerms = true;
-          if (this.auth.authFlowStarted) {
-            this.finishAuthFlow();
-          }
-        }
+        this.acceptedTerms = accepted;
       });
   }
 
@@ -137,35 +132,51 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ============================================================================
   // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
   // ============================================================================
- private async afterAuth() {
-  const status = await this.sessionService.validate(true);
-  const needsTerms = status === 'needs-terms' || (await this.auth.syncTermsStatus());
+  private async afterAuth() {
+    try {
+      const status = await this.sessionService.validate(true);
+      if (status === 'invalid') {
+        this.auth.authFlowStarted = false;
+        this.loginError = 'No pudimos validar tu sesión. Intenta nuevamente.';
+        return;
+      }
 
-  if (!needsTerms && status === 'valid') {
-    this.finishAuthFlow();
-    return;
-  }
+      const needsTerms =
+        status === 'needs-terms' || (await this.auth.syncTermsStatus());
 
-  if (needsTerms) {
-    this.auth.authFlowStarted = true;
+      if (!needsTerms) {
+        this.finishAuthFlow();
+        return;
+      }
 
-    const accepted = await this.termsCoordinator.openManualForResult();
+      const accepted = await this.termsCoordinator.openForResult();
+      if (!accepted) {
+        this.auth.authFlowStarted = false;
+        return;
+      }
 
+      const registered = await this.auth.markTermsAcceptedRemote();
+      if (!registered) {
+        this.loginError =
+          'No pudimos registrar tu aceptación de Términos. Intenta de nuevo.';
+        this.auth.requireTermsAcceptance();
+        this.auth.authFlowStarted = false;
+        return;
+      }
 
-    if (accepted) {
+      await this.sessionService.validate(true);
       this.finishAuthFlow();
-    } else {
+    } catch (err) {
+      console.error('afterAuth error', err);
+      this.loginError = 'Ocurrió un error al validar tu sesión.';
       this.auth.authFlowStarted = false;
     }
-    return;
   }
-
-  this.auth.authFlowStarted = false;
-}
 
 
   private finishAuthFlow() {
     this.auth.authFlowStarted = false;
+    this.loginError = '';
     if (this.router.url !== '/spreads') {
       this.router.navigate(['/spreads']);
     }
@@ -254,12 +265,18 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
   private async resumeGoogleRedirect() {
     this.loading = true;
-    const user = await this.auth.completeGoogleRedirect();
-    if (user) {
-      this.auth.authFlowStarted = true;
-      await this.afterAuth();
+    try {
+      const user = await this.auth.completeGoogleRedirect();
+      if (user) {
+        this.auth.authFlowStarted = true;
+        await this.afterAuth();
+      }
+    } finally {
+      this.loading = false;
+      if (!this.auth.currentUser) {
+        this.auth.authFlowStarted = false;
+      }
     }
-    this.loading = false;
   }
 
   private describeFirebaseError(err: any): string {
@@ -283,7 +300,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   // ?? Terminos y Condiciones
   // ============================================================================
   async openTerms() {
-    const accepted = await this.termsCoordinator.openManualForResult();
+    const accepted = await this.termsCoordinator.openForResult();
     if (accepted) {
       this.acceptedTerms = true;
     }

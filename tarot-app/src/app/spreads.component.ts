@@ -1,4 +1,4 @@
-﻿  import { Component, OnInit, inject, NgZone, ChangeDetectorRef, DestroyRef } from '@angular/core';
+﻿  import { Component, OnInit, OnDestroy, inject, NgZone, ChangeDetectorRef, DestroyRef } from '@angular/core';
   import { CommonModule } from '@angular/common';
   import { FormsModule } from '@angular/forms';
   import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
@@ -12,7 +12,6 @@
   import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
   import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
   import { HangingMenuComponent } from './components/hanging-menu.component';
-  import { TermsCoordinatorService } from './core/services/terms-coordinator.service';
   import { AuthService } from './core/auth/auth.service';
   import { SessionService } from './core/services/session.service';
   import { Router } from '@angular/router';
@@ -65,7 +64,7 @@ type Placed = {
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
   })
-  export class SpreadsComponent implements OnInit {
+  export class SpreadsComponent implements OnInit, OnDestroy {
     private api   = inject(TarotApi);
     private loader= inject(ImageLoaderService);
     private zone  = inject(NgZone);
@@ -75,7 +74,6 @@ type Placed = {
     private authService = inject(AuthService);
     private sessionService = inject(SessionService);
     private router = inject(Router);
-    private termsCoordinator = inject(TermsCoordinatorService);
     private destroyRef = inject(DestroyRef);
     // ===== estado principal =====
     spreadId: 'celtic-cross-10'|'ppf-3'|'free' = 'celtic-cross-10';
@@ -104,7 +102,7 @@ type Placed = {
     focusIdx = 0;
     
     aiResponse = '';
-    loadingInterpret = false;
+    isInterpreting = false;
     interpretationText = '';
     showInterpretation = false;
     loading= false;
@@ -132,12 +130,15 @@ type Placed = {
       { label: 'Cerrar sesion', action: 'logout' }
     ];
     readonly deckStack = Array.from({ length: 5 }, (_, i) => i);
+    readonly interpretCost = 1;
+    private activeModalContexts = new Set<string>();
   
     
   
     get canDeal(){ return this.deckReady && !this.dealing; }
     get isFree(){ return this.spreadId === 'free'; }
     get activeCards():Placed[]{ return this.isFree ? (this.layers[this.activeLayer]?.cards ?? []) : this.placed; }
+    get hasEnoughDrucoins(): boolean { return this.drucoinBalance >= this.interpretCost; }
     private bgCandidates = [
     `${environment.CDN_BASE}/cards/celtic-cloth.webp`
   ];
@@ -235,14 +236,44 @@ toggleBookPanel() {
       if (data.ok) {
       this.historyList = data.history;
       this.writeHistory(data.history); // sincroniza local
-       }
+      }
       }
       // quota stream already updates via session snapshot; extra refresh not needed here
+    }
+
+    ngOnDestroy() {
+      this.activeModalContexts.clear();
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('modal-open', 'interpret-open');
+      }
     }
     async refreshQuota(force = false){
   await this.sessionService.validate(force);
   this.cdr.markForCheck();
 }
+
+    private setBodyModalState(context: string, active: boolean, extraClass?: string) {
+      if (typeof document === 'undefined') {
+        return;
+      }
+
+      if (active) {
+        this.activeModalContexts.add(context);
+        document.body.classList.add('modal-open');
+        if (extraClass) {
+          document.body.classList.add(extraClass);
+        }
+        return;
+      }
+
+      this.activeModalContexts.delete(context);
+      if (this.activeModalContexts.size === 0) {
+        document.body.classList.remove('modal-open');
+      }
+      if (extraClass) {
+        document.body.classList.remove(extraClass);
+      }
+    }
 
     private async ensureReadingAllowance(): Promise<boolean> {
   if (this.needsTerms) {
@@ -265,6 +296,9 @@ toggleBookPanel() {
 
     if (res.status === 402) {
       const payload = await res.json().catch(() => ({}));
+      if (payload?.reason === 'no_drucoins') {
+        this.authService.updateDrucoinBalance(0);
+      }
       alert(payload?.message || 'No tienes tiradas o Drucoins suficientes.');
       return false;
     }
@@ -295,64 +329,173 @@ private async afterSuccessfulDraw()
         img.src = url;
       }
     }
-  async runInterpretation() {
-  if (!(await this.ensureReadingAllowance())) return;
-  try {
-    this.loadingInterpret = true;
-    this.aiResponse = '';
-    this.interpretationText = '';
-    this.showInterpretation = false;
-    const cards = this.placed.map(c => ({
-      name: c.cardId,
-      reversed: c.reversed
-    }));
 
-    const firebaseUser = this.auth.currentUser;
-    const token = firebaseUser ? await firebaseUser.getIdToken(true) : await this.authService.getIdToken();
-    if (!token) {
-      await this.router.navigate(['/login']);
-      return;
+  private hideInterpretationModal() {
+    if (this.showInterpretation) {
+      this.showInterpretation = false;
     }
-
-    const res = await fetch(`${environment.API_BASE}/interpret`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        context: this.userContext,
-        cards,
-        spreadId: this.spreadId
-      })
-    });
-
-    if (res.status === 402) {
-      const payload = await res.json().catch(() => ({}));
-      alert(payload?.message || 'No puedes interpretar la tirada en este momento.');
-      return;
-    }
-
-    const data = await res.json();
-    if (data.ok && data.interpretation) {
-      const interpretation = this.normalizeInterpretation(data.interpretation);
-      this.interpretationText = interpretation;
-      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
-        this.toHtml(interpretation)
-      );
-      this.showInterpretation = true;
-      await this.saveReading();
-    } else {
-      alert('No se recibiÃ³ interpretaciÃ³n.');
-    }
-  } catch (err) {
-    alert('Error interpretando la tirada.');
-    console.error(err);
-  } finally {
-    this.loadingInterpret = false;
-    this.cdr.markForCheck();
+    this.setBodyModalState('interpret-view', false, 'interpret-open');
   }
-}
+
+  private ensureHasDrucoins(): boolean {
+    if (this.hasEnoughDrucoins) {
+      return true;
+    }
+    alert('No tienes DruCoins suficientes para interpretar la tirada.');
+    return false;
+  }
+  async runInterpretation() {
+
+    if (this.isInterpreting) return;
+
+    if (!(await this.ensureReadingAllowance())) return;
+
+
+
+    this.hideInterpretationModal();
+
+
+
+    try {
+
+      this.isInterpreting = true;
+
+      this.setBodyModalState('interpreting', true);
+
+      this.aiResponse = '';
+
+      this.interpretationText = '';
+
+      const cards = this.placed.map(c => ({
+
+        name: c.cardId,
+
+        reversed: c.reversed
+
+      }));
+
+
+
+      const firebaseUser = this.auth.currentUser;
+
+      const token = firebaseUser ? await firebaseUser.getIdToken(true) : await this.authService.getIdToken();
+
+      if (!token) {
+
+        await this.router.navigate(['/login']);
+
+        return;
+
+      }
+
+
+
+      const res = await fetch(`${environment.API_BASE}/interpret`, {
+
+        method: 'POST',
+
+        headers: {
+
+          'Content-Type': 'application/json',
+
+          Authorization: `Bearer ${token}`
+
+        },
+
+        body: JSON.stringify({
+
+          context: this.userContext,
+
+          cards,
+
+          spreadId: this.spreadId
+
+        })
+
+      });
+
+
+
+      if (res.status === 402) {
+
+        const payload = await res.json().catch(() => ({}));
+
+        if (typeof payload?.drucoins === 'number') {
+
+          this.authService.updateDrucoinBalance(payload.drucoins);
+
+        }
+
+        const message =
+
+          payload?.message ||
+
+          (payload?.error === 'NO_DRUCOINS'
+
+            ? 'No tienes DruCoins suficientes para interpretar la tirada.'
+
+            : 'No puedes interpretar la tirada en este momento.');
+
+        alert(message);
+
+        return;
+
+      }
+
+
+
+      const data = await res.json();
+
+      if (typeof data?.drucoins === 'number') {
+
+        this.authService.updateDrucoinBalance(data.drucoins);
+
+      }
+
+
+
+      if (data.ok && data.interpretation) {
+
+        const interpretation = this.normalizeInterpretation(data.interpretation);
+
+        this.interpretationText = interpretation;
+
+        this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
+
+          this.toHtml(interpretation)
+
+        );
+
+        this.showInterpretation = true;
+
+        this.setBodyModalState('interpret-view', true, 'interpret-open');
+
+        await this.saveReading();
+
+      } else {
+
+        alert('No se recibio interpretacion.');
+
+      }
+
+    } catch (err) {
+
+      alert('Error interpretando la tirada.');
+
+      console.error(err);
+
+    } finally {
+
+      this.isInterpreting = false;
+
+      this.setBodyModalState('interpreting', false);
+
+      this.cdr.markForCheck();
+
+    }
+
+  }
+
 async saveReading() {
   try {
     const user = this.auth.currentUser;
@@ -574,17 +717,22 @@ async saveReading() {
     // ======================================================================
    // ======================================================================
   startInterpretation() {
-    if (!this.activeCards.length) return;
+    if (!this.activeCards.length || this.isInterpreting) return;
+    if (!this.ensureHasDrucoins()) return;
+
     if (this.isMobile) {
       if (!this.userContextInput) {
         this.userContextInput = this.userContext || '';
       }
       this.showMobileInterpretModal = true;
+      this.setBodyModalState('mobile-interpret', true);
       return;
     }
     this.confirmContext();
   }
   confirmContext() {
+    if (this.isInterpreting) return;
+    if (!this.ensureHasDrucoins()) return;
     this.userContext = (this.userContextInput || '').trim();
     if (!this.userContext) {
       alert('Por favor, escribe tu contexto o pregunta antes de continuar.');
@@ -594,10 +742,12 @@ async saveReading() {
   }
   confirmMobileInterpretation() {
     this.showMobileInterpretModal = false;
+    this.setBodyModalState('mobile-interpret', false);
     this.confirmContext();
   }
   closeMobileInterpretation() {
     this.showMobileInterpretModal = false;
+    this.setBodyModalState('mobile-interpret', false);
   }
   async hacerTirada() {
     if (!this.canDeal) return;
@@ -909,7 +1059,7 @@ async saveReading() {
  async openHistory(e?: MouseEvent) {
   e?.stopPropagation();
   this.closeCardOverlay();
-  this.showInterpretation = false;
+  this.hideInterpretationModal();
 
   let list: HistoryEntry[] = [];
 
@@ -945,12 +1095,12 @@ async saveReading() {
 
   this.historyList = list;
   this.showHistory = true;
+  this.setBodyModalState('history', true);
   this.cdr.detectChanges();
 }
 
     closeInterpret() {
-    this.showInterpretation = false;
-    document.body.classList.remove('modal-open');
+    this.hideInterpretationModal();
   }
     setLastDraw(cards: DrawCard[]) {
       this.lastDraw = Array.isArray(cards) ? cards : [];
@@ -962,7 +1112,8 @@ async saveReading() {
   this.showInterpretation = false;
   this.layerOverlay = false;
   // Ã°Å¸â€™Â¡ Asegura que el tablero recupere foco y sea clicable
-  document.body.classList.remove('modal-open', 'spread-complete');
+  this.setBodyModalState('history', false);
+  document.body.classList.remove('spread-complete');
   document.querySelector('.board')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   // Ã°Å¸â€â€ž Refresca la vista por si Angular estaba dormido
   this.cdr.detectChanges();

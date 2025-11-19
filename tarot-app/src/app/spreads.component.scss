@@ -489,13 +489,36 @@
 
 .context-wrap .context-action {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
+  gap: 0.4rem;
 }
 
 .context-wrap .btn-papiro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   white-space: nowrap;
   padding: 0.6rem 1rem;
   font-size: 0.95rem;
+}
+
+.cost-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(214,178,94,0.4);
+  background: rgba(214,178,94,0.15);
+  color: var(--gold);
+}
+
+.drucoin-warning {
+  font-size: 0.82rem;
+  color: #ff9c9c;
+  text-shadow: 0 0 6px rgba(0,0,0,0.4);
 }
 
 @media (max-width: 800px) {
@@ -831,10 +854,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(3px);
-  animation: fadeIn 0.5s ease;
+  padding: 1rem;
+  z-index: 2400;
+  background: rgba(3, 5, 12, 0.88);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.4s ease;
 }
 
 @keyframes fadeIn {
@@ -959,7 +983,40 @@
 
 @keyframes shimmer { 0% { opacity:.1 } 100% { opacity:.3 } }
 
+@media (max-width: 768px) {
+  .interpret-modal {
+    align-items: stretch;
+  }
+
+  .interpret-container {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .interpret-body {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .interpret-rail {
+    min-width: 100%;
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid rgba(168,134,62,0.3);
+  }
+}
+
 :host-context(body.modal-open) .layout { overflow: hidden; }
+
+:host-context(body.interpret-open) .board,
+:host-context(body.interpret-open) .panel,
+:host-context(body.interpret-open) .rail {
+  filter: blur(4px);
+  pointer-events: none;
+}
 
 /* Loading overlay IA */
 .loading-overlay {
@@ -1088,9 +1145,15 @@
 
 .mobile-action-group {
   padding: 0 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 .mobile-action-group .btn-main {
   width: 100%;
+}
+.mobile-action-group .drucoin-warning {
+  margin: 0;
 }
 
 .mobile-interpret-overlay {

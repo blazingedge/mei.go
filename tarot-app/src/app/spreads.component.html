@@ -104,7 +104,7 @@
       <!-- Drucoins -->
       <div class="drucoins-hud bubble">
         <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
-        <span class="count">{{ quota?.remaining ?? 0 }}</span>
+        <span class="count">{{ drucoinBalance }}</span>
       </div>
 
       <!-- Selector de tirada -->
@@ -200,9 +200,13 @@
       <button type="button"
               class="btn-main"
               (click)="startInterpretation()"
-              [disabled]="!activeCards.length">
+              [disabled]="!activeCards.length || !hasEnoughDrucoins || isInterpreting">
         Interpretar tirada
+        <span class="cost-chip">-1 DruCoin</span>
       </button>
+      @if (!hasEnoughDrucoins) {
+        <p class="drucoin-warning">Necesitas DruCoins para interpretar la tirada.</p>
+      }
     </div>
 
     <!-- Donación (mobile, discreta debajo del panel) -->
@@ -416,12 +420,12 @@
   <!-- ===========================================================
         DRUCOINS HUD (DESKTOP)
        =========================================================== -->
-  <div class="drucoins-hud" title="Tus tiradas disponibles">
+  <div class="drucoins-hud" title="Tus DruCoins disponibles">
     <img class="coin"
          src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" />
     <div class="counter">
-      <strong>{{ quota?.remaining ?? '--' }}</strong>
-      <small>/{{ quota?.monthly ?? '--' }}</small>
+      <strong>{{ drucoinBalance }}</strong>
+      <small>DruCoins</small>
     </div>
   </div>
 
@@ -458,9 +462,15 @@
       </div>
 
       <div class="context-action">
-        <button class="btn-papiro" (click)="confirmContext()">
+        <button class="btn-papiro"
+                (click)="confirmContext()"
+                [disabled]="isInterpreting || !hasEnoughDrucoins">
           ?? Interpretar tirada
+          <span class="cost-chip">-1 DruCoin</span>
         </button>
+        @if (!hasEnoughDrucoins) {
+          <p class="drucoin-warning">No tienes DruCoins suficientes.</p>
+        }
       </div>
     </div>
 
@@ -490,10 +500,13 @@
         <button type="button"
                 class="btn-pill primary"
                 (click)="confirmMobileInterpretation()"
-                [disabled]="!userContextInput.trim()">
+                [disabled]="!userContextInput.trim() || isInterpreting || !hasEnoughDrucoins">
           Interpretar
         </button>
       </div>
+      @if (!hasEnoughDrucoins) {
+        <p class="drucoin-warning">Recarga tus DruCoins para interpretar.</p>
+      }
     </div>
   </div>
 }
@@ -601,7 +614,7 @@
 <!-- ===========================================================
       LOADING (IA INTERPRETANDO)
      =========================================================== -->
-@if (loadingInterpret) {
+@if (isInterpreting) {
   <div class="loading-overlay" aria-busy="true">
     <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
     <p>El mago está interpretando tu lectura…</p>
@@ -629,4 +642,3 @@
     </div>
   </div>
 }
-

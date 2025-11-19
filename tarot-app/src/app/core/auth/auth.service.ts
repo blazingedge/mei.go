@@ -295,11 +295,7 @@ export class AuthService {
       this.quotaRemainingSubject.next(0);
     }
 
-    if (typeof snapshot.drucoins === 'number') {
-      this.drucoinBalanceSubject.next(snapshot.drucoins);
-    } else {
-      this.drucoinBalanceSubject.next(0);
-    }
+    this.updateDrucoinBalance(snapshot.drucoins ?? 0);
   }
 
   clearSessionState() {
@@ -307,7 +303,13 @@ export class AuthService {
     this.planSubject.next(null);
     this.quotaSubject.next(null);
     this.quotaRemainingSubject.next(0);
-    this.drucoinBalanceSubject.next(0);
+    this.updateDrucoinBalance(0);
+  }
+
+  updateDrucoinBalance(balance: number | null | undefined) {
+    const normalized =
+      typeof balance === 'number' && Number.isFinite(balance) ? balance : 0;
+    this.drucoinBalanceSubject.next(Math.max(0, normalized));
   }
 
   requireTermsAcceptance() {
