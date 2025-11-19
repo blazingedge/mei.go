@@ -141,30 +141,15 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
         return;
       }
 
-      const needsTerms =
-        status === 'needs-terms' || (await this.auth.syncTermsStatus());
-
-      if (!needsTerms) {
-        this.finishAuthFlow();
-        return;
+      if (status === 'needs-terms') {
+        const accepted = await this.sessionService.ensureTermsAcceptance();
+        if (!accepted) {
+          this.loginError = 'Debes aceptar los Términos y Condiciones.';
+          this.auth.authFlowStarted = false;
+          return;
+        }
       }
 
-      const accepted = await this.termsCoordinator.openForResult();
-      if (!accepted) {
-        this.auth.authFlowStarted = false;
-        return;
-      }
-
-      const registered = await this.auth.markTermsAcceptedRemote();
-      if (!registered) {
-        this.loginError =
-          'No pudimos registrar tu aceptación de Términos. Intenta de nuevo.';
-        this.auth.requireTermsAcceptance();
-        this.auth.authFlowStarted = false;
-        return;
-      }
-
-      await this.sessionService.validate(true);
       this.finishAuthFlow();
     } catch (err) {
       console.error('afterAuth error', err);

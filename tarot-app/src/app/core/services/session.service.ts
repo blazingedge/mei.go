@@ -9,6 +9,7 @@ import {
   PlanId,
   SessionSnapshot,
 } from '../auth/auth.service';
+import { TermsCoordinatorService } from './terms-coordinator.service';
 
 type SessionCheckResult = 'valid' | 'needs-terms' | 'invalid';
 
@@ -24,11 +25,13 @@ interface SessionValidateResponse {
 export class SessionService {
   private base = environment.API_BASE;
   private pendingValidation: Promise<SessionCheckResult> | null = null;
+  private termsFlowPromise: Promise<boolean> | null = null;
 
   constructor(
     private http: HttpClient,
     private auth: AuthService,
-    private router: Router
+    private router: Router,
+    private termsCoordinator: TermsCoordinatorService
   ) {}
 
   async bootstrap() {
@@ -42,8 +45,12 @@ export class SessionService {
     }
 
     if (result === 'needs-terms') {
-      // Mantente en la pantalla actual (login) para que aparezca el modal.
-      if (this.router.url !== '/login' && this.router.url !== '/spreads') {
+      const accepted = await this.ensureTermsAcceptance();
+      if (accepted) {
+        if (this.router.url === '/' || this.router.url === '/login') {
+          this.router.navigate(['/spreads']);
+        }
+      } else if (this.router.url !== '/login') {
         this.router.navigate(['/login']);
       }
       return;
@@ -114,6 +121,42 @@ export class SessionService {
       }
       console.error('Session validate error:', err);
       return 'invalid';
+    }
+  }
+
+  async ensureTermsAcceptance(): Promise<boolean> {
+    if (this.termsFlowPromise) {
+      return this.termsFlowPromise;
+    }
+
+    const flow = this.runTermsFlow();
+    this.termsFlowPromise = flow;
+    try {
+      return await flow;
+    } finally {
+      this.termsFlowPromise = null;
+    }
+  }
+
+  private async runTermsFlow(): Promise<boolean> {
+    try {
+      const accepted = await this.termsCoordinator.openForResult();
+      if (!accepted) {
+        return false;
+      }
+
+      const remote = await this.auth.markTermsAcceptedRemote();
+      if (!remote) {
+        this.auth.requireTermsAcceptance();
+        return false;
+      }
+
+      await this.validate(true);
+      return true;
+    } catch (err) {
+      console.error('Terms flow error', err);
+      this.auth.requireTermsAcceptance();
+      return false;
     }
   }
 }
