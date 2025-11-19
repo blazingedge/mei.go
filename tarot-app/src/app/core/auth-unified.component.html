@@ -1,6 +1,6 @@
 <!-- ===========================================================
      ✨ INTRO EFECTO "EL MEIGO"
-     =========================================================== -->
+=========================================================== -->
 <div class="intro-overlay" *ngIf="showIntro">
   <app-intro-particles></app-intro-particles>
   <h1 class="intro-text">El meigo</h1>
@@ -8,7 +8,7 @@
 
 <!-- ===========================================================
      🧿 LAYOUT PRINCIPAL AUTH
-     =========================================================== -->
+=========================================================== -->
 <div class="auth-layout">
   
   <!-- LOGO / LADO IZQUIERDO -->
@@ -27,21 +27,19 @@
         <h2>Iniciar sesión</h2>
 
         <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-          <input
-            type="email"
-            name="loginEmail"
-            placeholder="Email"
-            required
-            [(ngModel)]="login.email"
-            [disabled]="loading"/>
+          <input type="email"
+                 name="loginEmail"
+                 placeholder="Email"
+                 required
+                 [(ngModel)]="login.email"
+                 [disabled]="loading"/>
 
-          <input
-            type="password"
-            name="loginPassword"
-            placeholder="Contraseña"
-            required
-            [(ngModel)]="login.password"
-            [disabled]="loading"/>
+          <input type="password"
+                 name="loginPassword"
+                 placeholder="Contraseña"
+                 required
+                 [(ngModel)]="login.password"
+                 [disabled]="loading"/>
 
           @if (loginError) {
             <p class="error">{{ loginError }}</p>
@@ -140,3 +138,8 @@
     </div>
   </div>
 </div>
+
+<!-- ===========================================================
+     📝 MODAL DE TÉRMINOS Y CONDICIONES (SE AGREGA AQUÍ)
+=========================================================== -->
+<app-terms-modal></app-terms-modal>

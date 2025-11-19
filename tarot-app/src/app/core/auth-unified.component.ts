@@ -9,6 +9,7 @@ import { environment } from '../../environments/environment';
 import { Subject, takeUntil } from 'rxjs';
 import { SessionService } from './services/session.service';
 import { TermsCoordinatorService } from './services/terms-coordinator.service';
+import { TermsModalComponent } from '../components/terms-modal.component';
 
 @Component({
   standalone: true,
@@ -17,16 +18,14 @@ import { TermsCoordinatorService } from './services/terms-coordinator.service';
     CommonModule,
     FormsModule,
     LogoComponent,
-    IntroParticlesComponent
+    IntroParticlesComponent,
+    TermsModalComponent
   ],
   templateUrl: './auth-unified.component.html',
   styleUrls: ['./auth-unified.component.scss']
 })
 export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
-  // ----------------------------------------------------
-  // Estado
-  // ----------------------------------------------------
   showIntro = true;
   acceptedTerms = false;
 
@@ -45,9 +44,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     private termsCoordinator: TermsCoordinatorService
   ) {}
 
-  // ============================================================================
-  // 🎬 INTRO
-  // ============================================================================
   ngAfterViewInit() {
     const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
 
@@ -69,11 +65,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }, 7500);
   }
 
-  // ============================================================================
-  // ⭐ ngOnInit — SOLO reacciona si authFlowStarted = true
-  // ============================================================================
   async ngOnInit() {
     this.resumeGoogleRedirect();
+
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
@@ -97,12 +91,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-
-
-
-  // ============================================================================
-  // 🔐 LOGIN CLÁSICO
-  // ============================================================================
   async onLogin() {
     this.auth.authFlowStarted = true;
     this.loginError = '';
@@ -129,12 +117,10 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
   }
 
-  // ============================================================================
-  // 🌟 FUNCIÓN CENTRAL — MANEJA FLUJO TRAS LOGIN
-  // ============================================================================
   private async afterAuth() {
     try {
       const status = await this.sessionService.validate(true);
+
       if (status === 'invalid') {
         this.auth.authFlowStarted = false;
         this.loginError = 'No pudimos validar tu sesión. Intenta nuevamente.';
@@ -151,13 +137,13 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
       }
 
       this.finishAuthFlow();
+
     } catch (err) {
       console.error('afterAuth error', err);
       this.loginError = 'Ocurrió un error al validar tu sesión.';
       this.auth.authFlowStarted = false;
     }
   }
-
 
   private finishAuthFlow() {
     this.auth.authFlowStarted = false;
@@ -167,10 +153,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
   }
 
-
-  // ============================================================================
-  // 📝 REGISTRO
-  // ============================================================================
   async onRegister() {
     if (!this.acceptedTerms) {
       alert('Debes aceptar los Términos y Condiciones antes de registrarte.');
@@ -216,9 +198,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
   }
 
-  // ============================================================================
-  // 🔑 LOGIN GOOGLE
-  // ============================================================================
   async authGoogle() {
     this.auth.authFlowStarted = true;
     this.loading = true;
@@ -226,22 +205,26 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
     try {
       const user: GoogleLoginResult = await this.auth.loginWithGoogle();
+
       if (user === 'redirect') {
         this.loginError =
-          'Tu navegador bloqueó la ventana de Google. Permite las ventanas emergentes para este sitio (icono de pop-ups junto a la barra de direcciones) o continúa en la pestaña nueva que se abrió.';
+          'Tu navegador bloqueó la ventana de Google. Permite las ventanas emergentes para este sitio.';
         return;
       }
+
       if (!user) {
         this.auth.authFlowStarted = false;
         return;
       }
 
       await this.afterAuth();
+
     } catch (err: any) {
       this.loginError = this.describeFirebaseError(err);
       this.auth.authFlowStarted = false;
     } finally {
       this.loading = false;
+
       if (!this.auth.currentUser) {
         this.auth.authFlowStarted = false;
       }
@@ -258,6 +241,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
       }
     } finally {
       this.loading = false;
+
       if (!this.auth.currentUser) {
         this.auth.authFlowStarted = false;
       }
@@ -266,24 +250,22 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
   private describeFirebaseError(err: any): string {
     const code: string = err?.code || err?.message || '';
+
     if (code.includes('popup-blocked') || code.includes('popup-closed')) {
-      return 'El navegador bloqueó la ventana de Google. Activa las ventanas emergentes para este sitio (Chrome/Firefox) o usa el modo redirect.';
+      return 'El navegador bloqueó la ventana de Google. Activa las ventanas emergentes.';
     }
 
     if (code.includes('unauthorized-domain')) {
-      return 'Google rechazó el dominio actual. Ve a Firebase > Authentication > Domains y añade "mei-go.pages.dev".';
+      return 'Google rechazó el dominio actual. Añade "mei-go.pages.dev" en Firebase > Authentication > Domains.';
     }
 
     if (code.includes('cross-origin')) {
-      return 'Otra cabecera (COOP/COEP) está bloqueando la comunicación con Google. Quita esas cabeceras o usa autenticación por redirección.';
+      return 'Una cabecera COOP/COEP bloquea la autenticación. Usa redirect o elimina esas cabeceras.';
     }
 
     return err?.message || 'No se pudo iniciar sesión con Google.';
   }
 
-  // ============================================================================
-  // ?? Terminos y Condiciones
-  // ============================================================================
   async openTerms() {
     const accepted = await this.termsCoordinator.openForResult();
     if (accepted) {
@@ -291,17 +273,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
   }
 
-  // ============================================================================
-  // FACEBOOK
-  // ============================================================================
   authFacebook() {
     alert('Aún no está implementado 😅');
   }
 }
 
-// ======================================================
-// 🌐 CALLBACK TURNSTILE
-// ======================================================
 declare global {
   interface Window {
     onCaptchaVerified: (token: string) => void;
