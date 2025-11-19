@@ -1,4 +1,10 @@
-﻿import {
+﻿// =======================
+//  SPREADS COMPONENT
+//  DRUCOINS ONLY — FULL DEBUG
+//  PARTE 1 / 4
+// =======================
+
+import {
   Component,
   OnInit,
   OnDestroy,
@@ -7,13 +13,16 @@
   ChangeDetectorRef,
   DestroyRef,
 } from '@angular/core';
+
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragEnd } from '@angular/cdk/drag-drop';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
+
 import { environment } from '../environments/environment';
+
 import {
   TarotApi,
   CardMeta,
@@ -21,14 +30,22 @@ import {
   DrawResult,
   DrawCard,
 } from '../services/spreads.service';
+
 import { ImageLoaderService } from '../services/image-loader.service';
 import { Auth } from '@angular/fire/auth';
+
 import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
+
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HangingMenuComponent } from './components/hanging-menu.component';
+
 import { AuthService } from './core/auth/auth.service';
 import { SessionService } from './core/services/session.service';
 import { Router } from '@angular/router';
+
+// ==========================
+// TYPES
+// ==========================
 
 type Placed = {
   position: number;
@@ -43,6 +60,7 @@ type Placed = {
   faceup: boolean;
   layer: number;
 };
+
 type Slot = { position: number; x: number; y: number; r: number; z: number };
 type Layer = { id: number; cards: Placed[] };
 type FreeLayout = 'pile' | 'grid' | 'fan';
@@ -67,13 +85,11 @@ type SavedReadingDetail = SavedReadingSummary & {
   spreadId?: string;
 };
 
-const PLAN_LIMITS = {
-  luz: { monthly: 1 },
-  sabiduria: { monthly: 30 },
-  quantico: { monthly: 9999 },
-} as const;
-
 const HISTORY_KEY = 'tarot-history-v1';
+
+// ===============================
+// COMPONENT
+// ===============================
 
 @Component({
   selector: 'app-spreads',
@@ -89,6 +105,11 @@ const HISTORY_KEY = 'tarot-history-v1';
   styleUrls: ['./spreads.component.scss', './mobile.scss'],
 })
 export class SpreadsComponent implements OnInit, OnDestroy {
+
+  // ============================================
+  // INJECCIONES
+  // ============================================
+
   private api = inject(TarotApi);
   private loader = inject(ImageLoaderService);
   private zone = inject(NgZone);
@@ -100,16 +121,22 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
-  // ===== estado principal =====
+  // ============================================
+  // ESTADO PRINCIPAL
+  // ============================================
+
   spreadId: 'celtic-cross-10' | 'ppf-3' | 'free' = 'celtic-cross-10';
   spreadLabel = 'Cruz Celta';
+
   isMobile = false;
   private readonly viewportQuery = '(max-width: 768px)';
+
   backUrl!: string;
   boardBgUrl = '';
 
   deckMap = new Map<string, CardMeta>();
   spreads: SpreadDef[] = [];
+
   slots: Slot[] = [];
   placed: Placed[] = [];
   layers: Layer[] = [{ id: 1, cards: [] }];
@@ -120,6 +147,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   deckReady = false;
   deckError: string | null = null;
   deckCount = 0;
+
   dealing = false;
   deckProgress = 0;
   deckShuffling = false;
@@ -127,6 +155,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   stepMode = false;
   private buffer: Placed[] = [];
   nextIdx = 0;
+
   freeLayout: FreeLayout = 'pile';
   focusIdx = 0;
 
@@ -152,6 +181,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   showSavedReadings = false;
   savedReadingsLoading = false;
   savedReadings: SavedReadingSummary[] = [];
+
   savedDetail: SavedReadingDetail | null = null;
   savedDetailSafe: SafeHtml | null = null;
   savedDetailLoading = false;
@@ -166,18 +196,26 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   ];
 
   readonly deckStack = Array.from({ length: 5 }, (_, i) => i);
+
+  // COSTE DE INTERPRETACIÓN (1 Drucoin)
   readonly interpretCost = 1;
+
+  drucoinBalance = 0;
+
   private activeModalContexts = new Set<string>();
 
   get canDeal() {
     return this.deckReady && !this.dealing;
   }
+
   get isFree() {
     return this.spreadId === 'free';
   }
+
   get activeCards(): Placed[] {
     return this.isFree ? this.layers[this.activeLayer]?.cards ?? [] : this.placed;
   }
+
   get hasEnoughDrucoins(): boolean {
     return this.drucoinBalance >= this.interpretCost;
   }
@@ -191,1023 +229,463 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   overlayCardMeaning = '';
   loadingCardMeaning = false;
 
-  quota: { remaining: number; monthly: number } | null = null;
-  drucoinBalance = 0;
+  // ============================================
+  // CONSTRUCTOR
+  // ============================================
 
-  // === constructor ===
   constructor(private sanitizer: DomSanitizer) {
+
+    console.debug('%c[INIT] SpreadsComponent constructor()', 'color:#66f');
+
     this.backUrl =
       environment.CARD_BACK_URL ||
       `${environment.CDN_BASE}/cards/contracara.webp`;
 
+    // Observador para móvil/desktop
     this.observeViewport();
 
-    this.authService.quota$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((quota) => {
-        this.quota = quota
-          ? { monthly: quota.monthly, remaining: quota.remaining }
-          : null;
-        this.cdr.markForCheck();
-      });
-
+    // Solo manejamos DRUCOINS ahora
     this.authService.drucoinBalance$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((balance) => {
+        console.debug('%c[DruCoins Updated]', 'color:#0f0', balance);
         this.drucoinBalance = balance ?? 0;
         this.cdr.markForCheck();
       });
   }
 
-  // ============ ciclo de vida ============
+  // ============================================
+  // CICLO DE VIDA
+  // ============================================
 
   async ngOnInit() {
+
+    console.group('%c[SpreadsComponent INIT]', 'color:#66f');
+
     this.authService.needsTerms$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((needs) => {
+        console.debug('→ needsTerms updated:', needs);
         this.needsTerms = needs;
         this.cdr.markForCheck();
       });
 
     const sessionStatus = await this.sessionService.validate(true);
+    console.debug('→ Session status:', sessionStatus);
+
     if (sessionStatus === 'invalid') {
+      console.warn('⚠️ Sesión inválida. Redirigiendo a login.');
       await this.router.navigate(['/login']);
+      console.groupEnd();
       return;
     }
 
     const needsTerms =
       sessionStatus === 'needs-terms' ||
       (await this.authService.syncTermsStatus());
+
+    console.debug('→ needsTerms (sync):', needsTerms);
+
     this.needsTerms = needsTerms;
     this.cdr.markForCheck();
 
     this.resolveBgInBackground();
+
     await this.loadDeckFirst();
     this.rebuildSlots();
     this.loadSpreadsInBackground();
 
     const user = this.auth.currentUser;
+
     if (user) {
       const token = await user.getIdToken(true);
+      console.debug('→ Loading history from API...');
+
       const res = await fetch(`${environment.API_BASE}/history/list`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       const data = await res.json();
       if (data.ok) {
+        console.debug('→ Remote history loaded:', data.history);
         this.historyList = data.history;
         this.writeHistory(data.history);
       }
     }
+
+    console.groupEnd();
   }
 
   ngOnDestroy() {
+    console.debug('%c[DESTROY] SpreadsComponent', 'color:red');
     this.activeModalContexts.clear();
     if (typeof document !== 'undefined') {
       document.body.classList.remove('modal-open', 'interpret-open');
     }
   }
 
-  async refreshQuota(force = false) {
-    await this.sessionService.validate(force);
-    this.cdr.markForCheck();
+  // ============================================
+// DRUCOINS / TERMS / LECTURA — PARTE 2 / 4
+// ============================================
+
+// ---------------------------
+// Verificación de saldo
+// ---------------------------
+
+// ======================================================
+// PARTE 1 — VIEWPORT + BACKGROUND
+// ======================================================
+
+
+
+
+
+private ensureHasDrucoins(): boolean {
+  console.groupCollapsed('%c[Drucoins] ensureHasDrucoins()', 'color:#0ff');
+
+  console.log('→ Balance actual:', this.drucoinBalance);
+  console.log('→ InterpretCost:', this.interpretCost);
+
+  if (this.drucoinBalance >= this.interpretCost) {
+    console.log('✔ Suficientes DruCoins');
+    console.groupEnd();
+    return true;
   }
 
-  // ============ helpers DOM / viewport ============
+  console.warn('❌ No hay suficientes DruCoins');
+  alert('No tienes DruCoins suficientes para interpretar la tirada.');
 
-  private setBodyModalState(context: string, active: boolean, extraClass?: string) {
-    if (typeof document === 'undefined') return;
+  console.groupEnd();
+  return false;
+}
 
-    if (active) {
-      this.activeModalContexts.add(context);
-      document.body.classList.add('modal-open');
-      if (extraClass) document.body.classList.add(extraClass);
-      return;
-    }
+// ---------------------------
+// Verificación de lectura (Términos + Drucoins)
+// ---------------------------
+private async ensureReadingAllowance(): Promise<boolean> {
+  console.group('%c[Reading Allowance Check]', 'color:#ff0');
 
-    this.activeModalContexts.delete(context);
-    if (this.activeModalContexts.size === 0) {
-      document.body.classList.remove('modal-open');
-    }
-    if (extraClass) {
-      document.body.classList.remove(extraClass);
+  // 1) Términos
+  if (this.needsTerms) {
+    console.warn('⚠️ Usuario debe aceptar términos');
+
+    try {
+      const accepted = await this.sessionService.ensureTermsAcceptance();
+      console.log('→ accepted?', accepted);
+
+      this.needsTerms = !accepted;
+      this.cdr.markForCheck();
+
+      if (!accepted) {
+        alert('Debes aceptar los Términos y Condiciones para continuar.');
+        console.groupEnd();
+        return false;
+      }
+    } catch (err) {
+      console.error('❌ Error en flujo de términos:', err);
+      alert('No se pudieron mostrar los Términos. Intenta de nuevo.');
+      console.groupEnd();
+      return false;
     }
   }
 
-  private resolveBgInBackground() {
-    for (const url of this.bgCandidates) {
-      const img = new Image();
-      img.onload = () => {
-        if (!this.boardBgUrl) this.boardBgUrl = url;
-      };
-      img.src = url;
+  // 2) Verificación backend DRUCOINS
+  console.log('→ Verificando saldo en backend…');
+
+  try {
+    const token = await this.authService.getIdToken();
+
+    if (!token) {
+      console.error('❌ No token → redirigir login');
+      await this.router.navigate(['/login']);
+      console.groupEnd();
+      return false;
     }
-  }
 
-  private hideInterpretationModal() {
-    if (this.showInterpretation) {
-      this.showInterpretation = false;
+    const res = await fetch(`${environment.API_BASE}/reading/check`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    console.log('→ Response status:', res.status);
+
+    if (res.ok) {
+      console.log('✔ Backend autorizó lectura');
+      console.groupEnd();
+      return true;
     }
-    this.setBodyModalState('interpret-view', false, 'interpret-open');
-  }
 
-  private observeViewport() {
-    this.isMobile = this.breakpointObserver.isMatched(this.viewportQuery);
+    if (res.status === 402) {
+      const payload = await res.json().catch(() => ({}));
+      console.warn('⚠️ 402 PAYMENT REQUIRED:', payload);
 
-    this.breakpointObserver
-      .observe([this.viewportQuery])
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(({ matches }) => {
-        if (this.isMobile === matches) return;
-        this.zone.run(() => {
-          this.isMobile = matches;
-          this.cdr.markForCheck();
-        });
-      });
-  }
+      if (payload?.reason === 'no_drucoins') {
+        this.authService.updateDrucoinBalance(0);
+      }
 
-  // ============ drucoins / terms / lectura ============
+      alert(payload?.message || 'No tienes DruCoins suficientes.');
+      console.groupEnd();
+      return false;
+    }
 
-  private ensureHasDrucoins(): boolean {
-    if (this.hasEnoughDrucoins) return true;
-    alert('No tienes DruCoins suficientes para interpretar la tirada.');
+    if (res.status === 401) {
+      console.error('❌ Token inválido (401)');
+      await this.authService.logout();
+      await this.router.navigate(['/login']);
+      console.groupEnd();
+      return false;
+    }
+
+    console.error('❌ respuesta inesperada', res.status);
+    console.groupEnd();
+    return false;
+
+  } catch (err) {
+    console.error('❌ Error en reading check', err);
+    console.groupEnd();
     return false;
   }
+}
 
-  private async ensureReadingAllowance(): Promise<boolean> {
-    // 1) Términos
-    if (this.needsTerms) {
-      try {
-        const accepted = await this.sessionService.ensureTermsAcceptance();
-        this.needsTerms = !accepted;
-        this.cdr.markForCheck();
+// =======================================================
+// INTERPRETACIÓN IA (principal flujo) — DRUCOINS
+// =======================================================
 
-        if (!accepted) {
-          alert('Debes aceptar los Términos y Condiciones para continuar.');
-          return false;
-        }
-      } catch (err) {
-        console.error('Terms flow error desde Spreads:', err);
-        alert('No se pudieron mostrar los Términos y Condiciones. Intenta de nuevo.');
-        return false;
-      }
+startInterpretation() {
+  console.group('%c[Interpretation] startInterpretation()', 'color:#f0f');
+
+  if (!this.activeCards.length) {
+    console.warn('⚠️ No hay cartas activas');
+    console.groupEnd();
+    return;
+  }
+
+  if (this.isInterpreting) {
+    console.warn('⚠️ Ya está interpretando');
+    console.groupEnd();
+    return;
+  }
+
+  if (!this.ensureHasDrucoins()) {
+    console.warn('❌ No tiene DruCoins suficientes');
+    console.groupEnd();
+    return;
+  }
+
+  if (this.isMobile) {
+    console.log('→ Interpretación móvil: abriendo modal');
+    if (!this.userContextInput) {
+      this.userContextInput = this.userContext || '';
     }
+    this.showMobileInterpretModal = true;
+    this.setBodyModalState('mobile-interpret', true);
 
-    // 2) Backend: cuota + DruCoins
-    try {
-      const token = await this.authService.getIdToken();
-      if (!token) {
-        await this.router.navigate(['/login']);
-        return false;
-      }
-
-      const res = await fetch(`${environment.API_BASE}/reading/check`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) return true;
-
-      if (res.status === 402) {
-        const payload = await res.json().catch(() => ({}));
-        if (payload?.reason === 'no_drucoins') {
-          this.authService.updateDrucoinBalance(0);
-        }
-        alert(payload?.message || 'No tienes tiradas o DruCoins suficientes.');
-        return false;
-      }
-
-      if (res.status === 401) {
-        await this.authService.logout();
-        await this.router.navigate(['/login']);
-        return false;
-      }
-
-      return false;
-    } catch (err) {
-      console.error('reading check error', err);
-      return false;
-    }
+    console.groupEnd();
+    return;
   }
 
-  private async afterSuccessfulDraw() {
-    await this.refreshQuota(true);
+  console.log('→ Desktop interpretation → confirmContext()');
+  console.groupEnd();
+
+  this.confirmContext();
+}
+
+confirmContext() {
+  console.group('%c[Interpretation] confirmContext()', 'color:#0ff');
+
+  if (this.isInterpreting) {
+    console.warn('⚠️ Ya interpretando…');
+    console.groupEnd();
+    return;
   }
 
-  // ============ card meaning overlay ============
-
-  async openCardMeaning(pc: any) {
-    try {
-      const cardName =
-        this.deckMap.get(pc.cardId)?.name || pc.cardId || 'Carta desconocida';
-
-      this.showCardOverlay = true;
-      this.overlayCardTitle = cardName;
-      this.overlayCardMeaning = 'Consultando significado...';
-      this.loadingCardMeaning = true;
-      this.cdr.detectChanges();
-
-      const res = await fetch(
-        'https://lumiere-api.laife91.workers.dev/api/card-meaning',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: cardName,
-            reversed: !!pc.reversed,
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error('Error al obtener significado:', res.status, errText);
-        this.overlayCardMeaning = `Error ${res.status}: ${errText}`;
-        this.loadingCardMeaning = false;
-        this.cdr.detectChanges();
-        return;
-      }
-
-      const data = await res.json();
-      const meaning =
-        data.meaning ||
-        data.message ||
-        'No se recibió interpretación del servidor.';
-      this.overlayCardMeaning = meaning;
-    } catch (err: any) {
-      console.error('Error openCardMeaning:', err);
-      this.overlayCardMeaning =
-        'Error interno: ' + (err.message || 'desconocido');
-    } finally {
-      this.loadingCardMeaning = false;
-      this.cdr.detectChanges();
-    }
+  if (!this.ensureHasDrucoins()) {
+    console.warn('❌ No DruCoins');
+    console.groupEnd();
+    return;
   }
 
-  closeCardOverlay() {
-    this.showCardOverlay = false;
-    this.overlayCardTitle = '';
-    this.overlayCardMeaning = '';
-    this.loadingCardMeaning = false;
+  this.userContext = (this.userContextInput || '').trim();
+  console.log('→ Context:', this.userContext);
+
+  if (!this.userContext) {
+    alert('Por favor, escribe un contexto antes de continuar.');
+    console.groupEnd();
+    return;
   }
 
-  // ============ interpretación IA ============
+  console.log('→ Ejecutando runInterpretation()');
 
-  startInterpretation() {
-    if (!this.activeCards.length || this.isInterpreting) return;
-    if (!this.ensureHasDrucoins()) return;
+  console.groupEnd();
+  this.runInterpretation();
+}
 
-    if (this.isMobile) {
-      if (!this.userContextInput) {
-        this.userContextInput = this.userContext || '';
-      }
-      this.showMobileInterpretModal = true;
-      this.setBodyModalState('mobile-interpret', true);
-      return;
-    }
-    this.confirmContext();
+confirmMobileInterpretation() {
+  console.debug('[Mobile] confirmMobileInterpretation()');
+
+  this.showMobileInterpretModal = false;
+  this.setBodyModalState('mobile-interpret', false);
+  this.confirmContext();
+}
+
+closeMobileInterpretation() {
+  console.debug('[Mobile] closeMobileInterpretation()');
+  this.showMobileInterpretModal = false;
+  this.setBodyModalState('mobile-interpret', false);
+}
+
+
+// ============================================================
+// PARTE 3 — DECK / SPREADS / HISTORY / TIRADAS
+// ============================================================
+
+
+// ------------------------------------------------------------
+//  Cargar mazo completo (llamado al inicio y botón "Reintentar")
+// ------------------------------------------------------------
+async loadDeckFirst() {
+  console.group('%c[Deck] loadDeckFirst()', 'color:#4fc3f7');
+
+  this.loadingDeck = true;
+  this.deckError = null;
+  this.deckReady = false;
+  this.deckMap.clear();
+
+  try {
+    console.log('→ Llamando API: /deck/all');
+    const res = await firstValueFrom(this.api.loadDeck());
+
+
+    console.log('→ Deck recibido:', res);
+
+   for (const card of res.cards) {
+  this.deckMap.set(card.id, card);
+}
+
+this.deckCount = res.cards.length;
+
+    this.deckReady = true;
+    console.log(`✔ Mazo cargado (${this.deckCount} cartas)`);
+
+  } catch (err) {
+    console.error('❌ Error cargando mazo', err);
+    this.deckError = 'No se pudo cargar el mazo.';
+  } finally {
+    this.loadingDeck = false;
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+
+// ------------------------------------------------------------
+//  Shuffle visual (solo animación)
+// ------------------------------------------------------------
+toggleShuffle() {
+  console.group('%c[Deck] toggleShuffle()', 'color:#ffd54f');
+
+  this.deckShuffling = true;
+
+  setTimeout(() => {
+    this.deckShuffling = false;
+    console.log('→ Shuffle finalizado');
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }, 800);
+}
+
+
+// ------------------------------------------------------------
+//  Preparar slots del layout según tipo de tirada
+// ------------------------------------------------------------
+rebuildSlots() {
+  console.group('%c[Layout] rebuildSlots()', 'color:#ce93d8');
+
+  const layout = this.buildLayout(this.spreadId);
+  this.slots = layout.map((s) => ({ ...s }));
+
+  console.log('→ Slots generados:', this.slots);
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Cargar definiciones de spreads desde API
+// ------------------------------------------------------------
+async loadSpreadsInBackground() {
+  console.group('%c[Spreads] loadSpreadsInBackground()', 'color:#ffb74d');
+
+  try {
+    const list = await firstValueFrom(this.api.getSpreads());
+    console.log('→ Spreads recibidos:', list);
+
+    this.spreads = list;
+  } catch (err) {
+    console.error('❌ Error cargando spreads', err);
+  } finally {
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+
+// ------------------------------------------------------------
+// Cambio de tirada (selector <select>)
+// ------------------------------------------------------------
+onSpreadChange() {
+  console.group('%c[Spreads] onSpreadChange()', 'color:#64b5f6');
+  console.log('→ spreadId:', this.spreadId);
+
+  this.rebuildSlots();
+  this.placed = [];
+  this.layers = [{ id: 1, cards: [] }];
+  this.activeLayer = 0;
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Generar URL de la carta (front)
+// ------------------------------------------------------------
+getFrontUrl(id: string | undefined | null): string {
+  if (!id) return '';
+
+  return `${environment.CDN_BASE}/cards/${id}.webp`;
+}
+
+
+// ------------------------------------------------------------
+// Hacer tirada normal (para PPF-3 y free de 9)
+// ------------------------------------------------------------
+async hacerTirada() {
+  console.group('%c[Draw] hacerTirada()', 'color:#4db6ac');
+
+  if (!this.deckReady) {
+    console.warn('⚠️ Mazo no listo');
+    console.groupEnd();
+    return;
   }
 
-  confirmContext() {
-    if (this.isInterpreting) return;
-    if (!this.ensureHasDrucoins()) return;
+  this.dealing = true;
 
-    this.userContext = (this.userContextInput || '').trim();
-    if (!this.userContext) {
-      alert('Por favor, escribe tu contexto o pregunta antes de continuar.');
-      return;
-    }
-    this.runInterpretation();
-  }
+  try {
+    console.log('→ Llamando API draw:', this.spreadId);
+    const res: DrawResult = await firstValueFrom(this.api.draw(this.spreadId));
 
-  confirmMobileInterpretation() {
-    this.showMobileInterpretModal = false;
-    this.setBodyModalState('mobile-interpret', false);
-    this.confirmContext();
-  }
+    console.log('→ Resultado:', res);
+    this.lastDraw = res.cards;
 
-  closeMobileInterpretation() {
-    this.showMobileInterpretModal = false;
-    this.setBodyModalState('mobile-interpret', false);
-  }
-
-  async runInterpretation() {
-    if (this.isInterpreting) return;
-    if (!(await this.ensureReadingAllowance())) return;
-
-    this.hideInterpretationModal();
-
-    try {
-      this.isInterpreting = true;
-      this.setBodyModalState('interpreting', true);
-      this.aiResponse = '';
-      this.interpretationText = '';
-
-      const cards = this.placed.map((c) => ({
-        name: c.cardId,
-        reversed: c.reversed,
-      }));
-
-      const firebaseUser = this.auth.currentUser;
-      const token = firebaseUser
-        ? await firebaseUser.getIdToken(true)
-        : await this.authService.getIdToken();
-
-      if (!token) {
-        await this.router.navigate(['/login']);
-        return;
-      }
-
-      const res = await fetch(`${environment.API_BASE}/interpret`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          context: this.userContext,
-          cards,
-          spreadId: this.spreadId,
-        }),
-      });
-
-      if (res.status === 402) {
-        const payload = await res.json().catch(() => ({}));
-        if (typeof payload?.drucoins === 'number') {
-          this.authService.updateDrucoinBalance(payload.drucoins);
-        }
-        const message =
-          payload?.message ||
-          (payload?.error === 'NO_DRUCOINS'
-            ? 'No tienes DruCoins suficientes para interpretar la tirada.'
-            : 'No puedes interpretar la tirada en este momento.');
-        alert(message);
-        return;
-      }
-
-      const data = await res.json();
-      if (typeof data?.drucoins === 'number') {
-        this.authService.updateDrucoinBalance(data.drucoins);
-      }
-
-      if (data.ok && data.interpretation) {
-        const interpretation = this.normalizeInterpretation(data.interpretation);
-        this.interpretationText = interpretation;
-        this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
-          this.toHtml(interpretation)
-        );
-        this.showInterpretation = true;
-        this.setBodyModalState('interpret-view', true, 'interpret-open');
-        await this.saveReading();
-      } else {
-        alert('No se recibió interpretación.');
-      }
-    } catch (err) {
-      alert('Error interpretando la tirada.');
-      console.error(err);
-    } finally {
-      this.isInterpreting = false;
-      this.setBodyModalState('interpreting', false);
-      this.cdr.markForCheck();
-    }
-  }
-
-  async saveReading() {
-    try {
-      const user = this.auth.currentUser;
-      if (!user) {
-        alert('Inicia sesión para guardar lecturas.');
-        return;
-      }
-      const token = await user.getIdToken(true);
-      const payload = {
-        title: `Lectura ${new Date().toLocaleString()}`,
-        interpretation: this.interpretationText,
-        cards: this.placed.map((c) => ({
-          id: c.cardId,
-          reversed: c.reversed,
-          pos: c.position,
-        })),
-        spreadId: this.spreadId,
-      };
-
-      const res = await fetch(`${environment.API_BASE}/readings/save`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.status === 402) {
-        const msg = await res.text();
-        alert(
-          msg ||
-            'Has alcanzado el máximo (5). Pasa a Sabiduría o dona para ampliar.'
-        );
-        return;
-      }
-
-      if (!res.ok) throw new Error(await res.text());
-      alert('Lectura guardada.');
-    } catch (e: any) {
-      alert('No se pudo guardar. ' + (e?.message || ''));
-    }
-  }
-
-  setInterpretation(text: string) {
-    const normalized = this.normalizeInterpretation(text ?? '');
-    this.interpretationText = normalized;
-    this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
-      this.toHtml(normalized)
-    );
-  }
-
-  // ============ deck & spreads ============
-
-  async loadDeckFirst() {
-    this.loadingDeck = true;
-    this.deckError = null;
-    try {
-      const deck = await firstValueFrom(this.api.decks());
-      this.zone.run(() => {
-        this.deckMap.clear();
-        deck.forEach((c) => this.deckMap.set(c.id, c));
-        this.deckCount = deck.length;
-        this.deckReady = true;
-        this.loadingDeck = false;
-        this.cdr.markForCheck();
-      });
-      this.loader
-        .preloadAll([this.backUrl], 12000, { ignoreErrors: true })
-        .catch(() => {});
-      this.bumpDeckProgress(100, 900);
-    } catch (e: any) {
-      this.zone.run(() => {
-        this.deckError = e?.message ?? 'No se pudo cargar el mazo';
-        this.deckReady = false;
-        this.deckCount = 0;
-        this.loadingDeck = false;
-        this.cdr.markForCheck();
-      });
-    }
-  }
-
-  private loadSpreadsInBackground() {
-    this.api.spreads().subscribe({
-      next: (s) => (this.spreads = s),
-      error: () => {},
-    });
-  }
-
-  onSpreadChange() {
-    this.spreadLabel =
-      this.spreadId === 'celtic-cross-10'
-        ? 'Cruz Celta'
-        : this.spreadId === 'ppf-3'
-        ? 'Pasado · Presente · Futuro'
-        : 'Libre';
-
-    this.rebuildSlots();
-    this.placed = [];
-
-    if (this.isFree) {
-      this.layers = [{ id: 1, cards: [] }];
-      this.activeLayer = 0;
-    }
-  }
-
-  private rebuildSlots() {
-    const layout = this.buildLayout(this.spreadId);
-    this.slots = layout.map((p) => ({ ...p }));
-  }
-
-  getFrontUrl(cardId?: string): string | undefined {
-    if (!cardId) return undefined;
-
-    const aliasMap: Record<string, string> = {
-      // Bastos
-      'wands-11': 'pagedebastos',
-      'wands-12': 'caballerodebastos',
-      'wands-13': 'reinadebastos',
-      'wands-14': 'reydebastos',
-      // Espadas
-      'swords-11': 'pagedeespadas',
-      'swords-12': 'caballerodeespadas',
-      'swords-13': 'reinadeespadas',
-      'swords-14': 'reydeespadas',
-      // Copas
-      'cups-11': 'pagedecopas',
-      'cups-12': 'caballerodecopas',
-      'cups-13': 'reinadecopas',
-      'cups-14': 'reydecopas',
-      // Pentáculos (si tuvieras alias distintos)
-    };
-
-    const fixedId = aliasMap[cardId] ?? cardId;
-    const meta = this.deckMap.get(fixedId);
-
-    if (!meta) {
-      console.warn(`Carta sin meta en deckMap: ${fixedId} (original: ${cardId})`);
-      return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
-    }
-
-    if (!meta.imageUrl) {
-      console.warn(`Carta sin imageUrl asignada: ${fixedId}`);
-      return `${environment.CDN_BASE}/cards/${fixedId}.webp`;
-    }
-    return meta.imageUrl;
-  }
-
-  toggleShuffle() {
-    this.deckShuffling = !this.deckShuffling;
-    if (this.deckShuffling)
-      setTimeout(() => (this.deckShuffling = false), 1600);
-  }
-
-  private bumpDeckProgress(target = 100, ms = 800) {
-    const start = this.deckProgress;
-    const steps = 20;
-    const inc = (target - start) / steps;
-    const dt = Math.max(12, ms / steps);
-    let i = 0;
-    const t = setInterval(() => {
-      this.deckProgress = Math.min(
-        100,
-        Math.round(start + inc * ++i)
-      );
-      if (i >= steps) clearInterval(t);
-    }, dt);
-  }
-
-  // ============ hacer tirada ============
-
-  async hacerTirada() {
-    if (!this.canDeal) return;
-    if (!(await this.ensureReadingAllowance())) return;
-
-    console.groupCollapsed(
-      '%c[🔮 hacerTirada: inicio]',
-      'color:violet'
-    );
-    this.dealing = true;
-    this.placed = [];
-
-    try {
-      const user = this.auth.currentUser;
-      const uid = user?.uid ?? 'guest';
-      const token = user ? await user.getIdToken(true) : '';
-
-      console.log(
-        '🪄 Solicitando tirada para UID:',
-        uid,
-        'Spread:',
-        this.spreadId
-      );
-
-      const res: DrawResult = await this.api.drawWithAuth(
-        this.spreadId,
-        uid,
-        token
-      );
-      if (!res?.cards?.length)
-        throw new Error('No se recibieron cartas del servidor');
-
-      const validCards = res.cards.filter((c) => !!c.cardId);
-      console.table(
-        validCards.map((v) => ({ cardId: v.cardId, reversed: v.reversed }))
-      );
-
-      const withPos: Placed[] = validCards.map((c, i) => {
-        const p =
-          this.slots[i] || {
-            x: 50,
-            y: 50,
-            r: 0,
-            z: 10 + i,
-            position: i + 1,
-          };
-        return {
-          ...p,
-          cardId: c.cardId,
-          reversed: !!c.reversed,
-          delay: i * 100,
-          dealt: false,
-          faceup: false,
-          layer: 0,
-        };
-      });
-
-      console.table(
-        withPos.map((c) => ({
-          pos: c.position,
-          id: c.cardId,
-          r: c.r,
-          x: c.x,
-          y: c.y,
-        }))
-      );
-
-      const fronts = withPos
-        .map((pc) => this.getFrontUrl(pc.cardId))
-        .filter(Boolean) as string[];
-
-      const preloadRes = await this.loader.preloadAll(
-        [this.backUrl, ...fronts],
-        45000,
-        { ignoreErrors: true }
-      );
-      console.log('📦 Preload completado:', preloadRes);
-
-      const placeholder = `${environment.CDN_BASE}/cards/contracara.webp`;
-      const failFlat = preloadRes.fail ?? [];
-      withPos.forEach((pc) => {
-        const url = this.getFrontUrl(pc.cardId);
-        if (!url || failFlat.includes(url)) {
-          console.warn(
-            `⚠️ Carta ${pc.cardId} falló en preload, usando placeholder`
-          );
-          this.deckMap.set(
-            pc.cardId,
-            {
-              id: pc.cardId,
-              imageUrl: placeholder,
-              name: pc.cardId,
-            } as any
-          );
-        }
-      });
-
-      this.placed = withPos;
-
-      let baseDelay = 120;
-      const fps = await this.getApproxFPS();
-      if (fps < 50) baseDelay = 180;
-      if (fps < 30) baseDelay = 250;
-      console.log('🎥 FPS aproximado:', fps, '→ baseDelay:', baseDelay);
-
-      document.body.classList.add('spread-active');
-
-      this.zone.runOutsideAngular(async () => {
-        const tasks = withPos.map(
-          (pc, i) =>
-            new Promise<void>(async (resolve) => {
-              try {
-                await new Promise((r) =>
-                  setTimeout(
-                    r,
-                    i * (baseDelay + Math.random() * 80)
-                  )
-                );
-                this.zone.run(() => {
-                  pc.dealt = true;
-                  this.cdr.detectChanges();
-                });
-                await new Promise((r) => setTimeout(r, 350));
-                this.zone.run(() => {
-                  pc.faceup = true;
-                  this.cdr.detectChanges();
-                  console.log(
-                    `🃏 Carta girada: #${pc.position} (${pc.cardId})`
-                  );
-                });
-                resolve();
-              } catch (e) {
-                console.error(
-                  '❌ Error animando carta',
-                  pc.cardId,
-                  e
-                );
-                resolve();
-              }
-            })
-        );
-        await Promise.allSettled(tasks);
-
-        this.zone.run(() => {
-          const pending = this.placed.filter((c) => !c.faceup);
-          if (pending.length) {
-            console.warn(
-              '🌀 Reintentando girar cartas pendientes:',
-              pending.map((c) => c.cardId)
-            );
-            pending.forEach((c) => (c.faceup = true));
-            this.cdr.detectChanges();
-          }
-
-          const missingMeta = this.placed.filter(
-            (c) => !this.deckMap.get(c.cardId)
-          );
-          if (missingMeta.length) {
-            console.warn(
-              '⚠️ Cartas sin meta en deckMap:',
-              missingMeta.map((c) => c.cardId)
-            );
-          }
-
-          this.dealing = false;
-          this.saveToHistory();
-          this.afterSuccessfulDraw();
-          document.body.classList.remove('spread-active');
-          document.body.classList.add('spread-complete');
-          setTimeout(
-            () => document.body.classList.remove('spread-complete'),
-            800
-          );
-          console.groupEnd();
-        });
-      });
-    } catch (err: any) {
-      console.error('❌ Error en hacerTirada:', err);
-      this.deckError = err.message;
-      this.dealing = false;
-      console.groupEnd();
-    }
-  }
-
-  // ============ historia local/remota ============
-
-  async saveToHistory() {
-    const cards = this.isFree
-      ? this.layers[this.activeLayer].cards
-      : this.placed;
-    if (!cards.length) return;
-
-    const entry: HistoryEntry = {
-      id: crypto?.randomUUID?.() ?? String(Date.now()),
-      spreadId: this.spreadId,
-      spreadLabel: this.spreadLabel,
-      cards: JSON.parse(JSON.stringify(cards)),
-      ts: Date.now(),
-    };
-
-    const list = this.readHistory();
-    list.unshift(entry);
-    this.writeHistory(list);
-
-    const user = this.auth.currentUser;
-    if (user) {
-      try {
-        const token = await user.getIdToken(true);
-        await fetch(`${environment.API_BASE}/history/save`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(entry),
-        });
-      } catch (err) {
-        console.warn('⚠️ No se pudo sincronizar historial remoto:', err);
-      }
-    }
-  }
-
-  async openHistory(e?: MouseEvent) {
-    e?.stopPropagation();
-    this.closeCardOverlay();
-    this.hideInterpretationModal();
-
-    let list: HistoryEntry[] = [];
-    const user = this.auth.currentUser;
-
-    if (user) {
-      try {
-        const token = await user.getIdToken(true);
-        const res = await fetch(`${environment.API_BASE}/history/list`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          list = data.history ?? [];
-        }
-      } catch (err) {
-        console.warn(
-          '⚠️ Error cargando historial remoto, uso local:',
-          err
-        );
-      }
-    }
-
-    if (!list.length) {
-      list = this.readHistory();
-    }
-
-    let changed = false;
-    list = list.map((e) => {
-      if (e.ts == null) {
-        e.ts = Date.now();
-        changed = true;
-      }
-      return e;
-    });
-    if (changed) this.writeHistory(list);
-
-    this.historyList = list;
-    this.showHistory = true;
-    this.setBodyModalState('history', true);
-    this.cdr.detectChanges();
-  }
-
-  closeHistory() {
-    this.showHistory = false;
-    this.showCardOverlay = false;
-    this.showInterpretation = false;
-    this.layerOverlay = false;
-    this.setBodyModalState('history', false);
-    document.body.classList.remove('spread-complete');
-    document
-      .querySelector('.board')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    this.cdr.detectChanges();
-  }
-
-  async deleteHistory(id: string) {
-    if (!confirm('¿Eliminar esta lectura para siempre?')) return;
-
-    const list = this.readHistory().filter((e) => e.id !== id);
-    this.writeHistory(list);
-    this.historyList = list;
-
-    const user = this.auth.currentUser;
-    if (user) {
-      try {
-        const token = await user.getIdToken(true);
-        await fetch(`${environment.API_BASE}/history/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch (err) {
-        console.warn('⚠️ No se pudo borrar en servidor:', err);
-      }
-    }
-  }
-
-  loadHistory(h: HistoryEntry) {
-    this.showHistory = false;
-    this.spreadId = h.spreadId;
-    this.spreadLabel = h.spreadLabel;
-    this.onSpreadChange();
-
-    if (h.spreadId === 'free') {
-      this.layers = [{ id: 1, cards: JSON.parse(JSON.stringify(h.cards)) }];
-      this.activeLayer = 0;
-    } else {
-      this.placed = JSON.parse(JSON.stringify(h.cards));
-    }
-  }
-
-  // ============ layout / drag ============
-
-  private buildLayout(id: string) {
-    if (id === 'celtic-cross-10') return this.celticCross10();
-    if (id === 'ppf-3') return this.ppf3();
-    return this.free9();
-  }
-
-  private celticCross10() {
-    const Cx = 45,
-      Cy = 50;
-    const dx = 15,
-      dy = 13;
-    const colX = 78;
-    const h = 12;
-
-    return [
-      { position: 1, x: 50, y: 45, r: 0, z: 28 },
-      { position: 2, x: 50, y: 45, r: 90, z: 31 },
-      { position: 3, x: Cx, y: Cy + dy, r: 0, z: 19 },
-      { position: 4, x: Cx - dx, y: Cy, r: 0, z: 19 },
-      { position: 5, x: Cx, y: Cy - dy, r: 0, z: 19 },
-      { position: 6, x: Cx + dx, y: Cy, r: 0, z: 19 },
-      { position: 7, x: colX, y: Cy + h, r: 0, z: 18 },
-      { position: 8, x: colX, y: Cy, r: 0, z: 18 },
-      { position: 9, x: colX, y: Cy - h, r: 0, z: 18 },
-      { position: 10, x: colX, y: Cy - 2 * h, r: 0, z: 18 },
-    ];
-  }
-
-  private ppf3() {
-    return [
-      { position: 1, x: 35, y: 52, r: 0, z: 10 },
-      { position: 2, x: 50, y: 52, r: 0, z: 11 },
-      { position: 3, x: 65, y: 52, r: 0, z: 12 },
-    ];
-  }
-
-  private free9() {
-    const baseX = 50,
-      baseY = 52;
-    const rand = (a: number, b: number) => a + Math.random() * (b - a);
-    return Array.from({ length: 9 }, (_, i) => ({
-      position: i + 1,
-      x: baseX + rand(-6, 6),
-      y: baseY + rand(-6, 6),
-      r: rand(-8, 8),
-      z: 20 + i,
-    }));
-  }
-
-  onDragEnd(pc: Placed, ev: CdkDragEnd) {
-    const el = ev.source.getRootElement() as HTMLElement;
-    const board = el.closest('.board') as HTMLElement;
-    if (!board) return;
-    const rect = board.getBoundingClientRect();
-    const cx = el.getBoundingClientRect().left + el.offsetWidth / 2;
-    const cy = el.getBoundingClientRect().top + el.offsetHeight / 2;
-    pc.x = ((cx - rect.left) / rect.width) * 100;
-    pc.y = ((cy - rect.top) / rect.height) * 100;
-  }
-
-  onCardClick(pc: Placed, ev: MouseEvent) {
-    ev.stopPropagation();
-    pc.faceup = !pc.faceup;
-    const maxZ = Math.max(...this.activeCards.map((p) => p.z));
-    pc.z = maxZ + 1;
-  }
-
-  prevCard() {
-    const arr = this.activeCards;
-    if (!arr.length) return;
-    this.focusIdx = (this.focusIdx - 1 + arr.length) % arr.length;
-    this.bumpZ(arr, this.focusIdx);
-  }
-
-  nextCard() {
-    const arr = this.activeCards;
-    if (!arr.length) return;
-    this.focusIdx = (this.focusIdx + 1) % arr.length;
-    this.bumpZ(arr, this.focusIdx);
-  }
-
-  private bumpZ(arr: Placed[], i: number) {
-    const maxZ = Math.max(...arr.map((p) => p.z));
-    arr[i].z = maxZ + 1;
-  }
-
-  onDeckClick() {
-    if (!this.canDeal) {
-      this.toggleShuffle();
-      return;
-    }
-
-    if (this.spreadId === 'celtic-cross-10') {
-      if (this.stepMode) {
-        if (!this.buffer.length || this.nextIdx === 0) {
-          this.prepararCruzPasoAPaso().then(() =>
-            this.colocarSiguientePosicion()
-          );
-        } else {
-          this.colocarSiguientePosicion();
-        }
-      } else {
-        this.repartirCruzCompleta();
-      }
-      return;
-    }
-
-    if (this.isFree) {
-      this.agregarCartaLibre(1);
-      return;
-    }
-
-    this.hacerTirada();
-  }
-
-  async repartirCruzCompleta() {
-    if (!this.canDeal) return;
-    this.stepMode = false;
-    this.spreadId = 'celtic-cross-10';
-    this.onSpreadChange();
-    await this.hacerTirada();
-  }
-
-  async prepararCruzPasoAPaso() {
-    if (!this.deckReady) return;
-    this.stepMode = true;
-    this.spreadId = 'celtic-cross-10';
-    this.onSpreadChange();
-    this.dealing = true;
-
-    const res: DrawResult = await firstValueFrom(
-      this.api.draw('celtic-cross-10')
-    );
     const mapped: Placed[] = res.cards.map((c, i) => {
-      const p =
-        this.slots[i] || {
-          x: 50,
-          y: 50,
-          r: 0,
-          z: 10 + i,
-          position: i + 1,
-        };
+      const slot = this.slots[i];
       return {
-        position: p.position,
+        position: slot.position,
         cardId: c.cardId,
         reversed: c.reversed,
-        x: p.x,
-        y: p.y,
-        r: p.r,
-        z: p.z,
+        x: slot.x,
+        y: slot.y,
+        r: slot.r,
+        z: slot.z,
         delay: 0,
         dealt: false,
         faceup: false,
@@ -1215,334 +693,1018 @@ export class SpreadsComponent implements OnInit, OnDestroy {
       };
     });
 
+    // Precarga imágenes
     try {
-      const fronts = mapped
-        .map((m) => this.getFrontUrl(m.cardId))
-        .filter(Boolean) as string[];
-      this.loader
-        .preloadAll([this.backUrl, ...fronts], 60000, { ignoreErrors: true })
-        .catch(() => {});
+      const urls = mapped.map((m) => this.getFrontUrl(m.cardId));
+      await this.loader.preloadAll([this.backUrl, ...urls], 60000, {
+        ignoreErrors: true,
+      });
     } catch {}
 
     this.placed = [];
-    this.buffer = mapped;
-    this.nextIdx = 0;
+    this.placed = mapped;
+
+    // Animación de reparto
+    setTimeout(() => {
+      this.placed.forEach((pc, i) => {
+        setTimeout(() => {
+          pc.dealt = true;
+          setTimeout(() => (pc.faceup = true), 280);
+        }, i * 140);
+      });
+    });
+
+    // Guardar
+    this.saveToHistory();
+
+  } catch (err) {
+    console.error('❌ Error haciendo tirada', err);
+  } finally {
     this.dealing = false;
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+
+// ============================================================
+// HISTORIAL
+// ============================================================
+
+// Abrir modal
+openHistory() {
+  console.group('%c[History] openHistory()', 'color:#64b5f6');
+  this.showHistory = true;
+  console.groupEnd();
+}
+
+closeHistory() {
+  console.group('%c[History] closeHistory()', 'color:#ef5350');
+  this.showHistory = false;
+  console.groupEnd();
+}
+
+loadHistory(entry: HistoryEntry) {
+  console.group('%c[History] loadHistory()', 'color:#81c784');
+  console.log('→ Loading:', entry);
+
+  // reconstrucción del board
+  this.placed = entry.cards.map((c) => ({
+    ...c,
+    delay: 0,
+    dealt: true,
+    faceup: true,
+    layer: 0,
+  }));
+
+  this.showHistory = false;
+  console.groupEnd();
+}
+
+deleteHistory(id: string) {
+  console.group('%c[History] deleteHistory()', 'color:#ffcc80');
+  this.historyList = this.historyList.filter((h) => h.id !== id);
+  this.writeHistory(this.historyList);
+  console.groupEnd();
+}
+
+
+// =======================================================
+// RUN INTERPRETATION → llama al Worker + descuenta DRUCOINS
+// =======================================================
+
+async runInterpretation() {
+  console.group('%c[Interpretation] runInterpretation()', 'color:#ff66ff');
+
+  if (this.isInterpreting) {
+    console.warn('⚠️ Ya interpretando. Ignorar.');
+    console.groupEnd();
+    return;
   }
 
-  colocarSiguientePosicion() {
-    if (!this.stepMode || this.nextIdx >= this.buffer.length) return;
-    const pc = this.buffer[this.nextIdx++];
-    this.placed.push(pc);
+  if (!(await this.ensureReadingAllowance())) {
+    console.warn('❌ No permitido interpretar');
+    console.groupEnd();
+    return;
+  }
+
+  this.hideInterpretationModal();
+
+  try {
+    this.isInterpreting = true;
+    this.setBodyModalState('interpreting', true);
+
+    const cards = this.placed.map((c) => ({
+      name: c.cardId,
+      reversed: c.reversed,
+    }));
+
+    console.log('→ Cards enviadas al worker:', cards);
+    console.log('→ Context:', this.userContext);
+
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser
+      ? await firebaseUser.getIdToken(true)
+      : await this.authService.getIdToken();
+
+    if (!token) {
+      console.error('❌ token null → login');
+      await this.router.navigate(['/login']);
+      console.groupEnd();
+      return;
+    }
+
+    console.log('→ Consultando /interpret en worker…');
+
+    const res = await fetch(`${environment.API_BASE}/interpret`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        context: this.userContext,
+        cards,
+        spreadId: this.spreadId,
+      }),
+    });
+
+    console.log('→ Worker status:', res.status);
+
+    // casos de no saldo
+    if (res.status === 402) {
+      const payload = await res.json().catch(() => ({}));
+      console.error('❌ No tenía DruCoins suficientes:', payload);
+
+      if (typeof payload?.drucoins === 'number') {
+        this.authService.updateDrucoinBalance(payload.drucoins);
+      }
+
+      alert(payload?.message || 'No tienes DruCoins suficientes.');
+      console.groupEnd();
+      return;
+    }
+
+    const data = await res.json();
+    console.log('→ Worker response JSON:', data);
+
+    // actualizar el saldo
+    if (typeof data?.drucoins === 'number') {
+      console.log('→ Actualizando DruCoins:', data.drucoins);
+      this.authService.updateDrucoinBalance(data.drucoins);
+    }
+
+    if (data.ok && data.interpretation) {
+      console.log('✔ Interpretación recibida');
+      const interpretation = this.normalizeInterpretation(data.interpretation);
+
+      this.interpretationText = interpretation;
+      this.interpretationSafe = this.sanitizer.bypassSecurityTrustHtml(
+        this.toHtml(interpretation)
+      );
+
+      this.showInterpretation = true;
+      this.setBodyModalState('interpret-view', true, 'interpret-open');
+
+      await this.saveReading();
+
+    } else {
+      alert('No se recibió interpretación.');
+      console.warn('⚠️ Interpretación vacía');
+    }
+
+  } catch (err) {
+    console.error('❌ Error interpretando la tirada:', err);
+    alert('Error interpretando la tirada.');
+  } finally {
+    this.isInterpreting = false;
+    this.setBodyModalState('interpreting', false);
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+
+
+// ============================================================
+// PARTE 4 — OVERLAYS / MODALES / PRIVACY / BG / VIEWPORT / SAVE READING
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Observador responsive para móvil / desktop
+// ------------------------------------------------------------
+private observeViewport() {
+  console.group('%c[Viewport] observeViewport()', 'color:#81d4fa');
+
+  this.breakpointObserver
+    .observe([this.viewportQuery])
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((state) => {
+      this.isMobile = state.matches;
+      console.log('→ isMobile:', this.isMobile);
+      this.cdr.markForCheck();
+    });
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Resolver fondo del tablero
+// ------------------------------------------------------------
+private async resolveBgInBackground() {
+  console.group('%c[Background] resolveBgInBackground()', 'color:#aed581');
+
+  const list = this.bgCandidates;
+
+  for (const url of list) {
+    try {
+      await this.loader.preloadAll([url], 15000, { ignoreErrors: true });
+
+      this.boardBgUrl = `url(${url})`;
+      console.log('✔ Fondo cargado:', url);
+      break;
+    } catch {
+      console.warn('⚠️ Fallo cargando fondo:', url);
+    }
+  }
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Mostrar significado de carta (overlay)
+// ------------------------------------------------------------
+async openCardMeaning(pc: Placed) {
+  console.group('%c[Card Meaning] openCardMeaning()', 'color:#ba68c8');
+  console.log('→ Carta:', pc);
+
+  this.showCardOverlay = true;
+  this.overlayCardTitle = this.deckMap.get(pc.cardId)?.name || pc.cardId;
+  this.loadingCardMeaning = true;
+  this.overlayCardMeaning = '';
+
+  try {
+    console.log('→ Llamando API /card-meaning');
+    const res = await fetch(`${environment.API_BASE}/card-meaning`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: pc.cardId,
+        reversed: pc.reversed,
+      }),
+    });
+
+    const data = await res.json();
+    console.log('→ Meaning recibido:', data);
+
+    this.overlayCardMeaning = data.meaning || 'Sin descripción.';
+  } catch (err) {
+    console.error('❌ Error obteniendo significado', err);
+    this.overlayCardMeaning = 'Error obteniendo significado.';
+  }
+
+  this.loadingCardMeaning = false;
+  this.cdr.markForCheck();
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Cerrar significado de carta
+// ------------------------------------------------------------
+closeCardOverlay() {
+  console.group('%c[Card Meaning] closeCardOverlay()', 'color:#ef5350');
+
+  this.showCardOverlay = false;
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Control del estado <body> para modales
+// ------------------------------------------------------------
+private setBodyModalState(context: string, active: boolean, extraClass?: string) {
+  console.group('%c[Modal] setBodyModalState()', 'color:#ffcc80');
+  console.log('→ context:', context, 'active:', active);
+
+  if (active) {
+    this.activeModalContexts.add(context);
+
+    document.body.classList.add('modal-open');
+    if (extraClass) {
+      document.body.classList.add(extraClass);
+    }
+  } else {
+    this.activeModalContexts.delete(context);
+
+    if (this.activeModalContexts.size === 0) {
+      document.body.classList.remove('modal-open');
+      document.body.classList.remove('interpret-open');
+    }
+    if (extraClass) {
+      document.body.classList.remove(extraClass);
+    }
+  }
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Ocultar modal de interpretación IA
+// ------------------------------------------------------------
+private hideInterpretationModal() {
+  console.group('%c[Interpretation Modal] hideInterpretationModal()', 'color:#26a69a');
+
+  this.showInterpretation = false;
+
+  document.body.classList.remove('interpret-open');
+  this.activeModalContexts.delete('interpret-view');
+
+  if (this.activeModalContexts.size === 0) {
+    document.body.classList.remove('modal-open');
+  }
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Guardar interpretación IA como lectura detallada
+// ------------------------------------------------------------
+private async saveReading() {
+  console.group('%c[Save Reading] saveReading()', 'color:#8d6e63');
+
+  try {
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser
+      ? await firebaseUser.getIdToken(true)
+      : await this.authService.getIdToken();
+
+    if (!token) {
+      console.warn('⚠️ No token → no se guarda lectura');
+      console.groupEnd();
+      return;
+    }
+
+    const payload = {
+      spreadId: this.spreadId,
+      interpretation: this.interpretationText,
+      cards: this.placed.map((pc) => ({
+        id: pc.cardId,
+        reversed: pc.reversed,
+        pos: pc.position,
+      })),
+      context: this.userContext,
+    };
+
+    console.log('→ Guardando lectura en backend:', payload);
+
+    const res = await fetch(`${environment.API_BASE}/history/save`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    console.log('→ Respuesta save:', data);
+
+    if (data.ok && data.history) {
+      this.historyList = data.history;
+      this.writeHistory(data.history);
+    }
+  } catch (err) {
+    console.error('❌ Error guardando lectura IA:', err);
+  }
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Panel "Privacidad"
+// ------------------------------------------------------------
+openPrivacy() {
+  console.group('%c[UI] openPrivacy()', 'color:#90caf9');
+
+  alert('Aquí va tu página de privacidad (pendiente).');
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Layout principal según tipo de spread
+// ------------------------------------------------------------
+private buildLayout(id: string) {
+  if (id === 'celtic-cross-10') return this.celticCross10();
+  if (id === 'ppf-3') return this.ppf3();
+  return this.free9();
+}
+
+// Layout → Cruz Celta (10)
+private celticCross10() {
+  const Cx = 45, Cy = 50;
+  const dx = 15, dy = 13;
+  const colX = 78;
+  const h = 12;
+
+  return [
+    { position: 1, x: 50, y: 45, r: 0, z: 28 },
+    { position: 2, x: 50, y: 45, r: 90, z: 31 },
+    { position: 3, x: Cx, y: Cy + dy, r: 0, z: 19 },
+    { position: 4, x: Cx - dx, y: Cy, r: 0, z: 19 },
+    { position: 5, x: Cx, y: Cy - dy, r: 0, z: 19 },
+    { position: 6, x: Cx + dx, y: Cy, r: 0, z: 19 },
+    { position: 7, x: colX, y: Cy + h, r: 0, z: 18 },
+    { position: 8, x: colX, y: Cy, r: 0, z: 18 },
+    { position: 9, x: colX, y: Cy - h, r: 0, z: 18 },
+    { position: 10, x: colX, y: Cy - 2 * h, r: 0, z: 18 },
+  ];
+}
+
+// Layout → Pasado / Presente / Futuro (3)
+private ppf3() {
+  return [
+    { position: 1, x: 35, y: 52, r: 0, z: 10 },
+    { position: 2, x: 50, y: 52, r: 0, z: 11 },
+    { position: 3, x: 65, y: 52, r: 0, z: 12 },
+  ];
+}
+
+// Layout → Free (modo libre)
+private free9() {
+  const baseX = 50,
+    baseY = 52;
+  const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+  return Array.from({ length: 9 }, (_, i) => ({
+    position: i + 1,
+    x: baseX + rand(-6, 6),
+    y: baseY + rand(-6, 6),
+    r: rand(-8, 8),
+    z: 20 + i,
+  }));
+}
+
+
+// ------------------------------------------------------------
+// Drag & Drop
+// ------------------------------------------------------------
+onDragEnd(pc: Placed, ev: CdkDragEnd) {
+  console.groupCollapsed('%c[DragEnd]', 'color:#80cbc4');
+
+  const el = ev.source.getRootElement() as HTMLElement;
+  const board = el.closest('.board') as HTMLElement;
+  if (!board) {
+    console.warn('⚠️ No board encontrado');
+    console.groupEnd();
+    return;
+  }
+
+  const rect = board.getBoundingClientRect();
+  const cx = el.getBoundingClientRect().left + el.offsetWidth / 2;
+  const cy = el.getBoundingClientRect().top + el.offsetHeight / 2;
+
+  pc.x = ((cx - rect.left) / rect.width) * 100;
+  pc.y = ((cy - rect.top) / rect.height) * 100;
+
+  console.log(`→ Nueva posición: (${pc.x.toFixed(1)}%, ${pc.y.toFixed(1)}%)`);
+  console.groupEnd();
+}
+
+onCardClick(pc: Placed, ev: MouseEvent) {
+  ev.stopPropagation();
+
+  pc.faceup = !pc.faceup;
+
+  const maxZ = Math.max(...this.activeCards.map((p) => p.z));
+  pc.z = maxZ + 1;
+
+  console.log(`🃏 Flip card ${pc.cardId}, z → ${pc.z}`);
+}
+
+
+// ------------------------------------------------------------
+// Navegación entre cartas (modo móvil)
+// ------------------------------------------------------------
+prevCard() {
+  const arr = this.activeCards;
+  if (!arr.length) return;
+  this.focusIdx = (this.focusIdx - 1 + arr.length) % arr.length;
+  this.bumpZ(arr, this.focusIdx);
+}
+
+nextCard() {
+  const arr = this.activeCards;
+  if (!arr.length) return;
+  this.focusIdx = (this.focusIdx + 1) % arr.length;
+  this.bumpZ(arr, this.focusIdx);
+}
+
+private bumpZ(arr: Placed[], i: number) {
+  const maxZ = Math.max(...arr.map((p) => p.z));
+  arr[i].z = maxZ + 1;
+}
+
+
+// ------------------------------------------------------------
+// Click sobre el mazo
+// ------------------------------------------------------------
+onDeckClick() {
+  console.group('%c[Deck Click]', 'color:#ffca28');
+
+  if (!this.canDeal) {
+    console.log('→ No puede repartir → activar shuffle animation');
+    this.toggleShuffle();
+    console.groupEnd();
+    return;
+  }
+
+  if (this.spreadId === 'celtic-cross-10') {
+    if (this.stepMode) {
+      if (!this.buffer.length || this.nextIdx === 0) {
+        this.prepararCruzPasoAPaso().then(() =>
+          this.colocarSiguientePosicion()
+        );
+      } else {
+        this.colocarSiguientePosicion();
+      }
+    } else {
+      this.repartirCruzCompleta();
+    }
+    console.groupEnd();
+    return;
+  }
+
+  if (this.isFree) {
+    console.log('→ Modo libre: agregando 1 carta');
+    this.agregarCartaLibre(1);
+    console.groupEnd();
+    return;
+  }
+
+  console.log('→ Tirada normal');
+  this.hacerTirada();
+
+  console.groupEnd();
+}
+
+
+// ------------------------------------------------------------
+// Reparto Cruz Celta paso a paso
+// ------------------------------------------------------------
+async repartirCruzCompleta() {
+  if (!this.canDeal) return;
+  this.stepMode = false;
+  this.spreadId = 'celtic-cross-10';
+  this.onSpreadChange();
+  await this.hacerTirada();
+}
+
+async prepararCruzPasoAPaso() {
+  if (!this.deckReady) return;
+
+  this.stepMode = true;
+  this.spreadId = 'celtic-cross-10';
+  this.onSpreadChange();
+  this.dealing = true;
+
+  console.log('🧪 Preparando Cruz Celta por pasos…');
+
+  const res: DrawResult = await firstValueFrom(
+    this.api.draw('celtic-cross-10')
+  );
+
+  const mapped: Placed[] = res.cards.map((c, i) => {
+    const p =
+      this.slots[i] ?? {
+        x: 50,
+        y: 50,
+        r: 0,
+        z: 10 + i,
+        position: i + 1,
+      };
+    return {
+      position: p.position,
+      cardId: c.cardId,
+      reversed: c.reversed,
+      x: p.x,
+      y: p.y,
+      r: p.r,
+      z: p.z,
+      delay: 0,
+      dealt: false,
+      faceup: false,
+      layer: 0,
+    };
+  });
+
+  try {
+    const fronts = mapped
+      .map((m) => this.getFrontUrl(m.cardId))
+      .filter(Boolean) as string[];
+    this.loader
+      .preloadAll([this.backUrl, ...fronts], 60000, { ignoreErrors: true })
+      .catch(() => {});
+  } catch {}
+
+  this.placed = [];
+  this.buffer = mapped;
+  this.nextIdx = 0;
+  this.dealing = false;
+}
+
+colocarSiguientePosicion() {
+  if (!this.stepMode || this.nextIdx >= this.buffer.length) return;
+
+  const pc = this.buffer[this.nextIdx++];
+
+  console.log(`🃏 Colocando carta #${pc.position}: ${pc.cardId}`);
+
+  this.placed.push(pc);
+
+  setTimeout(() => {
+    pc.dealt = true;
     setTimeout(() => {
-      pc.dealt = true;
-      setTimeout(() => {
-        pc.faceup = true;
-        if (this.nextIdx >= this.buffer.length) this.saveToHistory();
-      }, 350);
+      pc.faceup = true;
+      if (this.nextIdx >= this.buffer.length) {
+        this.saveToHistory();
+      }
+    }, 350);
+  });
+}
+
+
+// ------------------------------------------------------------
+// Modo Libre (free mode)
+// ------------------------------------------------------------
+agregarCartaLibre(n = 1) {
+  if (!this.deckReady) return;
+
+  console.group('%c[Free Mode] agregarCartaLibre()', 'color:#4dd0e1');
+
+  const used = new Set<string>(
+    this.layers.flatMap((l) => l.cards.map((c) => c.cardId))
+  );
+
+  const allIds = Array.from(this.deckMap.keys());
+  const pool = allIds.filter((id) => !used.has(id));
+
+  if (!pool.length) {
+    console.warn('⚠️ No quedan cartas disponibles');
+    console.groupEnd();
+    return;
+  }
+
+  const target = this.layers[this.activeLayer];
+  if (!target) {
+    console.error('❌ activeLayer inválido');
+    console.groupEnd();
+    return;
+  }
+
+  const room = Math.max(0, 10 - target.cards.length);
+  let toCurrent = Math.min(room, n);
+  let remaining = n - toCurrent;
+
+  // Añadir a la capa actual
+  if (toCurrent > 0) {
+    const cards = this.generateFreeCards(pool, toCurrent, this.activeLayer);
+    target.cards.push(...cards);
+    this.runDealAnimation(cards);
+  }
+
+  // Crear nuevas capas si no cabe
+  while (remaining > 0) {
+    this.createNextLayer();
+    const fresh = allIds.filter(
+      (id) =>
+        !this.layers
+          .flatMap((l) => l.cards)
+          .some((c) => c.cardId === id)
+    );
+    const cards = this.generateFreeCards(
+      fresh,
+      Math.min(10, remaining),
+      this.activeLayer
+    );
+    this.layers[this.activeLayer].cards.push(...cards);
+    this.runDealAnimation(cards);
+
+    remaining -= cards.length;
+  }
+
+  console.groupEnd();
+}
+
+private generateFreeCards(
+  pool: string[],
+  count: number,
+  layerIndex: number
+): Placed[] {
+  const out: Placed[] = [];
+
+  for (let i = 0; i < count && pool.length; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const cardId = pool.splice(idx, 1)[0];
+    const reversed = Math.random() < 0.5;
+    const p = this.layoutFreePosition(this.freeLayout, i);
+
+    out.push({
+      position: p.position,
+      cardId,
+      reversed,
+      x: p.x,
+      y: p.y,
+      r: p.r,
+      z: 20 + i,
+      delay: i * 60,
+      dealt: false,
+      faceup: false,
+      layer: layerIndex,
     });
   }
 
-  // ============ libre ============
+  const urls = out
+    .map((c) => this.getFrontUrl(c.cardId))
+    .filter(Boolean) as string[];
 
-  agregarCartaLibre(n = 1) {
-    if (!this.deckReady) return;
+  this.loader
+    .preloadAll([this.backUrl, ...urls], 60000, {
+      ignoreErrors: true,
+    })
+    .catch(() => {});
 
-    const used = new Set<string>(
-      this.layers.flatMap((l) => l.cards.map((c) => c.cardId))
-    );
-    const allIds = Array.from(this.deckMap.keys());
-    const pool = allIds.filter((id) => !used.has(id));
-    if (!pool.length) return;
+  return out;
+}
 
-    const target = this.layers[this.activeLayer];
-    if (!target) return;
+private layoutFreePosition(kind: FreeLayout, i: number) {
+  if (kind === 'grid') {
+    const cols = 5,
+      gx = 12,
+      gy = 16;
+    const row = Math.floor(i / cols);
+    const col = i % cols;
 
-    const room = Math.max(0, 10 - target.cards.length);
-    let toCurrent = Math.min(room, n);
-    let remaining = n - toCurrent;
-
-    if (toCurrent > 0) {
-      const cards = this.generateFreeCards(pool, toCurrent, this.activeLayer);
-      target.cards.push(...cards);
-      this.runDealAnimation(cards);
-    }
-
-    while (remaining > 0) {
-      this.createNextLayer();
-      const fresh = allIds.filter(
-        (id) =>
-          !this.layers
-            .flatMap((l) => l.cards)
-            .some((c) => c.cardId === id)
-      );
-      const cards = this.generateFreeCards(
-        fresh,
-        Math.min(10, remaining),
-        this.activeLayer
-      );
-      this.layers[this.activeLayer].cards.push(...cards);
-      this.runDealAnimation(cards);
-      remaining -= cards.length;
-    }
-  }
-
-  private generateFreeCards(
-    pool: string[],
-    count: number,
-    layerIndex: number
-  ): Placed[] {
-    const out: Placed[] = [];
-    for (let i = 0; i < count && pool.length; i++) {
-      const idx = Math.floor(Math.random() * pool.length);
-      const cardId = pool.splice(idx, 1)[0];
-      const reversed = Math.random() < 0.5;
-      const p = this.layoutFreePosition(this.freeLayout, i);
-      out.push({
-        position: p.position,
-        cardId,
-        reversed,
-        x: p.x,
-        y: p.y,
-        r: p.r,
-        z: 20 + i,
-        delay: i * 60,
-        dealt: false,
-        faceup: false,
-        layer: layerIndex,
-      });
-    }
-
-    const urls = out
-      .map((c) => this.getFrontUrl(c.cardId))
-      .filter(Boolean) as string[];
-    this.loader
-      .preloadAll([this.backUrl, ...urls], 60000, { ignoreErrors: true })
-      .catch(() => {});
-    return out;
-  }
-
-  private layoutFreePosition(kind: FreeLayout, i: number) {
-    if (kind === 'grid') {
-      const cols = 5,
-        gx = 12,
-        gy = 16;
-      const row = Math.floor(i / cols);
-      const col = i % cols;
-      const x = 30 + col * gx;
-      const y = 30 + row * gy;
-      return {
-        position: i + 1,
-        x: Math.min(85, x),
-        y: Math.min(80, y),
-        r: 0,
-      };
-    }
-    if (kind === 'fan') {
-      const cx = 50,
-        cy = 58;
-      const base = -15,
-        step = 6;
-      const r = base + i * step;
-      const rad = (r * Math.PI) / 180;
-      const R = 16;
-      const x = cx + R * Math.sin(rad);
-      const y = cy - R * Math.cos(rad);
-      return { position: i + 1, x, y, r };
-    }
-    const rand = (a: number, b: number) => a + Math.random() * (b - a);
     return {
       position: i + 1,
-      x: 50 + rand(-6, 6),
-      y: 52 + rand(-6, 6),
-      r: rand(-8, 8),
+      x: Math.min(85, 30 + col * gx),
+      y: Math.min(80, 30 + row * gy),
+      r: 0,
     };
   }
 
-  private createNextLayer() {
-    const id = this.layers.length + 1;
-    this.layers.push({ id, cards: [] });
-    this.activeLayer = this.layers.length - 1;
-    this.layerOverlay = true;
-    setTimeout(() => (this.layerOverlay = false), 500);
+  if (kind === 'fan') {
+    const cx = 50,
+      cy = 58;
+    const base = -15,
+      step = 6;
+    const r = base + i * step;
+    const rad = (r * Math.PI) / 180;
+    const R = 16;
+
+    return {
+      position: i + 1,
+      x: cx + R * Math.sin(rad),
+      y: cy - R * Math.cos(rad),
+      r,
+    };
   }
 
-  switchLayer(i: number) {
-    if (i >= 0 && i < this.layers.length) this.activeLayer = i;
-  }
+  const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
-  private runDealAnimation(cards: Placed[]) {
-    setTimeout(() => {
-      cards.forEach((pc, i) => {
-        setTimeout(() => {
-          pc.dealt = true;
-          setTimeout(() => (pc.faceup = true), 300);
-        }, i * 100);
-      });
-      this.saveToHistory();
-    });
-  }
-
-  // ============ util varios ============
-
-  private getApproxFPS(): Promise<number> {
-    let frames = 0;
-    const start = performance.now();
-    return new Promise<number>((resolve) => {
-      function loop() {
-        frames++;
-        if (performance.now() - start < 1000) {
-          requestAnimationFrame(loop);
-        } else {
-          resolve(frames);
-        }
-      }
-      requestAnimationFrame(loop);
-    });
-  }
-
-  private requireUserToken = async (): Promise<string | null> => {
-    const user = this.auth.currentUser;
-    if (!user) {
-      alert('Inicia sesión para usar esta función.');
-      return null;
-    }
-    return user.getIdToken(true);
+  return {
+    position: i + 1,
+    x: 50 + rand(-6, 6),
+    y: 52 + rand(-6, 6),
+    r: rand(-8, 8),
   };
+}
 
-  extractHighlights(text: string): string[] {
-    if (!text) return [];
-    const sentences = text
-      .split(/[.!?]/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 25)
-      .slice(0, 5);
-    return sentences;
-  }
+private createNextLayer() {
+  const id = this.layers.length + 1;
 
-  private toHtml(s: string): string {
-    const esc = (t: string) =>
-      t.replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+  console.log(`🌀 Creando nueva capa #${id}`);
 
-    return esc(s)
-      .split(/\n{2,}/g)
-      .map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-      .join('');
-  }
+  this.layers.push({ id, cards: [] });
+  this.activeLayer = this.layers.length - 1;
 
-  private normalizeInterpretation(text: string): string {
-    if (!text) return '';
-    return text;
-  }
+  this.layerOverlay = true;
+  setTimeout(() => (this.layerOverlay = false), 500);
+}
 
-  // ============ tracking helpers para *ngFor ============
+switchLayer(i: number) {
+  console.log('→ Cambiando a layer', i);
 
-  trackSlot(_index: number, slot: Slot): number {
-    return slot.position;
-  }
-
-  trackCard(_index: number, card: Placed): string {
-    return `${card.layer}-${card.position}-${card.cardId}`;
-  }
-
-  trackDeck(_index: number, item: number): number {
-    return item;
-  }
-
-  trackHistoryEntry(_index: number, entry: HistoryEntry): string {
-    return entry.id;
-  }
-
-  trackById(_index: number, item: { id: string }): string {
-    return item.id;
-  }
-
-  // ============ UI varias / menú colgante ============
-
-  toggleBookPanel() {
-    this.showBookPanel = !this.showBookPanel;
-  }
-
-  openSavedReadings() {
-    // De momento reuso el historial
-    this.openHistory();
-  }
-
-  openSubscription() {
-    console.log('openSubscription clicked');
-  }
-
-  openProfile() {
-    console.log('openProfile clicked');
-  }
-
-  openPrivacy() {
-    console.log('openPrivacy clicked');
-  }
-
-  toggleSettings() {
-    console.log('toggleSettings clicked');
-  }
-
-  handleMenuAction(action: string) {
-    switch (action) {
-      case 'logout':
-        this.logout();
-        break;
-      case 'saved':
-        this.openSavedReadings();
-        break;
-      case 'account':
-        this.openProfile();
-        break;
-      case 'settings':
-        this.toggleSettings();
-        break;
-      case 'premium':
-        this.openSubscription();
-        break;
-      default:
-        console.log('menu action', action);
-    }
-  }
-
-  async logout() {
-    try {
-      await this.authService.logout();
-    } finally {
-      await this.router.navigate(['/login']);
-    }
-  }
-
-  closeInterpret() {
-    this.hideInterpretationModal();
-  }
-
-  setLastDraw(cards: DrawCard[]) {
-    this.lastDraw = Array.isArray(cards) ? cards : [];
-  }
-
-  formatTs(ts: number) {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return String(ts);
-    }
-  }
-
-  private readHistory(): HistoryEntry[] {
-    try {
-      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  }
-
-  private writeHistory(list: HistoryEntry[]) {
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
-    } catch {}
+  if (i >= 0 && i < this.layers.length) {
+    this.activeLayer = i;
   }
 }
+
+private runDealAnimation(cards: Placed[]) {
+  setTimeout(() => {
+    cards.forEach((pc, index) => {
+      setTimeout(() => {
+        pc.dealt = true;
+        setTimeout(() => {
+          pc.faceup = true;
+        }, 300);
+      }, index * 100);
+    });
+
+    this.saveToHistory();
+  });
+}
+
+private saveToHistory() {
+  try {
+    const entry: HistoryEntry = {
+      id: crypto.randomUUID(),
+      spreadId: this.spreadId,
+      spreadLabel: this.spreadLabel,
+      cards: JSON.parse(JSON.stringify(this.placed)),
+      ts: Date.now()
+    };
+
+    // guardar local
+    const list = this.readHistory();
+    list.unshift(entry);
+    this.writeHistory(list);
+
+    // actualizar lista en memoria
+    this.historyList = list;
+  } catch (err) {
+    console.error('[History] Error en saveToHistory()', err);
+  }
+}
+
+
+
+// ------------------------------------------------------------
+//              Utils / FPS / TrackBy
+// ------------------------------------------------------------
+private getApproxFPS(): Promise<number> {
+  let frames = 0;
+  const start = performance.now();
+
+  return new Promise<number>((resolve) => {
+    function loop() {
+      frames++;
+      if (performance.now() - start < 1000) {
+        requestAnimationFrame(loop);
+      } else {
+        resolve(frames);
+      }
+    }
+    requestAnimationFrame(loop);
+  });
+}
+
+extractHighlights(text: string): string[] {
+  if (!text) return [];
+
+  const sentences = text
+    .split(/[.!?]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 25)
+    .slice(0, 5);
+
+  return sentences;
+}
+
+private toHtml(s: string): string {
+  const esc = (t: string) =>
+    t
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  return esc(s)
+    .split(/\n{2,}/g)
+    .map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+private normalizeInterpretation(text: string): string {
+  if (!text) return '';
+  return text;
+}
+
+
+// ------------------------------------------------------------
+// Tracking helpers
+// ------------------------------------------------------------
+trackSlot(_index: number, slot: Slot): number {
+  return slot.position;
+}
+
+trackCard(_index: number, card: Placed): string {
+  return `${card.layer}-${card.position}-${card.cardId}`;
+}
+
+trackDeck(_index: number, item: number): number {
+  return item;
+}
+
+trackHistoryEntry(_index: number, entry: HistoryEntry): string {
+  return entry.id;
+}
+
+trackById(_index: number, item: { id: string }): string {
+  return item.id;
+}
+
+
+// ------------------------------------------------------------
+// Panel y menú colgante
+// ------------------------------------------------------------
+toggleBookPanel() {
+  this.showBookPanel = !this.showBookPanel;
+}
+
+openSavedReadings() {
+  this.openHistory();
+}
+
+openSubscription() {
+  console.log('[Menu] openSubscription clicked');
+}
+
+openProfile() {
+  console.log('[Menu] openProfile clicked');
+}
+
+toggleSettings() {
+  console.log('[Menu] toggleSettings clicked');
+}
+
+handleMenuAction(action: string) {
+  switch (action) {
+    case 'logout':
+      this.logout();
+      break;
+    case 'saved':
+      this.openSavedReadings();
+      break;
+    case 'account':
+      this.openProfile();
+      break;
+    case 'settings':
+      this.toggleSettings();
+      break;
+    case 'premium':
+      this.openSubscription();
+      break;
+    default:
+      console.log('menu action', action);
+  }
+}
+
+async logout() {
+  try {
+    await this.authService.logout();
+  } finally {
+    await this.router.navigate(['/login']);
+  }
+}
+
+closeInterpret() {
+  this.hideInterpretationModal();
+}
+
+setLastDraw(cards: DrawCard[]) {
+  this.lastDraw = Array.isArray(cards) ? cards : [];
+}
+
+formatTs(ts: number) {
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return String(ts);
+  }
+}
+
+private readHistory(): HistoryEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem('tarot-history-v1') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+private writeHistory(list: HistoryEntry[]) {
+  try {
+    localStorage.setItem('tarot-history-v1', JSON.stringify(list));
+  } catch {}
+}
+
+} // ← cierre final del componente
+

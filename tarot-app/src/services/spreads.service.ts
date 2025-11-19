@@ -61,12 +61,20 @@
       return this.http.get<DrawResult>(`${environment.API_BASE}/history/${id}`);
     }
 
+    loadDeck() {
+      return this.http.get<{ cards: CardMeta[] }>(`${environment.API_BASE}/deck/all`);
+    }
+
     deleteHistory(id: string) {
       return this.http.delete<{ ok: boolean }>(`${environment.API_BASE}/history/${id}`);
     }
 
     listHistory(uid: string) {
       return this.http.get<HistoryItem[]>(`${environment.API_BASE}/history?uid=${uid}`);
+    }
+
+    getSpreads() {
+      return this.http.get<SpreadDef[]>(`${environment.API_BASE}/spreads`);
     }
 
     // 🔹 Tirada autenticada con Firebase
