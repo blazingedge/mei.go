@@ -174,7 +174,7 @@ app.use(
 
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
-    credentials: false,
+    credentials: true, 
     maxAge: 86400,
   })
 );
