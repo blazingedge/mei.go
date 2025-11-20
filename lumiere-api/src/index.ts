@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
+import { DECK } from './deck';
 
 // =====================
 // Config
@@ -323,13 +324,75 @@ async function ensureDrucoinWallet(env: Env, uid: string) {
 
   // 👇 aquí pones el saldo inicial que quieras (2)
   await env.DB.prepare(
-    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?,?,?)'
+    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?,2,?)'
   )
     .bind(uid, 2, Date.now())
     .run();
+    await addDrucoins(env, uid, 2);
 
   console.groupEnd();
 }
+
+async function applyDailyDrucoin(env: Env, uid: string) {
+  console.groupCollapsed(
+    '%c⏳ applyDailyDrucoin()',
+    'color:#00bcd4;font-weight:bold;'
+  );
+
+  await ensureDrucoinWallet(env, uid);
+
+  const row = await env.DB.prepare(`
+    SELECT balance, last_daily_at
+    FROM drucoins
+    WHERE uid=?
+  `)
+  .bind(uid)
+  .first<{ balance: number; last_daily_at: number }>();
+
+  const balance = row?.balance ?? 0;
+  const last = row?.last_daily_at ?? 0;
+  const now = Date.now();
+
+  const ONE_DAY = 86_400_000; // 24h
+
+  console.log('Balance BEFORE:', balance);
+  console.log('last_daily_at:', last);
+
+  // Si pasó 1 día o nunca ha recibido daily
+  const shouldGrant = now - last >= ONE_DAY;
+
+  if (shouldGrant) {
+    console.log('→ Ha pasado 1 día, evaluando recarga...');
+
+    if (balance < 1) {
+      // Solo dar 1 si tiene 0
+      console.log('→ Usuario tenía 0, se asigna 1 DruCoin');
+      await env.DB.prepare(`
+        UPDATE drucoins
+        SET balance=1, last_daily_at=?
+        WHERE uid=?
+      `)
+      .bind(now, uid)
+      .run();
+    } else {
+      // Simplemente actualizamos la fecha sin cambiar balance
+      console.log('→ Tiene >=1, no damos gratis. Solo actualizamos fecha.');
+      await env.DB.prepare(`
+        UPDATE drucoins
+        SET last_daily_at=?
+        WHERE uid=?
+      `)
+      .bind(now, uid)
+      .run();
+    }
+  }
+
+  const newBalance = await getDrucoinBalance(env, uid);
+  console.log('Balance AFTER:', newBalance);
+
+  console.groupEnd();
+}
+
 
 
 async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
@@ -1109,9 +1172,12 @@ app.get('/api/session/validate', async (c) => {
     // Plan (solo UI)
     const plan = await ensureUserPlan(c.env, uid);
 
-    // DruCoins reales
+    // ✅ DAILY BONUS PRIMERO
+    await applyDailyDrucoin(c.env, uid);
+
+    // 🔥 DruCoins después del daily
     const drucoins = await getDrucoinBalance(c.env, uid);
-    console.log('DruCoins:', drucoins);
+    console.log('DruCoins (post-daily):', drucoins);
 
     // Quota virtual basada en DruCoins
     const quota = await getUserQuotaState(c.env, uid);
@@ -1146,6 +1212,7 @@ app.get('/api/session/validate', async (c) => {
     return c.json({ ok: false, error: String(err) }, 500);
   }
 });
+
 
 // ============= AQUÍ TERMINA LA PARTE 2/4 =============
 
@@ -1198,24 +1265,27 @@ app.get('/api/spreads', (c) => {
 // ============================================================
 // TAROT — DECK (ABSOLUTE URL)
 // ============================================================
-app.get('/api/decks', (c) => {
-  console.groupCollapsed(
-    '%c🃏 /api/decks',
-    'color:#26c6da;font-weight:bold;'
-  );
+app.get('/api/decks', async (c) => {
+  const CDN = c.env.CDN_BASE;
 
-  const origin = new URL(c.req.url).origin;
-
-  const deckAbs = FULL_DECK.map((m) => ({
-    ...m,
-    imageUrl: new URL(m.imageUrl, origin).toString(),
+  const cards = DECK.map(card => ({
+    id: card.id,
+    name: card.name,
+    suit: card.suit,
+    imageUrl: `${CDN}/${card.id}.webp`
   }));
 
-  console.log('Deck size:', deckAbs.length);
-  console.groupEnd();
-
-  return c.json(deckAbs);
+  return c.json(cards);
 });
+
+function detectSuit(name: string) {
+  if (name.includes('bastos')) return 'wands';
+  if (name.includes('espadas')) return 'swords';
+  if (name.includes('copas')) return 'cups';
+  if (name.includes('pentaculos')) return 'pents';
+  return 'major';
+}
+
 
 // ============================================================
 // SEED / RNG HELPERS FOR DRAW
@@ -1242,64 +1312,24 @@ function rng32(seed: number) {
 // 🔥 DRAW — TIRADAS DE CARTAS (SIN CUOTAS, GRATIS SIEMPRE)
 // ============================================================
 app.post('/api/draw', async (c) => {
-  console.groupCollapsed(
-    '%c🔮 /api/draw',
-    'color:#ffca28;font-weight:bold;'
-  );
-
   try {
-    // Autenticación Firebase opcional
-    const authHeader = c.req.header('Authorization') || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-    let uid = 'guest';
-    let email = 'guest';
-    let isMaster = false;
-
-    if (token) {
-      try {
-        const apiKey = c.env.FIREBASE_API_KEY || '';
-        const verified = await verifyFirebaseIdToken(token, apiKey);
-        uid = verified.uid;
-        email = verified.email;
-        isMaster = isMasterUser(email);
-      } catch (err) {
-        console.warn('⚠ Token inválido en /draw:', err);
-      }
-    }
-
-    console.log('UID:', uid);
-    console.log('Email:', email);
-    console.log('Master:', isMaster);
-
     // Body
-    const body = (await c.req.json().catch(() => ({}))) as {
-      spreadId?: string;
-      seed?: string;
-      context?: string;
-      allowsReversed?: boolean;
-    };
-
+    const body = await c.req.json();
     const spreadId = body.spreadId ?? 'celtic-cross-10';
-    const seedInput = body.seed ?? Date.now().toString();
     const allowsReversed = body.allowsReversed ?? true;
 
-    console.log('Spread:', spreadId);
-    console.log('Seed input:', seedInput);
-
-    // Número de cartas
-    const count =
-      spreadId === 'ppf-3' ? 3 :
-      spreadId === 'free' ? 9 : 10;
-
-    console.log('Cards count:', count);
-
-    // Generar semilla
+    // Semilla
+    const seedInput = body.seed ?? Date.now().toString();
     const seedNum = hashSeed(seedInput);
     const rnd = rng32(seedNum);
 
-    // Shuffle
-    const ids = FULL_DECK.map((d) => d.id);
+    // Count
+    const count = 
+      spreadId === 'ppf-3' ? 3 :
+      spreadId === 'free' ? 9 : 10;
+
+    // Shuflle
+    const ids = [...DECK.map(d => d.id)];
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]];
@@ -1310,45 +1340,19 @@ app.post('/api/draw', async (c) => {
     const cards = selected.map((id, index) => ({
       position: index + 1,
       cardId: id,
-      reversed: allowsReversed ? rnd() < 0.4 : false,
+      reversed: allowsReversed ? rnd() < 0.4 : false
     }));
 
-    console.log('Cards selected:', cards);
-
-    // Guardar tirada (si NO es guest)
-    if (uid !== 'guest') {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        await c.env.DB.prepare(
-          `INSERT INTO draws(uid, email, day, spreadId, context, cards_json)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        )
-          .bind(uid, email, today, spreadId, body.context || '', JSON.stringify(cards))
-          .run();
-
-        console.log('Tirada guardada en DB:', today);
-      } catch (err) {
-        console.warn('⚠ No se pudo guardar la tirada:', err);
-      }
-    }
-
-    const resp = {
+    return c.json({
       ok: true,
       spreadId,
       seed: seedInput,
-      uid,
-      cards,
-      remaining: '∞', // ya que NO hay cuotas
-    };
+      cards
+    });
 
-    console.log('Respuesta final /draw:', resp);
-
-    console.groupEnd();
-    return c.json(resp);
   } catch (err) {
-    console.error('💥 /api/draw ERROR:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error', message: String(err) }, 500);
+    console.error('/api/draw ERROR', err);
+    return c.json({ ok: false }, 500);
   }
 });
 

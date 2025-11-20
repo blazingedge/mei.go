@@ -12,6 +12,18 @@ export class SessionService {
 
   constructor(private terms: TermsCoordinatorService) {}
 
+
+   private state: SessionSnapshot = {
+    uid: null,
+    email: null,
+    drucoins: 0,
+    needsTerms: true
+  };
+
+  get snapshot() {
+    return this.state;
+  }
+
   // =========================================================================
   // PUBLIC VALIDATE WRAPPER
   // =========================================================================
@@ -34,50 +46,42 @@ export class SessionService {
   // REAL VALIDATION — now with Firebase token
   // =========================================================================
   private async performValidation(): Promise<SessionCheckResult> {
-    const url = `${environment.API_BASE}/session/validate`;
+  const url = `${environment.API_BASE}/session/validate`;
 
-    try {
-      // 🔥 1. Obtener token Firebase
-      const auth = getAuth();
-      const user = auth.currentUser;
-
-      if (!user) {
-        console.warn('⚠️ No Firebase user yet — invalid session.');
-        return 'invalid';
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token') ?? ''}`
       }
+    });
 
-      const token = await user.getIdToken(true);
-
-      // 🔥 2. Enviar token a tu backend
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      // 🔥 3. Backend dice "no autorizado"
-      if (res.status === 401) return 'invalid';
-
-      // 🔥 4. Verificar que de verdad es JSON
-      const type = res.headers.get('Content-Type') || '';
-      if (!type.includes('application/json')) {
-        console.error('❌ validate(): Server returned HTML instead of JSON');
-        return 'invalid';
-      }
-
-      const data = await res.json();
-
-      if (data.needsTerms === true) return 'needs-terms';
-      if (data.ok === true) return 'ok';
-
-      return 'invalid';
-
-    } catch (err) {
-      console.error('validate exception:', err);
+    if (res.status === 401) {
+      this.state = { uid:null, email:null, drucoins:0, needsTerms:true };
       return 'invalid';
     }
+
+    const type = res.headers.get('content-type') || '';
+    if (!type.includes('application/json')) return 'invalid';
+
+    const data = await res.json();
+
+    this.state = {
+      uid: data.uid,
+      email: data.email,
+      drucoins: data.drucoins ?? 0,
+      needsTerms: data.needsTerms
+    };
+
+    if (data.needsTerms) return 'needs-terms';
+    return 'ok';
+
+  } catch {
+    this.state = { uid:null, email:null, drucoins:0, needsTerms:true };
+    return 'invalid';
   }
+}
+
 
   // =========================================================================
   // ACCEPT TERMS
@@ -108,3 +112,11 @@ export class SessionService {
     }
   }
 }
+
+export interface SessionSnapshot {
+  uid: string | null;
+  email: string | null;
+  drucoins: number;
+  needsTerms: boolean;
+}
+
