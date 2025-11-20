@@ -362,89 +362,42 @@ private ensureHasDrucoins(): boolean {
 // ---------------------------
 // Verificación de lectura (Términos + Drucoins)
 // ---------------------------
-private async ensureReadingAllowance(): Promise<boolean> {
-  console.group('%c[Reading Allowance Check]', 'color:#ff0');
+async ensureReadingAllowance(): Promise<boolean> {
+  console.group('%c[ReadingCheck] ensureReadingAllowance()', 'color:#fb6');
 
-  // 1) Términos
-  if (this.needsTerms) {
-    console.warn('⚠️ Usuario debe aceptar términos');
+  // 1) Validar sesión: ok / needs-terms / invalid
+  const status = await this.session.validate();
 
-    try {
-      const accepted = await this.sessionService.ensureTermsAcceptance();
-      console.log('→ accepted?', accepted);
-
-      this.needsTerms = !accepted;
-      this.cdr.markForCheck();
-
-      if (!accepted) {
-        alert('Debes aceptar los Términos y Condiciones para continuar.');
-        console.groupEnd();
-        return false;
-      }
-    } catch (err) {
-      console.error('❌ Error en flujo de términos:', err);
-      alert('No se pudieron mostrar los Términos. Intenta de nuevo.');
-      console.groupEnd();
-      return false;
-    }
-  }
-
-  // 2) Verificación backend DRUCOINS
-  console.log('→ Verificando saldo en backend…');
-
-  try {
-    const token = await this.authService.getIdToken();
-
-    if (!token) {
-      console.error('❌ No token → redirigir login');
-      await this.router.navigate(['/login']);
-      console.groupEnd();
-      return false;
-    }
-
-    const res = await fetch(`${environment.API_BASE}/reading/check`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    console.log('→ Response status:', res.status);
-
-    if (res.ok) {
-      console.log('✔ Backend autorizó lectura');
-      console.groupEnd();
-      return true;
-    }
-
-    if (res.status === 402) {
-      const payload = await res.json().catch(() => ({}));
-      console.warn('⚠️ 402 PAYMENT REQUIRED:', payload);
-
-      if (payload?.reason === 'no_drucoins') {
-        this.authService.updateDrucoinBalance(0);
-      }
-
-      alert(payload?.message || 'No tienes DruCoins suficientes.');
-      console.groupEnd();
-      return false;
-    }
-
-    if (res.status === 401) {
-      console.error('❌ Token inválido (401)');
-      await this.authService.logout();
-      await this.router.navigate(['/login']);
-      console.groupEnd();
-      return false;
-    }
-
-    console.error('❌ respuesta inesperada', res.status);
-    console.groupEnd();
-    return false;
-
-  } catch (err) {
-    console.error('❌ Error en reading check', err);
+  if (status === 'invalid') {
+    console.warn('❌ Sesión inválida. Redirigir a login.');
+    this.router.navigate(['/login']);
     console.groupEnd();
     return false;
   }
+
+  // 2) Si faltan términos → abrir modal y aceptar
+  if (status === 'needs-terms') {
+    console.log('⚠ Usuario requiere aceptar términos.');
+    const accepted = await this.session.ensureTermsAcceptance();
+
+    if (!accepted) {
+      console.warn('❌ Usuario canceló términos.');
+      console.groupEnd();
+      return false;
+    }
+
+    console.log('✔ Términos aceptados.');
+  }
+
+  // 3) NO existe /reading/check → se elimina chequeo
+  console.log('→ Verificación DruCoins delegada a /interpret');
+
+  // 4) Si pasó todo → permitido
+  console.log('✔ Permiso preliminar concedido');
+  console.groupEnd();
+  return true;
 }
+
 
 // =======================================================
 // INTERPRETACIÓN IA (principal flujo) — DRUCOINS
