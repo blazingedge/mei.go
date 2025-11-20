@@ -792,7 +792,7 @@ async runInterpretation() {
     this.setBodyModalState('interpreting', true);
 
     const cards = this.placed.map((c) => ({
-      name: c.cardId,
+      cardId: c.cardId,
       reversed: c.reversed,
     }));
 
@@ -828,13 +828,13 @@ async runInterpretation() {
 
     console.log('→ Worker status:', res.status);
 
-    // casos de no saldo
     if (res.status === 402) {
       const payload = await res.json().catch(() => ({}));
       console.error('❌ No tenía DruCoins suficientes:', payload);
 
       if (typeof payload?.drucoins === 'number') {
         this.authService.updateDrucoinBalance(payload.drucoins);
+        this.sessionService.setDrucoins(payload.drucoins);
       }
 
       alert(payload?.message || 'No tienes DruCoins suficientes.');
@@ -845,10 +845,10 @@ async runInterpretation() {
     const data = await res.json();
     console.log('→ Worker response JSON:', data);
 
-    // actualizar el saldo
     if (typeof data?.drucoins === 'number') {
       console.log('→ Actualizando DruCoins:', data.drucoins);
       this.authService.updateDrucoinBalance(data.drucoins);
+      this.sessionService.setDrucoins(data.drucoins);
     }
 
     if (data.ok && data.interpretation) {
@@ -862,7 +862,6 @@ async runInterpretation() {
 
       this.showInterpretation = true;
       this.setBodyModalState('interpret-view', true, 'interpret-open');
-
     } else {
       alert('No se recibió interpretación.');
       console.warn('⚠️ Interpretación vacía');
@@ -878,6 +877,7 @@ async runInterpretation() {
     console.groupEnd();
   }
 }
+
 
 
 

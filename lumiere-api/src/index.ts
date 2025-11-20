@@ -4,6 +4,18 @@ import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import { DECK } from './deck';
 
+
+// ============================================================
+// 🃏 CARD NAME MAP — Crear mapa ES/EN basado en DECK
+// ============================================================
+const cardNamesEs: Record<string, string> = {};
+
+for (const card of DECK) {
+  // card.id = "cups_07"
+  // card.name = "Siete de Copas"
+  cardNamesEs[card.id] = card.name;
+}
+
 // =====================
 // Config
 // =====================
@@ -306,9 +318,24 @@ async function ensureDrucoinTable(env: Env) {
     CREATE TABLE IF NOT EXISTS drucoins (
       uid TEXT PRIMARY KEY,
       balance INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER
+      updated_at INTEGER,
+      last_daily TEXT
     )
   `).run();
+
+  try {
+    const info = await env.DB.prepare(
+      `SELECT 1 AS ok FROM pragma_table_info('drucoins') WHERE name='last_daily' LIMIT 1`
+    )
+      .first<{ ok: number }>();
+
+    if (!info?.ok) {
+      await env.DB.prepare(`ALTER TABLE drucoins ADD COLUMN last_daily TEXT`).run();
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar columna last_daily:', err);
+  }
+
   drucoinTableReady = true;
   console.log('Tabla drucoins asegurada.');
   console.groupEnd();
@@ -325,7 +352,7 @@ async function ensureDrucoinWallet(env: Env, uid: string) {
 
   // ✅ Solo crea si no existe, con saldo inicial 2
   await env.DB.prepare(
-    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?, 2, ?)'
+    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at, last_daily) VALUES(?, 2, ?, NULL)'
   )
     .bind(uid, Date.now())
     .run();
@@ -334,59 +361,48 @@ async function ensureDrucoinWallet(env: Env, uid: string) {
 }
 
 
-export async function applyDailyDrucoin(env: Env, uid: string) {
+export async function applyDailyDrucoin(env: Env, uid: string): Promise<number> {
   console.groupCollapsed(
     '%c🌙 applyDailyDrucoin()',
     'color:#4fc3f7;font-weight:bold;'
   );
 
-  // ✅ Asegurar tabla SIEMPRE
-  await ensureDrucoinTable(env);
+  await ensureDrucoinWallet(env, uid);
 
   const row = await env.DB.prepare(
-    `SELECT balance, updated_at FROM drucoins WHERE uid=?`
+    `SELECT balance, last_daily FROM drucoins WHERE uid=?`
   )
     .bind(uid)
-    .first<{ balance: number; updated_at: number }>();
+    .first<{ balance: number; last_daily: string | null }>();
 
-  const now = Date.now();
-  const oneDay = 24 * 60 * 60 * 1000;
-
-  // 🟢 Usuario sin wallet aún → creamos con 2 (bienvenida)
   if (!row) {
-    console.log('→ Wallet no existía. Creando con 2...');
-    await env.DB.prepare(
-      `INSERT INTO drucoins(uid, balance, updated_at) VALUES(?, 2, ?)`
-    )
-      .bind(uid, now)
-      .run();
-
+    console.warn('⚠️ Wallet no disponible tras ensureDrucoinWallet');
     console.groupEnd();
-    return;
+    return 0;
   }
 
-  const last = row.updated_at ?? 0;
-  const diff = now - last;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  let balance = row.balance ?? 0;
 
-  /**
-   * ⚖ LÓGICA “NO ACUMULATIVA” PERO SIN ROMPER DONACIONES
-   *
-   * - Si han pasado ≥24h y el balance < 1 → lo subimos a 1.
-   * - Si el balance ya es ≥1 (porque tiene donaciones o no las gastó),
-   *   NO lo tocamos (así no le borras coins de pago).
-   */
-  if (diff >= oneDay && row.balance < 1) {
-    console.log('→ >24h y balance < 1. Daily a 1.');
+  if (!row.last_daily || row.last_daily !== todayKey) {
+    console.log('→ Aplicando bono diario de +1');
     await env.DB.prepare(
-      `UPDATE drucoins SET balance = 1, updated_at=? WHERE uid=?`
+      `UPDATE drucoins
+         SET balance = balance + 1,
+             updated_at = ?,
+             last_daily = ?
+       WHERE uid = ?`
     )
-      .bind(now, uid)
+      .bind(Date.now(), todayKey, uid)
       .run();
+
+    balance += 1;
   } else {
-    console.log('→ No se aplica daily. diff(ms):', diff, 'balance:', row.balance);
+    console.log('→ Bono diario ya aplicado hoy.');
   }
 
   console.groupEnd();
+  return balance;
 }
 
 
@@ -422,12 +438,11 @@ async function addDrucoins(env: Env, uid: string, amount: number): Promise<numbe
     return current;
   }
   await ensureDrucoinWallet(env, uid);
-  const sql = await env.DB.prepare(
+  await env.DB.prepare(
     'UPDATE drucoins SET balance = balance + ?, updated_at=? WHERE uid=?'
   )
     .bind(amount, Date.now(), uid)
     .run();
-  console.log('UPDATE resultado:', sql);
   const balance = await getDrucoinBalance(env, uid);
   console.log('Balance después de sumar:', balance);
   console.groupEnd();
@@ -461,17 +476,91 @@ async function useDrucoins(env: Env, uid: string, amount = 1): Promise<boolean> 
     return false;
   }
 
-  const sql = await env.DB.prepare(
+  await env.DB.prepare(
     'UPDATE drucoins SET balance = balance - ?, updated_at=? WHERE uid=?'
   )
     .bind(amount, Date.now(), uid)
     .run();
-  console.log('UPDATE resultado:', sql);
-
   const newBalance = await getDrucoinBalance(env, uid);
   console.log('Balance AFTER:', newBalance);
   console.groupEnd();
   return true;
+}
+
+type ReadingInsertPayload = {
+  uid: string;
+  email?: string | null;
+  interpretation: string;
+  cards?: any[];
+  spreadId?: string | null;
+  title?: string | null;
+  plan?: PlanId;
+};
+
+async function insertReadingRecord(env: Env, payload: ReadingInsertPayload): Promise<string> {
+  const plan = payload.plan ?? (await ensureUserPlan(env, payload.uid));
+  const title =
+    (payload.title?.trim() || 'Lectura guardada').slice(0, 140);
+  const cardsJson = JSON.stringify(payload.cards ?? []);
+  const id = crypto.randomUUID();
+
+  await env.DB.prepare(
+    `INSERT INTO readings(id, uid, email, title, interpretation, cards_json, spreadId, created_at)
+     VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`
+  )
+    .bind(
+      id,
+      payload.uid,
+      payload.email ?? null,
+      title,
+      payload.interpretation,
+      cardsJson,
+      payload.spreadId ?? null
+    )
+    .run();
+
+  await enforceReadingLimit(env, payload.uid, plan);
+  return id;
+}
+
+async function pruneUserItems(
+  env: Env,
+  table: 'history' | 'readings',
+  uid: string,
+  limit: number,
+  orderClause: string
+) {
+  if (limit <= 0) return;
+
+  const query = `SELECT id FROM ${table} WHERE uid=? ${orderClause}`;
+  const rows = await env.DB.prepare(query).bind(uid).all<{ id: string }>();
+  const items = rows.results ?? [];
+  const extra = items.length - limit;
+  if (extra <= 0) return;
+
+  for (let i = 0; i < extra; i++) {
+    const target = items[i];
+    if (!target?.id) continue;
+    await env.DB.prepare(`DELETE FROM ${table} WHERE id=?`)
+      .bind(target.id)
+      .run();
+  }
+}
+
+async function enforceHistoryLimit(env: Env, uid: string, plan: PlanId) {
+  if (plan !== 'luz') return;
+  await pruneUserItems(env, 'history', uid, 3, 'ORDER BY ts ASC');
+}
+
+async function enforceReadingLimit(env: Env, uid: string, plan: PlanId) {
+  if (plan !== 'luz') return;
+  await pruneUserItems(
+    env,
+    'readings',
+    uid,
+    2,
+    'ORDER BY datetime(created_at) ASC'
+  );
 }
 
 // =====================
@@ -1171,14 +1260,13 @@ app.get('/api/session/validate', async (c) => {
 
     // Plan (solo UI)
     const plan = await ensureUserPlan(c.env, uid);
-
+    console.log('Plan del usuario:', plan);
     // ✅ DAILY BONUS PRIMERO
-    await applyDailyDrucoin(c.env, uid);
+  
+    await ensureDrucoinWallet(c.env, uid);
+    const drucoins = await applyDailyDrucoin(c.env, uid);
 
-    // 🔥 DruCoins después del daily
-    const drucoins = await getDrucoinBalance(c.env, uid);
     console.log('DruCoins (post-daily):', drucoins);
-
     // Quota virtual basada en DruCoins
     const quota = await getUserQuotaState(c.env, uid);
 
@@ -1193,7 +1281,7 @@ app.get('/api/session/validate', async (c) => {
     console.log('needsTerms:', needsTerms);
 
     const resp = {
-      ok: true,
+      ok: true, 
       uid,
       email,
       plan,
@@ -1398,17 +1486,30 @@ app.post('/api/history/save', async (c) => {
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
+    const plan = await ensureUserPlan(c.env, uid);
+    const historyId = id || crypto.randomUUID();
+    const payloadCards = Array.isArray(cards) ? cards : [];
+
     await c.env.DB.prepare(
       `INSERT INTO history(id, uid, spreadId, spreadLabel, cards_json, ts)
        VALUES (?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, uid, spreadId, spreadLabel, JSON.stringify(cards), ts ?? Date.now())
+      .bind(
+        historyId,
+        uid,
+        spreadId,
+        spreadLabel || spreadId || 'Tirada',
+        JSON.stringify(payloadCards),
+        ts ?? Date.now()
+      )
       .run();
+
+    await enforceHistoryLimit(c.env, uid, plan);
 
     console.log('Historial guardado OK.');
 
     console.groupEnd();
-    return c.json({ ok: true });
+    return c.json({ ok: true, id: historyId });
   } catch (err) {
     console.error('💥 /history/save error:', err);
     console.groupEnd();
@@ -1468,6 +1569,41 @@ app.get('/api/history/list', async (c) => {
     console.error('💥 /history/list error:', err);
     console.groupEnd();
     return c.json({ ok: false, message: String(err) }, 500);
+  }
+});
+
+app.delete('/api/history/:id', async (c) => {
+  console.groupCollapsed(
+    '%c🗑 /api/history/:id',
+    'color:#ef9a9a;font-weight:bold;'
+  );
+
+  try {
+    const historyId = c.req.param('id');
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+
+    if (!token) {
+      console.warn('❌ sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const v = await verifyFirebaseIdToken(token, apiKey);
+    const uid = v.uid;
+
+    await c.env.DB.prepare('DELETE FROM history WHERE id=? AND uid=?')
+      .bind(historyId, uid)
+      .run();
+
+    console.log('Historial eliminado:', historyId);
+    console.groupEnd();
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('💥 /history/:id delete error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: String(err) }, 500);
   }
 });
 
@@ -1579,51 +1715,53 @@ app.post('/api/interpret', async (c) => {
 
     console.log('Usuario:', uid, email);
 
+    const plan = await ensureUserPlan(c.env, uid);
+
     const isMaster = isMasterUser(email);
     console.log('¿Master?', isMaster);
 
     // -----------------------------------
     // DRUCOINS VALIDATION
     // -----------------------------------
+    let remainingBalance = await getDrucoinBalance(c.env, uid);
     if (!isMaster) {
-      const before = await getDrucoinBalance(c.env, uid);
-      console.log('DruCoins BEFORE:', before);
-
-      if (before <= 0) {
+      if (remainingBalance < 1) {
         console.warn('❌ Sin DruCoins suficientes');
         console.groupEnd();
         return c.json(
           {
             ok: false,
-            error: 'NO_DRUCOINS',
-            message: 'No tienes DruCoins suficientes.',
-            drucoins: before,
+            drucoins: remainingBalance,
+            message: 'No tienes suficientes DruCoins',
           },
           402
         );
       }
 
-      // Descuento
-      const okUse = await useDrucoins(c.env, uid, 1);
-      if (!okUse) {
+      const spent = await useDrucoins(c.env, uid, 1);
+      if (!spent) {
         console.warn('❌ Falla al descontar DruCoins');
-        const bal = await getDrucoinBalance(c.env, uid);
+        remainingBalance = await getDrucoinBalance(c.env, uid);
         console.groupEnd();
-        return c.json({
-          ok: false,
-          error: 'NO_DRUCOINS',
-          drucoins: bal,
-        }, 402);
+        return c.json(
+          {
+            ok: false,
+            drucoins: remainingBalance,
+            message: 'No tienes suficientes DruCoins',
+          },
+          402
+        );
       }
 
-      const after = await getDrucoinBalance(c.env, uid);
+      const before = remainingBalance;
+      remainingBalance = await getDrucoinBalance(c.env, uid);
 
       console.groupCollapsed(
         '%c💰 DruCoins descontados',
         'color:#ff7043;font-weight:bold;'
       );
       console.log('Antes:', before);
-      console.log('Después:', after);
+      console.log('Después:', remainingBalance);
       console.groupEnd();
     }
 
@@ -1637,9 +1775,12 @@ app.post('/api/interpret', async (c) => {
         ? 'Pasado · Presente · Futuro'
         : 'Tirada libre';
 
-    const formattedCards = cards.map((c) =>
-      `${cardNamesEs[c.name] || c.name}${c.reversed ? ' (invertida)' : ''}`
-    );
+   const formattedCards = cards.map((c) => {
+  const id = c.cardId; // tu backend recibe cardId, NO name
+  const name = cardNamesEs[id] || id;
+  return `${name}${c.reversed ? ' (invertida)' : ''}`;
+});
+
 
     const prompt = `
 Eres un guía espiritual celta. Usa frases breves y claras (máx 2–3 líneas cada párrafo).
@@ -1669,52 +1810,72 @@ Tareas:
       return c.json({ ok: false, error: 'no_token' }, 401);
     }
 
-    const response = await fetch(
-      'https://router.huggingface.co/featherless-ai/v1/completions',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${hfToken}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: 'meta-llama/Llama-3.1-8B-Instruct',
-          prompt,
-          max_tokens: 900,
-          temperature: 0.65,
-          top_p: 0.85,
-        }),
+    const defaultInterpretation =
+      'No pudimos generar una interpretación en este momento. Por favor inténtalo nuevamente.';
+    let interpretation = '';
+
+    try {
+      const response = await fetch(
+        'https://router.huggingface.co/featherless-ai/v1/completions',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${hfToken}`,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: 'meta-llama/Llama-3.1-8B-Instruct',
+            prompt,
+            max_tokens: 900,
+            temperature: 0.65,
+            top_p: 0.85,
+          }),
+        }
+      );
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('❌ HF error:', response.status, text);
+        interpretation = defaultInterpretation;
+      } else {
+        const result = await response.json();
+        interpretation = result?.choices?.[0]?.text?.trim() || '';
       }
-    );
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('❌ HF error:', response.status, text);
-      console.groupEnd();
-      return c.json({ ok: false, error: text });
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('❌ Error solicitando interpretación:', err);
+      interpretation = defaultInterpretation;
     }
 
-    const result = await response.json();
-
-    let interpretation = result?.choices?.[0]?.text?.trim() || '';
-    console.log('Interpretación bruta:', interpretation);
-
-    // Limpieza
     interpretation = interpretation
-      .replace(/(Gracias[^]+$)/i, '')
-      .replace(/(\*\*.*Licencia.*$)/i, '')
-      .replace(/\*{3,}/g, '**')
-      .trim();
+    .replace(/Gracias[^\n]+$/gi, '')
+    .replace(/Licencia[^\n]+$/gi, '')
+    .trim();
 
-    console.log('Interpretación final limpia:', interpretation);
+
+    if (!interpretation) {
+      interpretation = defaultInterpretation;
+    }
+
+    const cardsPayload = Array.isArray(cards) ? cards : [];
+    const readingId = await insertReadingRecord(c.env, {
+      uid,
+      email,
+      interpretation,
+      cards: cardsPayload,
+      spreadId,
+      title: spreadLabel,
+      plan,
+    });
 
     const resp = {
       ok: true,
       interpretation,
-      drucoins: await getDrucoinBalance(c.env, uid),
+      drucoins: remainingBalance,
+      readingId,
     };
 
     console.log('Respuesta final /interpret:', resp);
@@ -1755,14 +1916,17 @@ app.post('/api/readings/save', async (c) => {
     const email = v.email;
 
     console.log('Usuario:', uid, email);
+    const plan = await ensureUserPlan(c.env, uid);
 
-    const id = crypto.randomUUID();
-    await c.env.DB.prepare(
-      `INSERT INTO readings(id,uid,email,title,interpretation,cards_json,spreadId,created_at)
-       VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`
-    )
-      .bind(id, uid, email, title, interpretation, JSON.stringify(cards), spreadId)
-      .run();
+    const id = await insertReadingRecord(c.env, {
+      uid,
+      email,
+      interpretation,
+      cards,
+      spreadId,
+      title,
+      plan,
+    });
 
     console.log('Lectura guardada:', id);
 

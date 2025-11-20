@@ -87,6 +87,9 @@ private async performValidation(): Promise<SessionCheckResult> {
   }
 }
 
+setDrucoins(value: number) {
+  this.state.drucoins = value;
+}
 
 
   // =========================================================================

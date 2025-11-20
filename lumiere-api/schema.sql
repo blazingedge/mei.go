@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS quotas (
 CREATE TABLE IF NOT EXISTS drucoins (
   uid TEXT PRIMARY KEY,
   balance INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER
+  updated_at INTEGER,
+  last_daily TEXT
 );
 
 CREATE TABLE IF NOT EXISTS drucoin_reservations (
