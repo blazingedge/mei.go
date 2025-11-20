@@ -260,61 +260,70 @@ export class SpreadsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
 
-    console.group('%c[SpreadsComponent INIT]', 'color:#66f');
+  console.group('%c[SpreadsComponent INIT]', 'color:#66f');
 
-    this.authService.needsTerms$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((needs) => {
-        console.debug('→ needsTerms updated:', needs);
-        this.needsTerms = needs;
-        this.cdr.markForCheck();
-      });
+  this.authService.needsTerms$
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((needs) => {
+      console.debug('→ needsTerms updated:', needs);
+      this.needsTerms = needs;
+      this.cdr.markForCheck();
+    });
 
-    const sessionStatus = await this.sessionService.validate(true);
-    console.debug('→ Session status:', sessionStatus);
+  const sessionStatus = await this.sessionService.validate(true);
+  console.debug('→ Session validate result:', sessionStatus);
 
-    if (sessionStatus === 'invalid') {
-      console.warn('⚠️ Sesión inválida. Redirigiendo a login.');
-      await this.router.navigate(['/login']);
-      console.groupEnd();
-      return;
-    }
+  // ⭐ FIX: sincronizar DruCoins REALES tras validate()
+  const snap = this.sessionService.snapshot;
+  console.debug('→ Synced drucoins from SessionService:', snap.drucoins);
 
-    const needsTerms =
-      sessionStatus === 'needs-terms' ||
-      (await this.authService.syncTermsStatus());
+  this.drucoinBalance = snap.drucoins;
+  this.authService.updateDrucoinBalance(snap.drucoins);
+  this.cdr.markForCheck();
 
-    console.debug('→ needsTerms (sync):', needsTerms);
-
-    this.needsTerms = needsTerms;
-    this.cdr.markForCheck();
-
-    this.resolveBgInBackground();
-
-    await this.loadDeckFirst();
-    this.rebuildSlots();
-    this.loadSpreadsInBackground();
-
-    const user = this.auth.currentUser;
-
-    if (user) {
-      const token = await user.getIdToken(true);
-      console.debug('→ Loading history from API...');
-
-      const res = await fetch(`${environment.API_BASE}/history/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        console.debug('→ Remote history loaded:', data.history);
-        this.historyList = data.history;
-        this.writeHistory(data.history);
-      }
-    }
-
+  if (sessionStatus === 'invalid') {
+    console.warn('⚠️ Sesión inválida. Redirigiendo a login.');
+    await this.router.navigate(['/login']);
     console.groupEnd();
+    return;
   }
+
+  const needsTerms =
+    sessionStatus === 'needs-terms' ||
+    (await this.authService.syncTermsStatus());
+
+  console.debug('→ needsTerms (sync):', needsTerms);
+
+  this.needsTerms = needsTerms;
+  this.cdr.markForCheck();
+
+  this.resolveBgInBackground();
+
+  await this.loadDeckFirst();
+  this.rebuildSlots();
+  this.loadSpreadsInBackground();
+
+  const user = this.auth.currentUser;
+
+  if (user) {
+    const token = await user.getIdToken(true);
+    console.debug('→ Loading history from API...');
+
+    const res = await fetch(`${environment.API_BASE}/history/list`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      console.debug('→ Remote history loaded:', data.history);
+      this.historyList = data.history;
+      this.writeHistory(data.history);
+    }
+  }
+
+  console.groupEnd();
+}
+
 
   ngOnDestroy() {
     console.debug('%c[DESTROY] SpreadsComponent', 'color:red');
