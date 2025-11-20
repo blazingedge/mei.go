@@ -477,7 +477,7 @@
 
                 <div class="actions">
                   <button (click)="loadHistory(item)">Cargar</button>
-                  <button (click)="deleteHistory(item.id)">Eliminar</button>
+                  <button (click)="deleteHistory(item.id, $event)">Eliminar</button>
                 </div>
               </li>
             }
@@ -485,6 +485,64 @@
         }
       </section>
 
+    </div>
+  </div>
+}
+
+
+
+<!-- LECTURAS GUARDADAS -->
+@if (showSavedReadings) {
+  <div class="saved-overlay" (click)="closeSavedReadings()">
+    <div class="saved-panel" (click)="$event.stopPropagation()">
+
+      <header>
+        <h3>Tus interpretaciones guardadas</h3>
+        <button type="button" class="close" (click)="closeSavedReadings()">&times;</button>
+      </header>
+
+      @if (savedReadingsLoading) {
+        <p class="saved-loading">Cargando lecturas...</p>
+      } @else if (savedError) {
+        <p class="saved-error">{{ savedError }}</p>
+      } @else if (!savedReadings.length) {
+        <p class="saved-empty">Todavía no tienes interpretaciones guardadas.</p>
+      } @else {
+        <ul class="saved-list">
+          @for (reading of savedReadings; track reading.id) {
+            <li>
+              <div>
+                <strong>{{ reading.title }}</strong>
+                <small>{{ formatTs(reading.createdAt) }}</small>
+              </div>
+              <button type="button" (click)="viewSavedReading(reading, $event)">Ver</button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </div>
+}
+
+
+<!-- DETALLE DE LECTURA GUARDADA -->
+@if (savedDetail || savedDetailLoading) {
+  <div class="history-modal-interpretation" (click)="closeSavedInterpretation()">
+    <div class="history-modal-interpretation__dialog" (click)="$event.stopPropagation()">
+      <header>
+        <h3>{{ savedDetail?.title || 'Interpretación' }}</h3>
+        <button type="button" class="close" (click)="closeSavedInterpretation()">&times;</button>
+      </header>
+
+      <section class="history-modal-interpretation__body">
+        @if (savedDetailLoading) {
+          <p><em>Cargando interpretación...</em></p>
+        } @else if (savedDetailSafe) {
+          <div class="history-modal-interpretation__content" [innerHTML]="savedDetailSafe"></div>
+        } @else {
+          <p>Interpretación no disponible.</p>
+        }
+      </section>
     </div>
   </div>
 }

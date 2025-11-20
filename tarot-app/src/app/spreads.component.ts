@@ -279,6 +279,8 @@ export class SpreadsComponent implements OnInit, OnDestroy {
 
   this.drucoinBalance = snap.drucoins;
   this.authService.updateDrucoinBalance(snap.drucoins);
+  let needsTerms = !!snap.needsTerms;
+  this.historyList = this.normalizeHistoryList(this.readHistory());
   this.cdr.markForCheck();
 
   if (sessionStatus === 'invalid') {
@@ -288,13 +290,20 @@ export class SpreadsComponent implements OnInit, OnDestroy {
     return;
   }
 
-  const needsTerms =
-    sessionStatus === 'needs-terms' ||
-    (await this.authService.syncTermsStatus());
+  if (sessionStatus === 'needs-terms') {
+    needsTerms = true;
+  } else if (!needsTerms) {
+    needsTerms = await this.authService.syncTermsStatus();
+  }
 
   console.debug('→ needsTerms (sync):', needsTerms);
 
   this.needsTerms = needsTerms;
+  if (needsTerms) {
+    this.authService.requireTermsAcceptance();
+  } else {
+    this.authService.markTermsAccepted();
+  }
   this.cdr.markForCheck();
 
   this.resolveBgInBackground();
@@ -314,10 +323,12 @@ export class SpreadsComponent implements OnInit, OnDestroy {
     });
 
     const data = await res.json();
-    if (data.ok) {
+    if (data?.ok && Array.isArray(data.history)) {
       console.debug('→ Remote history loaded:', data.history);
-      this.historyList = data.history;
-      this.writeHistory(data.history);
+      const normalized = this.normalizeHistoryList(data.history);
+      this.historyList = normalized;
+      this.writeHistory(normalized);
+      this.cdr.markForCheck();
     }
   }
 
@@ -709,8 +720,10 @@ loadHistory(entry: HistoryEntry) {
   console.group('%c[History] loadHistory()', 'color:#81c784');
   console.log('→ Loading:', entry);
 
+  const cards = Array.isArray(entry.cards) ? entry.cards : [];
+
   // reconstrucción del board
-  this.placed = entry.cards.map((c) => ({
+  this.placed = cards.map((c) => ({
     ...c,
     delay: 0,
     dealt: true,
@@ -722,11 +735,34 @@ loadHistory(entry: HistoryEntry) {
   console.groupEnd();
 }
 
-deleteHistory(id: string) {
+async deleteHistory(id: string, ev?: Event) {
+  ev?.stopPropagation?.();
+
   console.group('%c[History] deleteHistory()', 'color:#ffcc80');
   this.historyList = this.historyList.filter((h) => h.id !== id);
   this.writeHistory(this.historyList);
-  console.groupEnd();
+  this.cdr.markForCheck();
+
+  try {
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser
+      ? await firebaseUser.getIdToken(true)
+      : await this.authService.getIdToken();
+
+    if (!token) {
+      console.warn('⚠️ No token para borrar history');
+      return;
+    }
+
+    await fetch(`${environment.API_BASE}/history/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    console.error('❌ Error borrando history remoto:', err);
+  } finally {
+    console.groupEnd();
+  }
 }
 
 
@@ -826,8 +862,6 @@ async runInterpretation() {
 
       this.showInterpretation = true;
       this.setBodyModalState('interpret-view', true, 'interpret-open');
-
-      await this.saveReading();
 
     } else {
       alert('No se recibió interpretación.');
@@ -988,61 +1022,6 @@ private hideInterpretationModal() {
 
   if (this.activeModalContexts.size === 0) {
     document.body.classList.remove('modal-open');
-  }
-
-  console.groupEnd();
-}
-
-
-// ------------------------------------------------------------
-// Guardar interpretación IA como lectura detallada
-// ------------------------------------------------------------
-private async saveReading() {
-  console.group('%c[Save Reading] saveReading()', 'color:#8d6e63');
-
-  try {
-    const firebaseUser = this.auth.currentUser;
-    const token = firebaseUser
-      ? await firebaseUser.getIdToken(true)
-      : await this.authService.getIdToken();
-
-    if (!token) {
-      console.warn('⚠️ No token → no se guarda lectura');
-      console.groupEnd();
-      return;
-    }
-
-    const payload = {
-      spreadId: this.spreadId,
-      interpretation: this.interpretationText,
-      cards: this.placed.map((pc) => ({
-        id: pc.cardId,
-        reversed: pc.reversed,
-        pos: pc.position,
-      })),
-      context: this.userContext,
-    };
-
-    console.log('→ Guardando lectura en backend:', payload);
-
-    const res = await fetch(`${environment.API_BASE}/history/save`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    console.log('→ Respuesta save:', data);
-
-    if (data.ok && data.history) {
-      this.historyList = data.history;
-      this.writeHistory(data.history);
-    }
-  } catch (err) {
-    console.error('❌ Error guardando lectura IA:', err);
   }
 
   console.groupEnd();
@@ -1591,8 +1570,150 @@ toggleBookPanel() {
   this.showBookPanel = !this.showBookPanel;
 }
 
-openSavedReadings() {
-  this.openHistory();
+async openSavedReadings() {
+  console.group('%c[SavedReadings] openSavedReadings()', 'color:#82b1ff');
+
+  this.showSavedReadings = true;
+  this.savedError = null;
+  this.setBodyModalState('saved-readings', true);
+
+  await this.loadSavedReadings();
+
+  console.groupEnd();
+}
+
+closeSavedReadings() {
+  console.group('%c[SavedReadings] closeSavedReadings()', 'color:#ef9a9a');
+
+  this.showSavedReadings = false;
+  this.setBodyModalState('saved-readings', false);
+  this.closeSavedInterpretation();
+
+  console.groupEnd();
+}
+
+private async loadSavedReadings() {
+  console.group('%c[SavedReadings] loadSavedReadings()', 'color:#ffcc80');
+
+  this.savedReadingsLoading = true;
+  this.savedError = null;
+
+  try {
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser
+      ? await firebaseUser.getIdToken(true)
+      : await this.authService.getIdToken();
+
+    if (!token) {
+      this.savedError = 'Inicia sesión para ver tus interpretaciones.';
+      return;
+    }
+
+    const res = await fetch(`${environment.API_BASE}/readings/list`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      this.savedError = 'No se pudo cargar tu biblioteca.';
+      return;
+    }
+
+    const data = await res.json();
+    const rawItems = Array.isArray(data?.items) ? data.items : data?.readings;
+
+    if (!Array.isArray(rawItems)) {
+      this.savedReadings = [];
+      return;
+    }
+
+    this.savedReadings = rawItems.map((item: any) => ({
+      id: item.id,
+      title: item.title || 'Lectura guardada',
+      createdAt: Number(item.createdAt ?? item.created_at ?? Date.now()),
+    }));
+  } catch (err) {
+    console.error('❌ loadSavedReadings error:', err);
+    this.savedError = 'No se pudo cargar tu biblioteca.';
+  } finally {
+    this.savedReadingsLoading = false;
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+async viewSavedReading(item: SavedReadingSummary, ev?: Event) {
+  ev?.stopPropagation?.();
+
+  console.group('%c[SavedReadings] viewSavedReading()', 'color:#8bc34a');
+  console.log('→ item:', item);
+
+  this.savedDetail = null;
+  this.savedDetailSafe = null;
+  this.savedDetailLoading = true;
+
+  try {
+    const firebaseUser = this.auth.currentUser;
+    const token = firebaseUser
+      ? await firebaseUser.getIdToken(true)
+      : await this.authService.getIdToken();
+
+    if (!token) {
+      this.savedError = 'Inicia sesión nuevamente.';
+      return;
+    }
+
+    const res = await fetch(`${environment.API_BASE}/readings/${item.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      this.savedError = 'No se pudo abrir la interpretación.';
+      return;
+    }
+
+    const data = await res.json();
+    if (!data?.ok) {
+      this.savedError = 'Lectura no disponible.';
+      return;
+    }
+
+    const interpretation = data.interpretation || '';
+    this.savedDetail = {
+      id: data.id,
+      title: data.title || item.title,
+      createdAt: Number(data.createdAt ?? Date.now()),
+      interpretation,
+      cards: data.cards ?? [],
+      spreadId: data.spreadId,
+    };
+    this.savedDetailSafe = this.sanitizer.bypassSecurityTrustHtml(
+      this.toHtml(interpretation)
+    );
+
+    this.setBodyModalState('history-modal-interpretation', true, 'interpret-open');
+  } catch (err) {
+    console.error('❌ viewSavedReading error:', err);
+    this.savedError = 'No se pudo abrir la interpretación.';
+  } finally {
+    this.savedDetailLoading = false;
+    this.cdr.markForCheck();
+    console.groupEnd();
+  }
+}
+
+closeSavedInterpretation() {
+  if (!this.savedDetail && !this.savedDetailLoading) {
+    return;
+  }
+
+  console.group('%c[SavedReadings] closeSavedInterpretation()', 'color:#ef5350');
+
+  this.savedDetail = null;
+  this.savedDetailSafe = null;
+  this.savedDetailLoading = false;
+  this.setBodyModalState('history-modal-interpretation', false, 'interpret-open');
+
+  console.groupEnd();
 }
 
 openSubscription() {
@@ -1655,7 +1776,8 @@ formatTs(ts: number) {
 
 private readHistory(): HistoryEntry[] {
   try {
-    return JSON.parse(localStorage.getItem('tarot-history-v1') || '[]');
+    const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return this.normalizeHistoryList(stored);
   } catch {
     return [];
   }
@@ -1663,9 +1785,55 @@ private readHistory(): HistoryEntry[] {
 
 private writeHistory(list: HistoryEntry[]) {
   try {
-    localStorage.setItem('tarot-history-v1', JSON.stringify(list));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
   } catch {}
 }
 
-} // ← cierre final del componente
+private normalizeHistoryList(source: any): HistoryEntry[] {
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((entry) => this.normalizeHistoryEntry(entry))
+    .filter((entry): entry is HistoryEntry => !!entry);
+}
 
+private normalizeHistoryEntry(raw: any): HistoryEntry | null {
+  if (!raw) return null;
+  const safeId = typeof raw.id === 'string' ? raw.id : this.generateHistoryId();
+  const cards = this.parseHistoryCards(raw.cards ?? raw.cards_json);
+
+  return {
+    id: safeId,
+    spreadId: raw.spreadId || 'free',
+    spreadLabel: raw.spreadLabel || 'Tirada',
+    cards,
+    ts: typeof raw.ts === 'number' ? raw.ts : Number(raw.ts) || Date.now(),
+  };
+}
+
+private parseHistoryCards(value: any): Placed[] {
+  if (Array.isArray(value)) {
+    return value as Placed[];
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed as Placed[];
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  return [];
+}
+
+private generateHistoryId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `history-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+} // ← cierre final del componente
