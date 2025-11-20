@@ -120,7 +120,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   private sessionService = inject(SessionService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
-
+  private session = inject(SessionService);
   // ============================================
   // ESTADO PRINCIPAL
   // ============================================
