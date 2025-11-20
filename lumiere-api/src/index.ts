@@ -1144,6 +1144,8 @@ app.post('/api/terms/accept', async (c) => {
 // ============================================================
 
 app.get('/api/session/validate', async (c) => {
+  console.log("Authorization header:", c.req.header("Authorization"));
+
   console.groupCollapsed(
     '%c🔐 /api/session/validate',
     'color:#29b6f6;font-weight:bold;'

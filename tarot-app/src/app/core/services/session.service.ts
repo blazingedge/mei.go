@@ -45,17 +45,21 @@ export class SessionService {
   // =========================================================================
   // REAL VALIDATION — now with Firebase token
   // =========================================================================
-  private async performValidation(): Promise<SessionCheckResult> {
+private async performValidation(): Promise<SessionCheckResult> {
   const url = `${environment.API_BASE}/session/validate`;
 
   try {
+    const auth = getAuth();
+    const token = await auth.currentUser?.getIdToken(true);
+
     const res = await fetch(url, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token') ?? ''}`
+        Authorization: `Bearer ${token ?? ''}`
       }
     });
 
+    // Unauthorized
     if (res.status === 401) {
       this.state = { uid:null, email:null, drucoins:0, needsTerms:true };
       return 'invalid';
@@ -76,11 +80,13 @@ export class SessionService {
     if (data.needsTerms) return 'needs-terms';
     return 'ok';
 
-  } catch {
+  } catch (err) {
+    console.error("validate error:", err);
     this.state = { uid:null, email:null, drucoins:0, needsTerms:true };
     return 'invalid';
   }
 }
+
 
 
   // =========================================================================
