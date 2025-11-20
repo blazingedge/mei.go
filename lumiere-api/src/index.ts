@@ -320,14 +320,17 @@ async function ensureDrucoinWallet(env: Env, uid: string) {
   );
   console.log('UID:', uid);
   await ensureDrucoinTable(env);
-  const sql = await env.DB.prepare(
+
+  // 👇 aquí pones el saldo inicial que quieras (2)
+  await env.DB.prepare(
     'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?,?,?)'
   )
-    .bind(uid, 0, Date.now())
-  .run();
-  console.log('Resultado INSERT OR IGNORE:', sql);
+    .bind(uid, 2, Date.now())
+    .run();
+
   console.groupEnd();
 }
+
 
 async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
   console.groupCollapsed(

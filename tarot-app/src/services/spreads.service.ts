@@ -61,9 +61,10 @@
       return this.http.get<DrawResult>(`${environment.API_BASE}/history/${id}`);
     }
 
-    loadDeck() {
-      return this.http.get<{ cards: CardMeta[] }>(`${environment.API_BASE}/deck/all`);
-    }
+   loadDeck() {
+  return this.http.get<CardMeta[]>(`${this.base}/decks`);
+  // this.base ya es environment.API_BASE
+}
 
     deleteHistory(id: string) {
       return this.http.delete<{ ok: boolean }>(`${environment.API_BASE}/history/${id}`);

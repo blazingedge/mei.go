@@ -551,18 +551,16 @@ async loadDeckFirst() {
   this.deckMap.clear();
 
   try {
-    console.log('→ Llamando API: /deck/all');
-    const res = await firstValueFrom(this.api.loadDeck());
+    console.log('→ Llamando API: /decks');
+    const cards = await firstValueFrom(this.api.loadDeck());
 
+    console.log('→ Deck recibido:', cards);
 
-    console.log('→ Deck recibido:', res);
+    for (const card of cards) {
+      this.deckMap.set(card.id, card);
+    }
 
-   for (const card of res.cards) {
-  this.deckMap.set(card.id, card);
-}
-
-this.deckCount = res.cards.length;
-
+    this.deckCount = cards.length;
     this.deckReady = true;
     console.log(`✔ Mazo cargado (${this.deckCount} cartas)`);
 
@@ -575,6 +573,7 @@ this.deckCount = res.cards.length;
     console.groupEnd();
   }
 }
+
 
 
 // ------------------------------------------------------------
