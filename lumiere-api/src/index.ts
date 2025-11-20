@@ -320,78 +320,76 @@ async function ensureDrucoinWallet(env: Env, uid: string) {
     'color:#ffa000;font-weight:bold;'
   );
   console.log('UID:', uid);
+
   await ensureDrucoinTable(env);
 
-  // 👇 aquí pones el saldo inicial que quieras (2)
+  // ✅ Solo crea si no existe, con saldo inicial 2
   await env.DB.prepare(
-    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?,2,?)'
+    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at) VALUES(?, 2, ?)'
   )
-    .bind(uid, 2, Date.now())
+    .bind(uid, Date.now())
     .run();
-    await addDrucoins(env, uid, 2);
 
   console.groupEnd();
 }
 
-async function applyDailyDrucoin(env: Env, uid: string) {
+
+export async function applyDailyDrucoin(env: Env, uid: string) {
   console.groupCollapsed(
-    '%c⏳ applyDailyDrucoin()',
-    'color:#00bcd4;font-weight:bold;'
+    '%c🌙 applyDailyDrucoin()',
+    'color:#4fc3f7;font-weight:bold;'
   );
 
-  await ensureDrucoinWallet(env, uid);
+  // ✅ Asegurar tabla SIEMPRE
+  await ensureDrucoinTable(env);
 
-  const row = await env.DB.prepare(`
-    SELECT balance, last_daily_at
-    FROM drucoins
-    WHERE uid=?
-  `)
-  .bind(uid)
-  .first<{ balance: number; last_daily_at: number }>();
+  const row = await env.DB.prepare(
+    `SELECT balance, updated_at FROM drucoins WHERE uid=?`
+  )
+    .bind(uid)
+    .first<{ balance: number; updated_at: number }>();
 
-  const balance = row?.balance ?? 0;
-  const last = row?.last_daily_at ?? 0;
   const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
 
-  const ONE_DAY = 86_400_000; // 24h
-
-  console.log('Balance BEFORE:', balance);
-  console.log('last_daily_at:', last);
-
-  // Si pasó 1 día o nunca ha recibido daily
-  const shouldGrant = now - last >= ONE_DAY;
-
-  if (shouldGrant) {
-    console.log('→ Ha pasado 1 día, evaluando recarga...');
-
-    if (balance < 1) {
-      // Solo dar 1 si tiene 0
-      console.log('→ Usuario tenía 0, se asigna 1 DruCoin');
-      await env.DB.prepare(`
-        UPDATE drucoins
-        SET balance=1, last_daily_at=?
-        WHERE uid=?
-      `)
-      .bind(now, uid)
+  // 🟢 Usuario sin wallet aún → creamos con 2 (bienvenida)
+  if (!row) {
+    console.log('→ Wallet no existía. Creando con 2...');
+    await env.DB.prepare(
+      `INSERT INTO drucoins(uid, balance, updated_at) VALUES(?, 2, ?)`
+    )
+      .bind(uid, now)
       .run();
-    } else {
-      // Simplemente actualizamos la fecha sin cambiar balance
-      console.log('→ Tiene >=1, no damos gratis. Solo actualizamos fecha.');
-      await env.DB.prepare(`
-        UPDATE drucoins
-        SET last_daily_at=?
-        WHERE uid=?
-      `)
-      .bind(now, uid)
-      .run();
-    }
+
+    console.groupEnd();
+    return;
   }
 
-  const newBalance = await getDrucoinBalance(env, uid);
-  console.log('Balance AFTER:', newBalance);
+  const last = row.updated_at ?? 0;
+  const diff = now - last;
+
+  /**
+   * ⚖ LÓGICA “NO ACUMULATIVA” PERO SIN ROMPER DONACIONES
+   *
+   * - Si han pasado ≥24h y el balance < 1 → lo subimos a 1.
+   * - Si el balance ya es ≥1 (porque tiene donaciones o no las gastó),
+   *   NO lo tocamos (así no le borras coins de pago).
+   */
+  if (diff >= oneDay && row.balance < 1) {
+    console.log('→ >24h y balance < 1. Daily a 1.');
+    await env.DB.prepare(
+      `UPDATE drucoins SET balance = 1, updated_at=? WHERE uid=?`
+    )
+      .bind(now, uid)
+      .run();
+  } else {
+    console.log('→ No se aplica daily. diff(ms):', diff, 'balance:', row.balance);
+  }
 
   console.groupEnd();
 }
+
+
 
 
 
@@ -1277,6 +1275,7 @@ app.get('/api/decks', async (c) => {
 
   return c.json(cards);
 });
+
 
 function detectSuit(name: string) {
   if (name.includes('bastos')) return 'wands';
