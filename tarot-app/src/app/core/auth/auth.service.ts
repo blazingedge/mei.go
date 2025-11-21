@@ -16,6 +16,7 @@ import {
   signOut,
   User,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
 } from '@angular/fire/auth';
 
 import { browserLocalPersistence, setPersistence } from 'firebase/auth';
@@ -125,28 +126,16 @@ export class AuthService {
   // LOGIN TRADICIONAL
   // -----------------------
   async login(email: string, password: string): Promise<boolean> {
-    try {
-      const res = await this.http
-        .post<{ ok: boolean; token?: string }>(
-          `${environment.API_BASE}/auth/login`,
-          { email, password },
-          { withCredentials: true }
-        )
-        .toPromise();
-
-      if (res?.ok && res?.token) {
-        this.workerToken = res.token;
-        return true;
-      }
-      
-
-      return false;
-    } catch (err) {
-      console.error('[Auth] login error:', err);
-      return false;
-    }
-    
+  try {
+    const result = await signInWithEmailAndPassword(this.auth, email, password);
+    const token = await result.user.getIdToken(true);
+    this.workerToken = token;
+    return true;
+  } catch (err) {
+    console.error('[Auth] login error Firebase:', err);
+    return false;
   }
+}
 
   // -----------------------
   // REGISTRO TRADICIONAL

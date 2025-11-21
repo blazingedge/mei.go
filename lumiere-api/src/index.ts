@@ -1228,59 +1228,7 @@ if (!resp.ok || !data.idToken) {
 });
 
 
-// ============================================================
-// AUTH — LOGIN (Firebase Email + Password)
-// ============================================================
-app.post('/api/auth/login', async (c) => {
-  console.groupCollapsed(
-    '%c🔐 /api/auth/login',
-    'color:#2979ff;font-weight:bold;'
-  );
 
-  try {
-    const { email, password } = await c.req.json();
-    console.log('Email recibido:', email);
-
-    if (!email || !password) {
-      console.warn('❌ Falta email o password');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_fields' }, 400);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-
-    const resp = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          returnSecureToken: true,
-        }),
-      }
-    );
-
-    const data = (await resp.json()) as FirebaseAuthResponse;
-    console.log('Firebase login response:', data);
-
-    if (!resp.ok || !data.idToken) {
-      console.warn('❌ Error Firebase:', data);
-      console.groupEnd();
-      return c.json({ ok: false, error: data?.error?.message }, 400);
-    }
-
-    const token = data.idToken!;
-
-    console.groupEnd();
-    return c.json({ ok: true, token });
-  } catch (err) {
-    console.error('💥 /api/auth/login error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
-});
 
 // ============================================================
 // TURNSTILE CAPTCHA
