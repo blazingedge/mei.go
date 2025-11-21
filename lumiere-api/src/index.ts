@@ -1114,23 +1114,23 @@ app.post('/api/auth/demo', async (c) => {
 // AUTH — REGISTRO (Firebase Email + Password)
 // ============================================================
 app.post('/api/auth/register', async (c) => {
-  console.groupCollapsed(
-    '%c📝 /api/auth/register',
-    'color:#00e676;font-weight:bold;'
-  );
+  console.groupCollapsed('%c📝 /api/auth/register', 'color:#00e676;font-weight:bold;');
 
   try {
-    const { email, password } = await c.req.json();
-    console.log('Email recibido:', email);
+    const body = await c.req.json().catch(() => null);
 
-    if (!email || !password) {
+    if (!body || !body.email || !body.password) {
       console.warn('❌ Falta email o password');
       console.groupEnd();
-      return c.json({ ok: false, error: 'missing_fields' }, 400);
+      return c.json({ ok: false, error: 'missing_fields' });
     }
+
+    const email = String(body.email).trim().toLowerCase();
+    const password = String(body.password).trim();
 
     const apiKey = c.env.FIREBASE_API_KEY || '';
 
+    // ====== FIREBASE SIGNUP ======
     const resp = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
       {
@@ -1144,40 +1144,57 @@ app.post('/api/auth/register', async (c) => {
       }
     );
 
-    const data = (await resp.json()) as FirebaseAuthResponse;
+    const data: any = await resp.json().catch(() => ({}));
+
     console.log('Firebase signup response:', data);
 
+    // Detectar error de firebase
     if (!resp.ok || !data.idToken) {
       console.warn('❌ Error Firebase:', data);
+
+      const fbError =
+        data?.error?.message ||
+        data?.error?.errors?.[0]?.message ||
+        'firebase_error';
+
       console.groupEnd();
-      return c.json({ ok: false, error: data?.error?.message }, 400);
+      return c.json(
+        {
+          ok: false,
+          error: fbError,
+        },
+        400
+      );
     }
 
-    const uid = data.localId!;
+    const uid = data.localId;
 
-    // Enviar correo de verificación de Firebase
-    if (data.idToken) {
+    // ====== VERIFICACIÓN DE CORREO ======
     await sendFirebaseEmailVerification(apiKey, data.idToken);
-    }
 
-
-    await c.env.DB.prepare(`
-      INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
-      VALUES (?, ?, 'luz', ?, ?)
-    `)
-      .bind(uid, email.toLowerCase(), Date.now(), Date.now())
+    // ====== GUARDAR EN DB ======
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
+       VALUES (?, ?, 'luz', ?, ?)`
+    )
+      .bind(uid, email, Date.now(), Date.now())
       .run();
 
     await ensureDrucoinWallet(c.env, uid);
 
     console.groupEnd();
     return c.json({ ok: true });
-  } catch (err) {
-    console.error('💥 /api/auth/register error:', err);
+
+  } catch (err: any) {
+    console.error('💥 /api/auth/register error:', err?.message || err);
     console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
+    return c.json(
+      { ok: false, error: 'internal_server_error' },
+      500
+    );
   }
 });
+
 
 // ============================================================
 // AUTH — LOGIN (Firebase Email + Password)
