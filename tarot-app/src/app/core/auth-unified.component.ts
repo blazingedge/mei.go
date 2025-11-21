@@ -80,6 +80,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   async ngOnInit() {
     this.resumeGoogleRedirect();
 
+      (window as any).onCaptchaVerified = (token: string) => {
+    console.log("Captcha token recibido:", token);
+    this.turnstileToken = token;
+     };
+
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
