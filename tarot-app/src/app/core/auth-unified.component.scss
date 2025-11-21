@@ -50,12 +50,17 @@
   backdrop-filter: blur(6px);
 }
 
+.auth-card form {
+  margin-bottom: 16px;
+}
+
 /* ===========================================================
    📝 SECTIONS
    =========================================================== */
 
 .section h2 {
   margin: 0 0 0.6rem;
+  margin-top: 20px !important;
   margin-bottom: 1.7rem;
   font-family: 'Cinzel', serif;
   font-size: 1.05rem;
@@ -179,7 +184,7 @@ input {
 
 .divider {
   text-align: center;
-  margin: 1rem 0;
+  margin: 24px 0;
   position: relative;
 
   span {
@@ -238,4 +243,15 @@ input {
     letter-spacing: 0.1em;
     color: white;
   }
+}
+
+#cf-turnstile {
+  margin-top: 18px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  display: inline-block;
+}
+#cf-turnstile iframe {
+  border-radius: 12px;
 }
