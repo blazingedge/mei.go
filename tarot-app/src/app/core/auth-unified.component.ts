@@ -248,6 +248,25 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
     this.regError = '';
 
+    const email = this.register.email.trim();
+    const pass = this.register.password;
+    const confirm = this.register.confirm;
+
+    if (!email || !pass || !confirm) {
+    this.regError = 'Completa todos los campos.';
+    return;
+  }
+
+  if (pass !== confirm) {
+    this.regError = 'Las contraseñas no coinciden.';
+    return;
+  }
+
+  if (pass.length < 6) {
+    this.regError = 'La contraseña debe tener al menos 6 caracteres.';
+    return;
+  }
+
     const turnstileToken = this.turnstileToken;
 
     if (!turnstileToken) {

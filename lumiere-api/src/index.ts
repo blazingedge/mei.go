@@ -1149,23 +1149,55 @@ app.post('/api/auth/register', async (c) => {
     console.log('Firebase signup response:', data);
 
     // Detectar error de firebase
-    if (!resp.ok || !data.idToken) {
-      console.warn('❌ Error Firebase:', data);
+    // Detectar error de firebase
+if (!resp.ok || !data.idToken) {
+  console.warn('❌ Error Firebase:', data);
 
-      const fbError =
-        data?.error?.message ||
-        data?.error?.errors?.[0]?.message ||
-        'firebase_error';
+  const fbError =
+    data?.error?.message ||
+    data?.error?.errors?.[0]?.message ||
+    'firebase_error';
 
-      console.groupEnd();
-      return c.json(
-        {
-          ok: false,
-          error: fbError,
-        },
-        400
-      );
-    }
+  // 🔍 Mapeo a un mensaje humano
+  let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
+
+  switch (fbError) {
+    case 'EMAIL_EXISTS':
+      userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
+      break;
+
+    case 'INVALID_EMAIL':
+      userMessage = 'El correo no tiene un formato válido.';
+      break;
+
+    case 'MISSING_PASSWORD':
+      userMessage = 'Debes indicar una contraseña.';
+      break;
+
+    // Firebase suele devolver algo tipo:
+    // WEAK_PASSWORD : Password should be at least 6 characters
+    default:
+      if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
+        userMessage =
+          'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
+      } else if (typeof fbError === 'string') {
+        // Por si quieres ver el código exacto en UI:
+        userMessage = `Error al registrar: ${fbError}`;
+      }
+      break;
+  }
+
+  console.groupEnd();
+  return c.json(
+    {
+      ok: false,
+      error: fbError,
+      message: userMessage,
+    },
+    400
+  );
+}
+
 
     const uid = data.localId;
 

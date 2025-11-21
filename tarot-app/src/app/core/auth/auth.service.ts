@@ -154,16 +154,20 @@ export class AuthService {
   async register(email: string, password: string): Promise<boolean> {
   try {
     const res = await this.http
-      .post<{ ok: boolean }>(
+      .post<{ ok: boolean; error?: string; message?: string }>(
         `${environment.API_BASE}/auth/register`,
         { email, password },
         { withCredentials: true }
       )
       .toPromise();
 
-    if (!res?.ok) return false;
+    if (!res?.ok) {
+      console.error('[Auth] register backend error:', res);
+      // Lanzamos un error con el mensaje humano si viene
+      throw new Error(res?.message || res?.error || 'No se pudo registrar');
+    }
 
-    // 🔥 Aquí hacemos login para obtener User
+    // 🔥 Hacemos login para obtener User (si quieres mantenerlo)
     const loginRes = await this.http
       .post<{ ok: boolean; token?: string }>(
         `${environment.API_BASE}/auth/login`,
@@ -172,11 +176,13 @@ export class AuthService {
       )
       .toPromise();
 
-    if (!loginRes?.ok) return false;
+    if (!loginRes?.ok) {
+      console.warn('[Auth] login tras registro falló:', loginRes);
+      // Aquí puedes decidir si consideras el registro OK igualmente
+      // o lanzas un error también.
+    }
 
-    // 🔥 Obtenemos el usuario actual desde Firebase
     const user = this.auth.currentUser;
-
     if (user) {
       console.log('📧 Enviando correo de verificación…');
       await sendEmailVerification(user);
@@ -184,11 +190,13 @@ export class AuthService {
 
     return true;
 
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Auth] register error:', err);
-    return false;
+    // Propagamos mensaje hacia el componente
+    throw err;
   }
 }
+
 
   // -----------------------
   // GOOGLE LOGIN
