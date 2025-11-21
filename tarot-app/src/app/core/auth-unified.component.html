@@ -50,6 +50,11 @@
                   [disabled]="loginForm.invalid || loading">
             Entrar
           </button>
+
+          <div class="forgot">
+          <a (click)="onForgotPassword()">¿Olvidaste tu contraseña?</a>
+          </div>
+
         </form>
       </section>
 
@@ -139,3 +144,13 @@
      📝 MODAL DE TÉRMINOS Y CONDICIONES (SE AGREGA AQUÍ)
 =========================================================== -->
 <app-terms-modal></app-terms-modal>
+
+
+<!-- ===========================================================
+      🔐 MODAL DE RESTABLECER LA CONTRASAEÑA
+=========================================================== -->
+@if (showForgotModal) {
+  <app-forgot-password-modal
+    (closed)="closeForgotPassword()">
+  </app-forgot-password-modal>
+}
