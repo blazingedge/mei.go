@@ -1,147 +1,51 @@
-<!-- ===========================================================
-     ✨ INTRO EFECTO "EL MEIGO"
-=========================================================== -->
-<div class="intro-overlay" *ngIf="showIntro">
-  <app-intro-particles></app-intro-particles>
-  <h1 class="intro-text">El meigo</h1>
-</div>
+<!-- =============================
+     🪄 REGISTRO
+============================== -->
+<section class="section">
+  <h2>Regístrate</h2>
 
-<!-- ===========================================================
-     🧿 LAYOUT PRINCIPAL AUTH
-=========================================================== -->
-<div class="auth-layout">
-  
-  <!-- LOGO / LADO IZQUIERDO -->
-  <div class="auth-left">
-    <app-logo></app-logo>
-  </div>
+  <form (ngSubmit)="onRegister()" #regForm="ngForm">
 
-  <!-- FORMULARIOS -->
-  <div class="auth-right">
-    <div class="auth-card">
+    <input type="email"
+           name="regEmail"
+           placeholder="Email"
+           required
+           [(ngModel)]="register.email"
+           [disabled]="loading"/>
 
-      <!-- =============================
-           🔑 LOGIN
-      ============================== -->
-      <section class="section">
-        <h2>Iniciar sesión</h2>
+    <input type="password"
+           name="regPassword"
+           placeholder="Contraseña"
+           required
+           [(ngModel)]="register.password"
+           [disabled]="loading"/>
 
-        <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-          <input type="email"
-                 name="loginEmail"
-                 placeholder="Email"
-                 required
-                 [(ngModel)]="login.email"
-                 [disabled]="loading"/>
+    <input type="password"
+           name="regConfirm"
+           placeholder="Repetir contraseña"
+           required
+           [(ngModel)]="register.confirm"
+           [disabled]="loading"/>
 
-          <input type="password"
-                 name="loginPassword"
-                 placeholder="Contraseña"
-                 required
-                 [(ngModel)]="login.password"
-                 [disabled]="loading"/>
+    @if (regError) {
+      <p class="error">{{ regError }}</p>
+    }
 
-          @if (loginError) {
-            <p class="error">{{ loginError }}</p>
-          }
+    <!-- CAPTCHA AQUÍ (corregido) -->
+    <div id="cf-turnstile"></div>
 
-          <button type="submit"
-                  class="btn-main"
-                  [disabled]="loginForm.invalid || loading">
-            Entrar
-          </button>
-        </form>
-      </section>
+    <!-- Botón principal -->
+    <button type="submit"
+            class="btn-main"
+            [disabled]="regForm.invalid || loading">
+      Crear cuenta
+    </button>
 
-      <div class="divider"><span>ó</span></div>
-
-      <!-- =============================
-           🌐 LOGIN SOCIAL
-      ============================== -->
-      <div class="social">
-        <button class="social-btn google"
-                type="button"
-                (click)="authGoogle()"
-                [disabled]="loading">
-          <img src="assets/google.svg" alt="Google login" />
-        </button>
-
-        <button class="social-btn facebook"
-                type="button"
-                (click)="authFacebook()"
-                [disabled]="loading">
-          <img src="assets/facebook.svg" alt="Facebook login" />
-        </button>
-      </div>
-      <p class="popup-hint">
-        En Chrome y Firefox debes permitir las ventanas emergentes para este sitio para usar Google.
-      </p>
-
-      <div class="divider thin"></div>
-
-      <!-- =============================
-           🪄 REGISTRO
-      ============================== -->
-      <section class="section">
-        <h2>Regístrate</h2>
-
-        <form (ngSubmit)="onRegister()" #regForm="ngForm">
-
-          <input type="email"
-                 name="regEmail"
-                 placeholder="Email"
-                 required
-                 [(ngModel)]="register.email"
-                 [disabled]="loading"/>
-
-          <input type="password"
-                 name="regPassword"
-                 placeholder="Contraseña"
-                 required
-                 [(ngModel)]="register.password"
-                 [disabled]="loading"/>
-
-          <input type="password"
-                 name="regConfirm"
-                 placeholder="Repetir contraseña"
-                 required
-                 [(ngModel)]="register.confirm"
-                 [disabled]="loading"/>
-
-          @if (regError) {
-            <p class="error">{{ regError }}</p>
-          }
-
-            <!-- CAPTCHA AQUÍ -->
-        <div class="cf-turnstile"
-           data-sitekey="0x4AAAAAACAX4mmeQUvYpIQr"
-           data-theme="auto"
-          data-callback="onCaptchaVerified">
-        </div>
-
-          <!-- Botón principal -->
-          <button type="submit"
-                  class="btn-main"
-                  [disabled]="regForm.invalid || loading">
-            Crear cuenta
-          </button>
-
-          <!-- Botón de términos -->
-          <button type="button"
-                  class="terms-btn"
-                  (click)="openTerms()">
-            Ver Términos y Condiciones
-          </button>
-        </form>
-      </section>
-
-      
-
-    </div>
-  </div>
-</div>
-
-<!-- ===========================================================
-     📝 MODAL DE TÉRMINOS Y CONDICIONES (SE AGREGA AQUÍ)
-=========================================================== -->
-<app-terms-modal></app-terms-modal>
+    <!-- Botón de términos -->
+    <button type="button"
+            class="terms-btn"
+            (click)="openTerms()">
+      Ver Términos y Condiciones
+    </button>
+  </form>
+</section>

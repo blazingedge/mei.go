@@ -11,6 +11,12 @@ import { SessionService } from './services/session.service';
 import { TermsCoordinatorService } from './services/terms-coordinator.service';
 import { TermsModalComponent } from '../components/terms-modal.component';
 
+declare global {
+  interface Window {
+    turnstile?: any;
+  }
+}
+
 @Component({
   standalone: true,
   selector: 'app-auth-unified',
@@ -62,6 +68,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
         intro.style.pointerEvents = 'none';
         this.showIntro = false;
       });
+
+      this.initTurnstile();
     }
 
     setTimeout(() => {
@@ -78,6 +86,33 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.turnstileToken = token;
      };
   }
+
+  private initTurnstile() {
+  const render = () => {
+    if (window.turnstile && document.getElementById('cf-turnstile')) {
+      window.turnstile.render("#cf-turnstile", {
+        sitekey: "0x4AAAAAACAX4mmeQUvYpIQr",
+        theme: "auto",
+        callback: (token: string) => {
+          console.log("Token recibido:", token);
+          this.turnstileToken = token;
+        }
+      });
+      return true;
+    }
+    return false;
+  };
+
+  if (!render()) {
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries++;
+      if (render() || tries > 10) {
+        clearInterval(timer);
+      }
+    }, 300);
+  }
+}
 
   async ngOnInit() {
     this.resumeGoogleRedirect();
