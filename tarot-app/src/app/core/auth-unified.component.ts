@@ -45,10 +45,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 ) {
 
   // 🔮 Callback global de Turnstile → Angular lo recibe aquí
-  (window as any).onCaptchaVerified = (token: string) => {
-    console.log('Turnstile OK:', token);
-    this.turnstileToken = token;   // <-- Guardas el token aquí
-  };
+ 
 
 }
   turnstileToken: string = '';
@@ -75,15 +72,17 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
       }
       this.showIntro = false;
     }, 7500);
+
+     (window as any).onCaptchaVerified = (token: string) => {
+    console.log("Captcha token recibido:", token);
+    this.turnstileToken = token;
+     };
   }
 
   async ngOnInit() {
     this.resumeGoogleRedirect();
 
-      (window as any).onCaptchaVerified = (token: string) => {
-    console.log("Captcha token recibido:", token);
-    this.turnstileToken = token;
-     };
+     
 
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
