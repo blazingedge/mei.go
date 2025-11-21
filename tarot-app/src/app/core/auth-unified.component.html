@@ -112,6 +112,13 @@
             <p class="error">{{ regError }}</p>
           }
 
+            <!-- CAPTCHA AQUÍ -->
+        <div class="cf-turnstile"
+           data-sitekey="0x4AAAAAACAX4mmeQUvYpIQr"
+           data-theme="auto"
+          data-callback="onCaptchaVerified">
+        </div>
+
           <!-- Botón principal -->
           <button type="submit"
                   class="btn-main"
@@ -128,12 +135,7 @@
         </form>
       </section>
 
-      <!-- Turnstile -->
-      <div class="cf-turnstile"
-           data-sitekey="0x4AAAAAACAX4mmeQUvYpIQr"
-           data-theme="auto"
-           data-callback="onCaptchaVerified">
-      </div>
+      
 
     </div>
   </div>

@@ -37,12 +37,24 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   register = { email: '', password: '', confirm: '' };
   private destroy$ = new Subject<void>();
 
-  constructor(
-    private auth: AuthService,
-    private router: Router,
-    private sessionService: SessionService,
-    private termsCoordinator: TermsCoordinatorService
-  ) {}
+ constructor(
+  private auth: AuthService,
+  private router: Router,
+  private sessionService: SessionService,
+  private termsCoordinator: TermsCoordinatorService
+) {
+
+  // 🔮 Callback global de Turnstile → Angular lo recibe aquí
+  (window as any).onCaptchaVerified = (token: string) => {
+    console.log('Turnstile OK:', token);
+    this.turnstileToken = token;   // <-- Guardas el token aquí
+  };
+
+}
+  turnstileToken: string = '';
+
+
+  
 
   ngAfterViewInit() {
     const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
@@ -161,15 +173,11 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
     this.regError = '';
 
-    const tokenEl = document.querySelector(
-      'input[name="cf-turnstile-response"]'
-    ) as HTMLInputElement | null;
-
-    const turnstileToken = tokenEl?.value || '';
+    const turnstileToken = this.turnstileToken;
 
     if (!turnstileToken) {
-      this.regError = 'Debes completar el CAPTCHA.';
-      return;
+    this.regError = 'Debes completar el CAPTCHA.';
+    return;
     }
 
     this.loading = true;
@@ -278,27 +286,4 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   }
 }
 
-declare global {
-  interface Window {
-    onCaptchaVerified: (token: string) => void;
-  }
-}
 
-window.onCaptchaVerified = async (token: string) => {
-  console.log('Turnstile token:', token);
-
-  try {
-    const res = await fetch(`${environment.API_BASE}/captcha/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    });
-
-    const data = await res.json();
-    if (!data.ok) {
-      alert('Verifica que no eres un robot.');
-    }
-  } catch (err) {
-    console.error('Turnstile error:', err);
-  }
-};
