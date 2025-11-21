@@ -3,6 +3,9 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { sendEmailVerification } from '@angular/fire/auth';
+
+
 
 import {
   Auth,
@@ -135,33 +138,57 @@ export class AuthService {
         this.workerToken = res.token;
         return true;
       }
+      
 
       return false;
     } catch (err) {
       console.error('[Auth] login error:', err);
       return false;
     }
+    
   }
 
   // -----------------------
   // REGISTRO TRADICIONAL
   // -----------------------
   async register(email: string, password: string): Promise<boolean> {
-    try {
-      const res = await this.http
-        .post<{ ok: boolean }>(
-          `${environment.API_BASE}/auth/register`,
-          { email, password },
-          { withCredentials: true }
-        )
-        .toPromise();
+  try {
+    const res = await this.http
+      .post<{ ok: boolean }>(
+        `${environment.API_BASE}/auth/register`,
+        { email, password },
+        { withCredentials: true }
+      )
+      .toPromise();
 
-      return !!res?.ok;
-    } catch (err) {
-      console.error('[Auth] register error:', err);
-      return false;
+    if (!res?.ok) return false;
+
+    // 🔥 Aquí hacemos login para obtener User
+    const loginRes = await this.http
+      .post<{ ok: boolean; token?: string }>(
+        `${environment.API_BASE}/auth/login`,
+        { email, password },
+        { withCredentials: true }
+      )
+      .toPromise();
+
+    if (!loginRes?.ok) return false;
+
+    // 🔥 Obtenemos el usuario actual desde Firebase
+    const user = this.auth.currentUser;
+
+    if (user) {
+      console.log('📧 Enviando correo de verificación…');
+      await sendEmailVerification(user);
     }
+
+    return true;
+
+  } catch (err) {
+    console.error('[Auth] register error:', err);
+    return false;
   }
+}
 
   // -----------------------
   // GOOGLE LOGIN
@@ -307,6 +334,25 @@ export class AuthService {
     this.needsTermsSubject.next(false);
     this.termsAcceptedSubject.next(true);
   }
+// -----------------------
+// RESET PASSWORD
+// -----------------------
+async resetPassword(email: string): Promise<boolean> {
+  try {
+    const res = await this.http
+      .post<{ ok: boolean }>(
+        `${environment.API_BASE}/auth/reset-password`,
+        { email },
+        { withCredentials: true }
+      )
+      .toPromise();
+
+    return !!res?.ok;
+  } catch (err) {
+    console.error('[Auth] resetPassword error:', err);
+    return false;
+  }
+}
 
 
 

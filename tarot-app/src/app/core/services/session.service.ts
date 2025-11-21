@@ -91,6 +91,26 @@ setDrucoins(value: number) {
   this.state.drucoins = value;
 }
 
+//-- RESET PASSWORD/ 
+
+async resetPassword(email: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${environment.API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+
+    return res.ok;
+  }
+  catch (err) {
+    console.error('resetPassword error:', err);
+    return false;
+  }
+
+}
+
+
 
   // =========================================================================
   // ACCEPT TERMS

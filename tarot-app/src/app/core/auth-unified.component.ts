@@ -6,10 +6,12 @@ import { LogoComponent } from './logo.component';
 import { AuthService, GoogleLoginResult } from './auth/auth.service';
 import { IntroParticlesComponent } from './intro-particles/intro-partilces.component';
 import { environment } from '../../environments/environment';
-import { Subject, takeUntil } from 'rxjs';
+import { async, Subject, takeUntil } from 'rxjs';
 import { SessionService } from './services/session.service';
 import { TermsCoordinatorService } from './services/terms-coordinator.service';
 import { TermsModalComponent } from '../components/terms-modal.component';
+import { ForgotPasswordModalComponent } from '../components/forgot-password-modal.component';
+
 
 declare global {
   interface Window {
@@ -25,15 +27,22 @@ declare global {
     FormsModule,
     LogoComponent,
     IntroParticlesComponent,
-    TermsModalComponent
+    TermsModalComponent,
+    ForgotPasswordModalComponent
   ],
   templateUrl: './auth-unified.component.html',
-  styleUrls: ['./auth-unified.component.scss']
+  styleUrls: [
+    './auth-unified.component.scss',
+    '../components/forgot-password.component.scss'
+  ]
 })
+
 export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
   showIntro = true;
   acceptedTerms = false;
+  forgotEmail = false;
+  showForgotModal = false;
 
   loading = false;
   loginError = '';
@@ -86,6 +95,26 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.turnstileToken = token;
      };
   }
+ 
+  async onForgotPassword() {
+  const email = this.login.email.trim();
+
+  if (!email) {
+    alert('Por favor ingresa tu email en el campo de inicio de sesión.');
+    return;
+  }
+
+  const ok = await this.auth.resetPassword(email);
+
+  if (ok) {
+    alert('Te hemos enviado un correo para restablecer tu contraseña.');
+  } else {
+    alert('No se pudo enviar el correo de recuperación.');
+  }
+}
+
+
+
 
   private initTurnstile() {
   const render = () => {
@@ -102,6 +131,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
     return false;
   };
+
+ 
+
 
   if (!render()) {
     let tries = 0;
@@ -152,6 +184,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
 
     this.loading = true;
+    
+    
+
 
     try {
       const ok = await this.auth.login(this.login.email, this.login.password);
@@ -166,6 +201,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
         this.auth.authFlowStarted = false;
       }
     }
+    
   }
 
   private async afterAuth() {
@@ -239,7 +275,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
       alert('Registro completado. Ahora puedes iniciar sesión.');
     } catch (e: any) {
-      this.regError = e.message || 'Error al registrar';
+      this.regError = e?.error ?? e?.message ?? 'Error al registrar';
+
     } finally {
       this.loading = false;
     }
@@ -322,6 +359,14 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 
   authFacebook() {
     alert('Aún no está implementado 😅');
+  }
+
+  openForgotPassword() {
+  this.showForgotModal = true;
+}
+  closeForgotPassword() {
+  this.showForgotModal = false;
+
   }
 }
 

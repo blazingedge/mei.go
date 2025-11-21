@@ -39,9 +39,21 @@ type Bindings = {
   ENV?: string;
   TURNSTILE_SECRET: string;
   FIREBASE_API_KEY?: string;
+
+  RESEND_API_KEY?: string;      // 🔹 para email de bienvenida
+  RESEND_FROM_EMAIL?: string;   // ej: 'Meigo <no-reply@meigo.app>'
 };
 
+
 type Env = Bindings;
+
+// Respuesta típica de Firebase Auth (signUp / signInWithPassword)
+type FirebaseAuthResponse = {
+  idToken?: string;
+  localId?: string;
+  email?: string;
+  error?: { message?: string };
+};
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -58,7 +70,7 @@ type PlanId = 'luz' | 'sabiduria' | 'quantico';
  */
 const PLAN_LIMITS: Record<PlanId, { monthly: number }> = {
   luz: { monthly: 2 },
-  sabiduria: { monthly: 1000000 },
+  sabiduria: { monthly: 15 },
   quantico: { monthly: Number.MAX_SAFE_INTEGER },
 } as const;
 
@@ -101,6 +113,58 @@ function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
   if (!isDev && allowed.includes(origin)) return origin;
 
   return allowed[0] ?? '*';
+}
+
+// =====================
+
+async function sendFirebaseEmailVerification(apiKey: string, idToken: string) {
+  console.groupCollapsed('%c📧 sendFirebaseEmailVerification', 'color:#ffb300;font-weight:bold;');
+  try {
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestType: 'VERIFY_EMAIL',
+          idToken,
+        }),
+      }
+    );
+
+    const data = await resp.json().catch(() => ({}));
+    console.log('Firebase sendOobCode VERIFY_EMAIL:', resp.status, data);
+
+  } catch (err) {
+    console.error('💥 Error en sendFirebaseEmailVerification:', err);
+  }
+  console.groupEnd();
+}
+
+///------RESET PASWORD VIA EMAIL-----//
+
+async function sendFirebasePasswordReset(apiKey: string, email: string) {
+  console.groupCollapsed('%c🔁 sendFirebasePasswordReset', 'color:#ffb300;font-weight:bold;');
+  try {
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestType: 'PASSWORD_RESET',
+          email,
+        }),
+      }
+    );
+
+    const data = await resp.json().catch(() => ({}));
+    console.log('Firebase sendOobCode PASSWORD_RESET:', resp.status, data);
+
+  } catch (err) {
+    console.error('💥 Error en sendFirebasePasswordReset:', err);
+  }
+  console.groupEnd();
 }
 
 // =====================
@@ -187,7 +251,7 @@ app.use(
 
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
-    credentials: true, 
+    credentials: true,
     maxAge: 86400,
   })
 );
@@ -1047,6 +1111,415 @@ app.post('/api/auth/demo', async (c) => {
 });
 
 // ============================================================
+// AUTH — REGISTRO (Firebase Email + Password)
+// ============================================================
+app.post('/api/auth/register', async (c) => {
+  console.groupCollapsed(
+    '%c📝 /api/auth/register',
+    'color:#00e676;font-weight:bold;'
+  );
+
+  try {
+    const { email, password } = await c.req.json();
+    console.log('Email recibido:', email);
+
+    if (!email || !password) {
+      console.warn('❌ Falta email o password');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_fields' }, 400);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data = (await resp.json()) as FirebaseAuthResponse;
+    console.log('Firebase signup response:', data);
+
+    if (!resp.ok || !data.idToken) {
+      console.warn('❌ Error Firebase:', data);
+      console.groupEnd();
+      return c.json({ ok: false, error: data?.error?.message }, 400);
+    }
+
+    const uid = data.localId!;
+
+    // Enviar correo de verificación de Firebase
+    if (data.idToken) {
+    await sendFirebaseEmailVerification(apiKey, data.idToken);
+    }
+
+
+    await c.env.DB.prepare(`
+      INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
+      VALUES (?, ?, 'luz', ?, ?)
+    `)
+      .bind(uid, email.toLowerCase(), Date.now(), Date.now())
+      .run();
+
+    await ensureDrucoinWallet(c.env, uid);
+
+    console.groupEnd();
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('💥 /api/auth/register error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+// ============================================================
+// AUTH — LOGIN (Firebase Email + Password)
+// ============================================================
+app.post('/api/auth/login', async (c) => {
+  console.groupCollapsed(
+    '%c🔐 /api/auth/login',
+    'color:#2979ff;font-weight:bold;'
+  );
+
+  try {
+    const { email, password } = await c.req.json();
+    console.log('Email recibido:', email);
+
+    if (!email || !password) {
+      console.warn('❌ Falta email o password');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_fields' }, 400);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data = (await resp.json()) as FirebaseAuthResponse;
+    console.log('Firebase login response:', data);
+
+    if (!resp.ok || !data.idToken) {
+      console.warn('❌ Error Firebase:', data);
+      console.groupEnd();
+      return c.json({ ok: false, error: data?.error?.message }, 400);
+    }
+
+    const token = data.idToken!;
+
+    console.groupEnd();
+    return c.json({ ok: true, token });
+  } catch (err) {
+    console.error('💥 /api/auth/login error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+// ============================================================
+// TURNSTILE CAPTCHA
+// ============================================================
+
+type TurnstileResponse = {
+  success?: boolean;
+  challenge_ts?: string;
+  hostname?: string;
+  error_codes?: string[];
+};
+
+
+
+app.post('/api/captcha/verify', async (c) => {
+  console.groupCollapsed(
+    '%c🛡 /api/captcha/verify',
+    'color:#4caf50;font-weight:bold;'
+  );
+
+  const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
+  console.log('token recibido:', token);
+
+  if (!token) {
+    console.warn('❌ token vacío');
+    console.groupEnd();
+    return c.json({ ok: false, error: 'missing_token' }, 400);
+  }
+
+  const data = await verifyTurnstile(token, c.env) as TurnstileResponse;
+
+  const ok = !!data.success;
+
+   console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
+  
+
+  console.groupEnd();
+  return c.json({ ok });
+});
+
+// ============================================================
+// TERMS & CONDITIONS
+// ============================================================
+
+// ¿Necesita aceptar términos?
+app.get('/api/terms/needs', async (c) => {
+  console.groupCollapsed(
+    '%c📜 /api/terms/needs',
+    'color:#ffb74d;font-weight:bold;'
+  );
+
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ sin token');
+      console.groupEnd();
+      return c.json({ needs: true }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    console.log('UID:', uid);
+
+    const row = await c.env.DB.prepare(
+      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
+    )
+      .bind(uid)
+      .first<{ accepted_at: number }>();
+
+    console.log('Row DB:', row);
+
+    const needs = !row;
+    console.log('needsTerms:', needs);
+
+    console.groupEnd();
+    return c.json({ needs });
+  } catch (err) {
+    console.error('💥 /terms/needs error:', err);
+    console.groupEnd();
+    return c.json({ needs: true }, 401);
+  }
+});
+
+// Check terms (GET corregido)
+app.get('/api/terms/check', async (c) => {
+  console.groupCollapsed(
+    '%c📜 /api/terms/check',
+    'color:#ff9800;font-weight:bold;'
+  );
+
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ sin token');
+      console.groupEnd();
+      return c.json({ accepted: false }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    const row = await c.env.DB.prepare(
+      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
+    )
+      .bind(uid)
+      .first<{ accepted_at: number }>();
+
+    console.log('Row:', row);
+
+    const accepted = !!row;
+    console.log('accepted:', accepted);
+
+    console.groupEnd();
+    return c.json({ accepted });
+  } catch (err) {
+    console.error('💥 /terms/check error:', err);
+    console.groupEnd();
+    return c.json({ accepted: false }, 401);
+  }
+});
+
+// Aceptar términos (graba la fecha y REGALA 1 DRUCOIN)
+app.post('/api/terms/accept', async (c) => {
+  console.groupCollapsed(
+    '%c📝 /api/terms/accept',
+    'color:#ff7043;font-weight:bold;'
+  );
+
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    console.log('Aceptando términos para UID:', uid);
+
+    const now = Date.now();
+    await c.env.DB.prepare(
+      'INSERT OR REPLACE INTO terms_acceptance(uid, accepted_at) VALUES(?,?)'
+    )
+      .bind(uid, now)
+      .run();
+
+    console.log('Términos guardados.');
+
+    // ⭐ RECOMPENSA: 1 DruCoin
+    const balance = await addDrucoins(c.env, uid, 1);
+    console.log('Balance después del bonus:', balance);
+
+    const resp = { ok: true, balance };
+    console.log('Respuesta final:', resp);
+
+    console.groupEnd();
+    return c.json(resp);
+  } catch (err) {
+    console.error('💥 /terms/accept error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+// ============================================================
+// SESSION VALIDATE
+// ============================================================
+
+app.get('/api/session/validate', async (c) => {
+  console.log("Authorization header:", c.req.header("Authorization"));
+
+  console.groupCollapsed(
+    '%c🔐 /api/session/validate',
+    'color:#29b6f6;font-weight:bold;'
+  );
+
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+
+    if (!token) {
+      console.warn('❌ sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    // Firebase
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+    const email = user.email;
+
+    console.log('Usuario:', user);
+
+    // Plan (solo UI)
+    const plan = await ensureUserPlan(c.env, uid);
+    console.log('Plan del usuario:', plan);
+    // ✅ DAILY BONUS PRIMERO
+
+    await ensureDrucoinWallet(c.env, uid);
+    const drucoins = await applyDailyDrucoin(c.env, uid);
+
+    console.log('DruCoins (post-daily):', drucoins);
+    // Quota virtual basada en DruCoins
+    const quota = await getUserQuotaState(c.env, uid);
+
+    // ¿Ha aceptado términos?
+    const row = await c.env.DB.prepare(
+      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
+    )
+      .bind(uid)
+      .first<{ accepted_at: number }>();
+
+    const needsTerms = !row;
+    console.log('needsTerms:', needsTerms);
+
+    const resp = {
+      ok: true,
+      uid,
+      email,
+      plan,
+      drucoins,
+      quota,
+      needsTerms,
+    };
+
+    console.log('Respuesta /session/validate:', resp);
+
+    console.groupEnd();
+    return c.json(resp);
+  } catch (err) {
+    console.error('💥 /session/validate error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: String(err) }, 500);
+  }
+});
+
+// ============= AQUÍ TERMINA LA PARTE 2/4 =============
+
+// ============================================================
+// VERSION
+// ============================================================
+app.get('/api/version', (c) => {
+  console.groupCollapsed(
+    '%c🧭 /api/version',
+    'color:#4dd0e1;font-weight:bold;'
+  );
+  const payload = {
+    ok: true,
+    version: '1.0.0-meigo',
+    env: c.env.ENV || 'undefined',
+  };
+  console.log('payload:', payload);
+  console.groupEnd();
+  return c.json(payload);
+});
+
+// ============================================================
+// AUTH DEMO (para modo prueba sin Firebase)
+// ============================================================
+app.post('/api/auth/demo', async (c) => {
+  console.groupCollapsed(
+    '%c🎭 /api/auth/demo',
+    'color:#7e57c2;font-weight:bold;'
+  );
+
+  const user = {
+    uid: 'demo-user',
+    email: 'demo@meigo.app',
+  };
+
+  const resp = { ok: true, user };
+  console.log('Demo user devuelto:', resp);
+
+  console.groupEnd();
+  return c.json(resp);
+});
+
+// ============================================================
 // TURNSTILE CAPTCHA
 // ============================================================
 async function verifyTurnstile(token: string, env: Env) {
@@ -1261,12 +1734,13 @@ app.get('/api/session/validate', async (c) => {
     // Plan (solo UI)
     const plan = await ensureUserPlan(c.env, uid);
     console.log('Plan del usuario:', plan);
-    // ✅ DAILY BONUS PRIMERO
-  
+
+    // DAILY BONUS
     await ensureDrucoinWallet(c.env, uid);
     const drucoins = await applyDailyDrucoin(c.env, uid);
 
     console.log('DruCoins (post-daily):', drucoins);
+
     // Quota virtual basada en DruCoins
     const quota = await getUserQuotaState(c.env, uid);
 
@@ -1281,7 +1755,7 @@ app.get('/api/session/validate', async (c) => {
     console.log('needsTerms:', needsTerms);
 
     const resp = {
-      ok: true, 
+      ok: true,
       uid,
       email,
       plan,
@@ -1301,276 +1775,7 @@ app.get('/api/session/validate', async (c) => {
   }
 });
 
-
 // ============= AQUÍ TERMINA LA PARTE 2/4 =============
-
-
-// ============================================================
-// TAROT — SPREADS DEFINITIONS
-// ============================================================
-app.get('/api/spreads', (c) => {
-  console.groupCollapsed(
-    '%c🎴 /api/spreads',
-    'color:#ab47bc; font-weight:bold;'
-  );
-
-  const spreads = [
-    {
-      id: 'celtic-cross-10',
-      name: 'Cruz Celta (10)',
-      positions: Array.from({ length: 10 }, (_, i) => ({
-        index: i + 1,
-        label: `Pos ${i + 1}`,
-        allowsReversed: true,
-      })),
-    },
-    {
-      id: 'ppf-3',
-      name: 'Pasado · Presente · Futuro',
-      positions: [1, 2, 3].map((i) => ({
-        index: i,
-        label: `${i}`,
-        allowsReversed: true,
-      })),
-    },
-    {
-      id: 'free',
-      name: 'Libre (9)',
-      positions: Array.from({ length: 9 }, (_, i) => ({
-        index: i + 1,
-        label: `${i + 1}`,
-        allowsReversed: true,
-      })),
-    },
-  ];
-
-  console.log('Spreads enviados:', spreads);
-  console.groupEnd();
-
-  return c.json(spreads);
-});
-
-// ============================================================
-// TAROT — DECK (ABSOLUTE URL)
-// ============================================================
-app.get('/api/decks', async (c) => {
-  const CDN = c.env.CDN_BASE;
-
-  const cards = DECK.map(card => ({
-    id: card.id,
-    name: card.name,
-    suit: card.suit,
-    imageUrl: `${CDN}/${card.id}.webp`
-  }));
-
-  return c.json(cards);
-});
-
-
-function detectSuit(name: string) {
-  if (name.includes('bastos')) return 'wands';
-  if (name.includes('espadas')) return 'swords';
-  if (name.includes('copas')) return 'cups';
-  if (name.includes('pentaculos')) return 'pents';
-  return 'major';
-}
-
-
-// ============================================================
-// SEED / RNG HELPERS FOR DRAW
-// ============================================================
-const hashSeed = (s: string) => {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-};
-
-function rng32(seed: number) {
-  return () => {
-    seed ^= seed << 13;
-    seed ^= seed >>> 17;
-    seed ^= seed << 5;
-    return ((seed >>> 0) % 10000) / 10000;
-  };
-}
-
-// ============================================================
-// 🔥 DRAW — TIRADAS DE CARTAS (SIN CUOTAS, GRATIS SIEMPRE)
-// ============================================================
-app.post('/api/draw', async (c) => {
-  try {
-    // Body
-    const body = await c.req.json();
-    const spreadId = body.spreadId ?? 'celtic-cross-10';
-    const allowsReversed = body.allowsReversed ?? true;
-
-    // Semilla
-    const seedInput = body.seed ?? Date.now().toString();
-    const seedNum = hashSeed(seedInput);
-    const rnd = rng32(seedNum);
-
-    // Count
-    const count = 
-      spreadId === 'ppf-3' ? 3 :
-      spreadId === 'free' ? 9 : 10;
-
-    // Shuflle
-    const ids = [...DECK.map(d => d.id)];
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
-
-    const selected = ids.slice(0, count);
-
-    const cards = selected.map((id, index) => ({
-      position: index + 1,
-      cardId: id,
-      reversed: allowsReversed ? rnd() < 0.4 : false
-    }));
-
-    return c.json({
-      ok: true,
-      spreadId,
-      seed: seedInput,
-      cards
-    });
-
-  } catch (err) {
-    console.error('/api/draw ERROR', err);
-    return c.json({ ok: false }, 500);
-  }
-});
-
-// ============================================================
-// HISTORY SAVE
-// ============================================================
-app.post('/api/history/save', async (c) => {
-  console.groupCollapsed(
-    '%c💾 /api/history/save',
-    'color:#4db6ac;font-weight:bold;'
-  );
-
-  try {
-    const { id, spreadId, spreadLabel, cards, ts } =
-      await c.req.json().catch(() => ({}));
-
-    console.log('Body recibido:', { id, spreadId, spreadLabel, ts });
-
-    // Auth
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-    let uid = 'guest';
-    let email = 'guest';
-
-    if (token) {
-      try {
-        const apiKey = c.env.FIREBASE_API_KEY || '';
-        const v = await verifyFirebaseIdToken(token, apiKey);
-        uid = v.uid;
-        email = v.email;
-      } catch {
-        console.warn('⚠ Token inválido al guardar history');
-        console.groupEnd();
-        return c.json({ ok: false, error: 'unauthorized' }, 401);
-      }
-    }
-
-    if (uid === 'guest') {
-      console.warn('❌ guest no puede guardar historial');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const plan = await ensureUserPlan(c.env, uid);
-    const historyId = id || crypto.randomUUID();
-    const payloadCards = Array.isArray(cards) ? cards : [];
-
-    await c.env.DB.prepare(
-      `INSERT INTO history(id, uid, spreadId, spreadLabel, cards_json, ts)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        historyId,
-        uid,
-        spreadId,
-        spreadLabel || spreadId || 'Tirada',
-        JSON.stringify(payloadCards),
-        ts ?? Date.now()
-      )
-      .run();
-
-    await enforceHistoryLimit(c.env, uid, plan);
-
-    console.log('Historial guardado OK.');
-
-    console.groupEnd();
-    return c.json({ ok: true, id: historyId });
-  } catch (err) {
-    console.error('💥 /history/save error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, message: String(err) }, 500);
-  }
-});
-
-// ============================================================
-// HISTORY LIST
-// ============================================================
-app.get('/api/history/list', async (c) => {
-  console.groupCollapsed(
-    '%c📚 /api/history/list',
-    'color:#4fc3f7;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const v = await verifyFirebaseIdToken(token, apiKey);
-    const uid = v.uid;
-
-    console.log('UID:', uid);
-
-    const rows = await c.env.DB.prepare(
-      `SELECT id, spreadId, spreadLabel, cards_json, ts
-       FROM history
-       WHERE uid = ?
-       ORDER BY ts DESC
-       LIMIT 50`
-    )
-      .bind(uid)
-      .all();
-
-    const history =
-      rows.results?.map((r) => ({
-        id: r.id,
-        spreadId: r.spreadId,
-        spreadLabel: r.spreadLabel,
-        cards: JSON.parse(r.cards_json || '[]'),
-        ts: Number(r.ts),
-      })) ?? [];
-
-    console.log('History size:', history.length);
-
-    console.groupEnd();
-    return c.json({ ok: true, history });
-  } catch (err) {
-    console.error('💥 /history/list error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, message: String(err) }, 500);
-  }
-});
 
 app.delete('/api/history/:id', async (c) => {
   console.groupCollapsed(
@@ -1608,6 +1813,12 @@ app.delete('/api/history/:id', async (c) => {
 });
 
 // ============= AQUÍ TERMINA LA PARTE 3/4 =============
+type HFCompletionResponse = {
+  choices?: {
+    text?: string;
+  }[];
+  error?: any;
+};
 
 // ============================================================
 // CARD MEANING — SIGNIFICADO INDIVIDUAL DE UNA CARTA
@@ -1661,7 +1872,7 @@ No incluyas despedidas, emojis ni texto redundante.
       return c.json({ ok: false, error: txt });
     }
 
-    const result = await response.json();
+    const result = await response.json() as HFCompletionResponse;
     const output = result?.choices?.[0]?.text?.trim() || '';
 
     console.log('Significado final:', output);
@@ -1775,12 +1986,11 @@ app.post('/api/interpret', async (c) => {
         ? 'Pasado · Presente · Futuro'
         : 'Tirada libre';
 
-   const formattedCards = cards.map((c) => {
-  const id = c.cardId; // tu backend recibe cardId, NO name
-  const name = cardNamesEs[id] || id;
-  return `${name}${c.reversed ? ' (invertida)' : ''}`;
-});
-
+    const formattedCards = cards.map((c) => {
+      const id = c.cardId;
+      const name = cardNamesEs[id] || id;
+      return `${name}${c.reversed ? ' (invertida)' : ''}`;
+    });
 
     const prompt = `
 Eres un guía espiritual celta. Usa frases breves y claras (máx 2–3 líneas cada párrafo).
@@ -1801,7 +2011,7 @@ Tareas:
     console.log('Prompt final:', prompt);
 
     // -----------------------------------
-    // LLAMADA A HUGGINGFACE
+    // LLAMADA HF
     // -----------------------------------
     const hfToken = c.env.HF_TOKEN;
     if (!hfToken) {
@@ -1841,7 +2051,7 @@ Tareas:
         console.error('❌ HF error:', response.status, text);
         interpretation = defaultInterpretation;
       } else {
-        const result = await response.json();
+        const result = await response.json() as HFCompletionResponse;
         interpretation = result?.choices?.[0]?.text?.trim() || '';
       }
     } catch (err) {
@@ -1851,10 +2061,9 @@ Tareas:
     }
 
     interpretation = interpretation
-    .replace(/Gracias[^\n]+$/gi, '')
-    .replace(/Licencia[^\n]+$/gi, '')
-    .trim();
-
+      .replace(/Gracias[^\n]+$/gi, '')
+      .replace(/Licencia[^\n]+$/gi, '')
+      .trim();
 
     if (!interpretation) {
       interpretation = defaultInterpretation;
@@ -1888,6 +2097,36 @@ Tareas:
     return c.json({ ok: false, error: String(err) });
   }
 });
+
+app.post('/api/auth/reset-password', async (c) => {
+  console.groupCollapsed(
+    '%c🔁 /api/auth/reset-password',
+    'color:#ffb74d;font-weight:bold;'
+  );
+
+  try {
+    const { email } = await c.req.json<{ email?: string }>().catch(() => ({ email: '' }));
+    console.log('Email recibido para reset:', email);
+
+    if (!email) {
+      console.warn('❌ Falta email');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_email' }, 400);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    await sendFirebasePasswordReset(apiKey, email);
+
+    console.groupEnd();
+    return c.json({ ok: true });
+
+  } catch (err) {
+    console.error('💥 /api/auth/reset-password error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
 
 // ============================================================
 // READINGS — SAVE
@@ -2106,133 +2345,6 @@ app.get('/cdn/*', async (c) => {
 });
 
 // ============================================================
-// AUTH — REGISTRO (Firebase Email + Password)
-// ============================================================
-
-app.post('/api/auth/register', async (c) => {
-  console.groupCollapsed(
-    '%c📝 /api/auth/register',
-    'color:#00e676;font-weight:bold;'
-  );
-
-  try {
-    const { email, password } = await c.req.json();
-    console.log('Email recibido:', email);
-
-    if (!email || !password) {
-      console.warn('❌ Falta email o password');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_fields' }, 400);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-
-    // Crear usuario en Firebase
-    const resp = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          returnSecureToken: true,
-        }),
-      }
-    );
-
-    const data = await resp.json();
-    console.log("Firebase signup response:", data);
-
-    if (!resp.ok || !data?.idToken) {
-      console.warn("❌ Error Firebase:", data);
-      console.groupEnd();
-      return c.json({ ok: false, error: data?.error?.message }, 400);
-    }
-
-    const uid = data.localId;
-
-    // Inserta usuario inicial en SQL
-    await c.env.DB.prepare(`
-      INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
-      VALUES (?, ?, 'luz', ?, ?)
-    `)
-      .bind(uid, email.toLowerCase(), Date.now(), Date.now())
-      .run();
-
-    // Crea Wallet inicial
-    await ensureDrucoinWallet(c.env, uid);
-
-    console.groupEnd();
-    return c.json({ ok: true });
-
-  } catch (err) {
-    console.error("💥 /api/auth/register error:", err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
-});
-
-
-// ============================================================
-// AUTH — LOGIN (Firebase Email + Password)
-// ============================================================
-
-app.post('/api/auth/login', async (c) => {
-  console.groupCollapsed(
-    '%c🔐 /api/auth/login',
-    'color:#2979ff;font-weight:bold;'
-  );
-
-  try {
-    const { email, password } = await c.req.json();
-    console.log('Email recibido:', email);
-
-    if (!email || !password) {
-      console.warn('❌ Falta email o password');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_fields' }, 400);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-
-    // Login en Firebase
-    const resp = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          returnSecureToken: true,
-        }),
-      }
-    );
-
-    const data = await resp.json();
-    console.log("Firebase login response:", data);
-
-    if (!resp.ok || !data?.idToken) {
-      console.warn("❌ Error Firebase:", data);
-      console.groupEnd();
-      return c.json({ ok: false, error: data?.error?.message }, 400);
-    }
-
-    const token = data.idToken;
-
-    console.groupEnd();
-    return c.json({ ok: true, token });
-
-  } catch (err) {
-    console.error('💥 /api/auth/login error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
-});
-
-
-// ============================================================
 // EXPORT DEFAULT
 // ============================================================
 console.log(
@@ -2241,5 +2353,3 @@ console.log(
 );
 
 export default app;
-
-
