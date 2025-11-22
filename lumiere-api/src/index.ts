@@ -799,6 +799,60 @@ app.post('/api/subscriptions/check', async (c) => {
   }
 });
 
+
+app.get('/api/decks', async (c) => {
+  const rows = await c.env.DB.prepare(
+    'SELECT id, name, suit, number FROM cards'
+  ).all();
+
+  return c.json(rows.results || []);
+});
+
+app.get('/api/spreads', (c) => {
+  return c.json([
+    { id: 'celtic-cross-10', name: 'Cruz Celta' },
+    { id: 'ppf-3', name: 'Pasado-Presente-Futuro' },
+    { id: 'free', name: 'Libre' }
+  ]);
+});
+
+
+app.get('/api/history/list', async (c) => {
+  try {
+    const auth = c.req.header('Authorization');
+    if (!auth || !auth.startsWith('Bearer ')) {
+      return c.json({ ok: false, error: 'No token' }, 401);
+    }
+
+    const token = auth.slice(7);
+    const decoded = await verifyFirebaseIdToken(token, c.env);
+    if (!decoded || !decoded.uid) {
+      return c.json({ ok: false, error: 'Invalid token' }, 401);
+    }
+
+    const uid = decoded.uid;
+
+    const rows = await c.env.DB.prepare(
+      `SELECT 
+        id, 
+        cards_json as cards, 
+        spread_label as spreadLabel, 
+        ts 
+       FROM history 
+       WHERE uid = ? 
+       ORDER BY ts DESC`
+    ).bind(uid).all();
+
+    return c.json({ ok: true, history: rows.results || [] });
+
+  } catch (err) {
+    console.error('❌ /history/list error:', err);
+    return c.json({ ok: false, error: 'internal' }, 500);
+  }
+});
+
+
+
 async function setUserPlan(env: Env, uid: string, plan: PlanId) {
   console.groupCollapsed(
     '%c📌 setUserPlan()',
