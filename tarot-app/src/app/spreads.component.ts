@@ -121,6 +121,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private session = inject(SessionService);
+  
   // ============================================
   // ESTADO PRINCIPAL
   // ============================================
@@ -145,6 +146,13 @@ export class SpreadsComponent implements OnInit, OnDestroy {
 
   loadingDeck = true;
   deckReady = false;
+
+  loading = false;
+
+  // Imagen de loading místico
+  loadingWizardMobile : string = `${environment.CDN_BASE}/cards/magoceltaloadingmobile.webp`;
+  loadingWizardDesktop = `${environment.CDN_BASE}/cards/magoceltaloadingweb.webp`;
+
   deckError: string | null = null;
   deckCount = 0;
 
@@ -164,7 +172,7 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   interpretationText = '';
   showInterpretation = false;
 
-  loading = false;
+
   showHistory = false;
   historyList: HistoryEntry[] = [];
 
@@ -203,6 +211,8 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   drucoinBalance = 0;
 
   private activeModalContexts = new Set<string>();
+
+
 
   get canDeal() {
     return this.deckReady && !this.dealing;
@@ -357,7 +367,9 @@ export class SpreadsComponent implements OnInit, OnDestroy {
 // ======================================================
 
 
-
+get loadingWizardurl(): string {
+  return this.isMobile ? this.loadingWizardMobile : this.loadingWizardDesktop;
+}
 
 
 private ensureHasDrucoins(): boolean {

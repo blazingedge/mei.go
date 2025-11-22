@@ -608,10 +608,15 @@
 <!-- LOADING IA -->
 @if (isInterpreting) {
   <div class="loading-overlay" aria-busy="true">
-    <img class="loading-art" src="assets/anim/wizard.webp" alt="Interpretando tu tirada…" />
-    <p>El mago está interpretando tu lectura…</p>
+    <img class="loading-art" [src]="loadingWizardurl" alt="El mago visualizando..." />
+    <p class="loading-text">
+      El mago visualizando…<br />
+      Esperando el futuro
+    </p>
   </div>
 }
+
+
 
 
 

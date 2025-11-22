@@ -1415,3 +1415,41 @@
 .history-modal-interpretation__content p {
   margin-bottom: 0.8rem;
 }
+
+/* ==========================================
+   LOADING MÍSTICO – MAGO CELTA
+   ========================================== */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 6, 15, 0.88);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-art {
+  width: min(350px, 75vw);
+  height: auto;
+  object-fit: contain;
+  animation: floaty 3s ease-in-out infinite;
+}
+
+.loading-text {
+  margin-top: 18px;
+  font-family: 'Cinzel', 'Cormorant Garamond', serif;
+  color: #f5e8c6;
+  font-size: 1.3rem;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(255, 230, 180, 0.6);
+}
+
+@keyframes floaty {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
