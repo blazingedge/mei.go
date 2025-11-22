@@ -141,7 +141,7 @@ async function sendFirebaseEmailVerification(apiKey: string, idToken: string) {
   console.groupEnd();
 }
 
-///------RESET PASWORD VIA EMAIL-----//
+///------RESET PASSWORD VIA EMAIL-----//
 
 async function sendFirebasePasswordReset(apiKey: string, email: string) {
   console.groupCollapsed('%c🔁 sendFirebasePasswordReset', 'color:#ffb300;font-weight:bold;');
@@ -249,7 +249,7 @@ app.use(
       return 'https://mei-go.pages.dev';
     },
 
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
     maxAge: 86400,
@@ -468,9 +468,6 @@ export async function applyDailyDrucoin(env: Env, uid: string): Promise<number> 
   console.groupEnd();
   return balance;
 }
-
-
-
 
 
 async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
@@ -801,32 +798,51 @@ app.post('/api/subscriptions/check', async (c) => {
 
 
 app.get('/api/decks', async (c) => {
-  const rows = await c.env.DB.prepare(
-    'SELECT id, name, suit, number FROM cards'
-  ).all();
+  console.groupCollapsed('%c🃏 /api/decks', 'color:#ffcc80;font-weight:bold;');
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT id, name, suit, number FROM cards'
+    ).all();
 
-  return c.json(rows.results || []);
+    console.log('Cartas encontradas:', rows.results?.length || 0);
+    console.groupEnd();
+    return c.json(rows.results || []);
+  } catch (err) {
+    console.error('💥 /api/decks error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
 });
 
 app.get('/api/spreads', (c) => {
-  return c.json([
+  console.groupCollapsed('%c🔀 /api/spreads', 'color:#ffcc80;font-weight:bold;');
+  const spreads = [
     { id: 'celtic-cross-10', name: 'Cruz Celta' },
     { id: 'ppf-3', name: 'Pasado-Presente-Futuro' },
     { id: 'free', name: 'Libre' }
-  ]);
+  ];
+  console.log('Spreads:', spreads);
+  console.groupEnd();
+  return c.json(spreads);
 });
 
 
 app.get('/api/history/list', async (c) => {
+  console.groupCollapsed('%c📜 /api/history/list', 'color:#ffb74d;font-weight:bold;');
   try {
     const auth = c.req.header('Authorization');
     if (!auth || !auth.startsWith('Bearer ')) {
+      console.warn('❌ Sin token en /api/history/list');
+      console.groupEnd();
       return c.json({ ok: false, error: 'No token' }, 401);
     }
 
     const token = auth.slice(7);
-    const decoded = await verifyFirebaseIdToken(token, c.env);
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const decoded = await verifyFirebaseIdToken(token, apiKey);
     if (!decoded || !decoded.uid) {
+      console.warn('❌ Token inválido en /api/history/list');
+      console.groupEnd();
       return c.json({ ok: false, error: 'Invalid token' }, 401);
     }
 
@@ -843,10 +859,13 @@ app.get('/api/history/list', async (c) => {
        ORDER BY ts DESC`
     ).bind(uid).all();
 
+    console.log('Historial encontrado:', rows.results?.length || 0);
+    console.groupEnd();
     return c.json({ ok: true, history: rows.results || [] });
 
   } catch (err) {
     console.error('❌ /history/list error:', err);
+    console.groupEnd();
     return c.json({ ok: false, error: 'internal' }, 500);
   }
 });
@@ -1119,12 +1138,6 @@ app.get('/api/drucoins/balance', async (c) => {
   }
 });
 
-// ============= AQUÍ TERMINA LA PARTE 1/4 =============
-// En la siguiente parte metemos:
-// - debug/version, auth demo, captcha
-// - Términos & sesión (/session/validate, /terms/*)
-// - + más endpoints
-
 // ============================================================
 // VERSION
 // ============================================================
@@ -1198,67 +1211,59 @@ app.post('/api/auth/register', async (c) => {
       }
     );
 
-    const data: any = await resp.json().catch(() => ({}));
+    const data: FirebaseAuthResponse | any = await resp.json().catch(() => ({}));
 
     console.log('Firebase signup response:', data);
 
-    // Detectar error de firebase
-    // Detectar error de firebase
-if (!resp.ok || !data.idToken) {
-  console.warn('❌ Error Firebase:', data);
+    if (!resp.ok || !data.idToken) {
+      console.warn('❌ Error Firebase:', data);
 
-  const fbError =
-    data?.error?.message ||
-    data?.error?.errors?.[0]?.message ||
-    'firebase_error';
+      const fbError =
+        data?.error?.message ||
+        (data as any)?.error?.errors?.[0]?.message ||
+        'firebase_error';
 
-  // 🔍 Mapeo a un mensaje humano
-  let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
+      let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
 
-  switch (fbError) {
-    case 'EMAIL_EXISTS':
-      userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
-      break;
+      switch (fbError) {
+        case 'EMAIL_EXISTS':
+          userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
+          break;
 
-    case 'INVALID_EMAIL':
-      userMessage = 'El correo no tiene un formato válido.';
-      break;
+        case 'INVALID_EMAIL':
+          userMessage = 'El correo no tiene un formato válido.';
+          break;
 
-    case 'MISSING_PASSWORD':
-      userMessage = 'Debes indicar una contraseña.';
-      break;
+        case 'MISSING_PASSWORD':
+          userMessage = 'Debes indicar una contraseña.';
+          break;
 
-    // Firebase suele devolver algo tipo:
-    // WEAK_PASSWORD : Password should be at least 6 characters
-    default:
-      if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
-        userMessage =
-          'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
-      } else if (typeof fbError === 'string') {
-        // Por si quieres ver el código exacto en UI:
-        userMessage = `Error al registrar: ${fbError}`;
+        default:
+          if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
+            userMessage =
+              'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
+          } else if (typeof fbError === 'string') {
+            userMessage = `Error al registrar: ${fbError}`;
+          }
+          break;
       }
-      break;
-  }
 
-  console.groupEnd();
-  return c.json(
-    {
-      ok: false,
-      error: fbError,
-      message: userMessage,
-    },
-    400
-  );
-}
+      console.groupEnd();
+      return c.json(
+        {
+          ok: false,
+          error: fbError,
+          message: userMessage,
+        },
+        400
+      );
+    }
 
 
-    const uid = data.localId;
+    const uid = data.localId as string;
 
-    // ====== VERIFICACIÓN DE CORREO ======
-    await sendFirebaseEmailVerification(apiKey, data.idToken);
+    await sendFirebaseEmailVerification(apiKey, data.idToken!);
 
-    // ====== GUARDAR EN DB ======
     await c.env.DB.prepare(
       `INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
        VALUES (?, ?, 'luz', ?, ?)`
@@ -1281,9 +1286,6 @@ if (!resp.ok || !data.idToken) {
   }
 });
 
-
-
-
 // ============================================================
 // TURNSTILE CAPTCHA
 // ============================================================
@@ -1295,284 +1297,6 @@ type TurnstileResponse = {
   error_codes?: string[];
 };
 
-
-
-app.post('/api/captcha/verify', async (c) => {
-  console.groupCollapsed(
-    '%c🛡 /api/captcha/verify',
-    'color:#4caf50;font-weight:bold;'
-  );
-
-  const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
-  console.log('token recibido:', token);
-
-  if (!token) {
-    console.warn('❌ token vacío');
-    console.groupEnd();
-    return c.json({ ok: false, error: 'missing_token' }, 400);
-  }
-
-  const data = await verifyTurnstile(token, c.env) as TurnstileResponse;
-
-  const ok = !!data.success;
-
-   console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
-  
-
-  console.groupEnd();
-  return c.json({ ok });
-});
-
-// ============================================================
-// TERMS & CONDITIONS
-// ============================================================
-
-// ¿Necesita aceptar términos?
-app.get('/api/terms/needs', async (c) => {
-  console.groupCollapsed(
-    '%c📜 /api/terms/needs',
-    'color:#ffb74d;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ needs: true }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const user = await verifyFirebaseIdToken(token, apiKey);
-    const uid = user.uid;
-
-    console.log('UID:', uid);
-
-    const row = await c.env.DB.prepare(
-      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-    )
-      .bind(uid)
-      .first<{ accepted_at: number }>();
-
-    console.log('Row DB:', row);
-
-    const needs = !row;
-    console.log('needsTerms:', needs);
-
-    console.groupEnd();
-    return c.json({ needs });
-  } catch (err) {
-    console.error('💥 /terms/needs error:', err);
-    console.groupEnd();
-    return c.json({ needs: true }, 401);
-  }
-});
-
-// Check terms (GET corregido)
-app.get('/api/terms/check', async (c) => {
-  console.groupCollapsed(
-    '%c📜 /api/terms/check',
-    'color:#ff9800;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ accepted: false }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const user = await verifyFirebaseIdToken(token, apiKey);
-    const uid = user.uid;
-
-    const row = await c.env.DB.prepare(
-      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-    )
-      .bind(uid)
-      .first<{ accepted_at: number }>();
-
-    console.log('Row:', row);
-
-    const accepted = !!row;
-    console.log('accepted:', accepted);
-
-    console.groupEnd();
-    return c.json({ accepted });
-  } catch (err) {
-    console.error('💥 /terms/check error:', err);
-    console.groupEnd();
-    return c.json({ accepted: false }, 401);
-  }
-});
-
-// Aceptar términos (graba la fecha y REGALA 1 DRUCOIN)
-app.post('/api/terms/accept', async (c) => {
-  console.groupCollapsed(
-    '%c📝 /api/terms/accept',
-    'color:#ff7043;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const user = await verifyFirebaseIdToken(token, apiKey);
-    const uid = user.uid;
-
-    console.log('Aceptando términos para UID:', uid);
-
-    const now = Date.now();
-    await c.env.DB.prepare(
-      'INSERT OR REPLACE INTO terms_acceptance(uid, accepted_at) VALUES(?,?)'
-    )
-      .bind(uid, now)
-      .run();
-
-    console.log('Términos guardados.');
-
-    // ⭐ RECOMPENSA: 1 DruCoin
-    const balance = await addDrucoins(c.env, uid, 1);
-    console.log('Balance después del bonus:', balance);
-
-    const resp = { ok: true, balance };
-    console.log('Respuesta final:', resp);
-
-    console.groupEnd();
-    return c.json(resp);
-  } catch (err) {
-    console.error('💥 /terms/accept error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
-});
-
-// ============================================================
-// SESSION VALIDATE
-// ============================================================
-
-app.get('/api/session/validate', async (c) => {
-  console.log("Authorization header:", c.req.header("Authorization"));
-
-  console.groupCollapsed(
-    '%c🔐 /api/session/validate',
-    'color:#29b6f6;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    // Firebase
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const user = await verifyFirebaseIdToken(token, apiKey);
-    const uid = user.uid;
-    const email = user.email;
-
-    console.log('Usuario:', user);
-
-    // Plan (solo UI)
-    const plan = await ensureUserPlan(c.env, uid);
-    console.log('Plan del usuario:', plan);
-    // ✅ DAILY BONUS PRIMERO
-
-    await ensureDrucoinWallet(c.env, uid);
-    const drucoins = await applyDailyDrucoin(c.env, uid);
-
-    console.log('DruCoins (post-daily):', drucoins);
-    // Quota virtual basada en DruCoins
-    const quota = await getUserQuotaState(c.env, uid);
-
-    // ¿Ha aceptado términos?
-    const row = await c.env.DB.prepare(
-      'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-    )
-      .bind(uid)
-      .first<{ accepted_at: number }>();
-
-    const needsTerms = !row;
-    console.log('needsTerms:', needsTerms);
-
-    const resp = {
-      ok: true,
-      uid,
-      email,
-      plan,
-      drucoins,
-      quota,
-      needsTerms,
-    };
-
-    console.log('Respuesta /session/validate:', resp);
-
-    console.groupEnd();
-    return c.json(resp);
-  } catch (err) {
-    console.error('💥 /session/validate error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: String(err) }, 500);
-  }
-});
-
-// ============= AQUÍ TERMINA LA PARTE 2/4 =============
-
-// ============================================================
-// VERSION
-// ============================================================
-app.get('/api/version', (c) => {
-  console.groupCollapsed(
-    '%c🧭 /api/version',
-    'color:#4dd0e1;font-weight:bold;'
-  );
-  const payload = {
-    ok: true,
-    version: '1.0.0-meigo',
-    env: c.env.ENV || 'undefined',
-  };
-  console.log('payload:', payload);
-  console.groupEnd();
-  return c.json(payload);
-});
-
-// ============================================================
-// AUTH DEMO (para modo prueba sin Firebase)
-// ============================================================
-app.post('/api/auth/demo', async (c) => {
-  console.groupCollapsed(
-    '%c🎭 /api/auth/demo',
-    'color:#7e57c2;font-weight:bold;'
-  );
-
-  const user = {
-    uid: 'demo-user',
-    email: 'demo@meigo.app',
-  };
-
-  const resp = { ok: true, user };
-  console.log('Demo user devuelto:', resp);
-
-  console.groupEnd();
-  return c.json(resp);
-});
-
-// ============================================================
-// TURNSTILE CAPTCHA
-// ============================================================
 async function verifyTurnstile(token: string, env: Env) {
   console.groupCollapsed(
     '%c🛡 verifyTurnstile()',
@@ -1593,7 +1317,7 @@ async function verifyTurnstile(token: string, env: Env) {
   console.log('Respuesta turnstile:', data);
 
   console.groupEnd();
-  return data;
+  return data as TurnstileResponse;
 }
 
 app.post('/api/captcha/verify', async (c) => {
@@ -1665,7 +1389,7 @@ app.get('/api/terms/needs', async (c) => {
   }
 });
 
-// Check terms (GET corregido)
+// Check terms (GET)
 app.get('/api/terms/check', async (c) => {
   console.groupCollapsed(
     '%c📜 /api/terms/check',
@@ -1736,7 +1460,6 @@ app.post('/api/terms/accept', async (c) => {
 
     console.log('Términos guardados.');
 
-    // ⭐ RECOMPENSA: 1 DruCoin
     const balance = await addDrucoins(c.env, uid, 1);
     console.log('Balance después del bonus:', balance);
 
@@ -1774,7 +1497,6 @@ app.get('/api/session/validate', async (c) => {
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
-    // Firebase
     const apiKey = c.env.FIREBASE_API_KEY || '';
     const user = await verifyFirebaseIdToken(token, apiKey);
     const uid = user.uid;
@@ -1782,20 +1504,16 @@ app.get('/api/session/validate', async (c) => {
 
     console.log('Usuario:', user);
 
-    // Plan (solo UI)
     const plan = await ensureUserPlan(c.env, uid);
     console.log('Plan del usuario:', plan);
 
-    // DAILY BONUS
     await ensureDrucoinWallet(c.env, uid);
     const drucoins = await applyDailyDrucoin(c.env, uid);
 
     console.log('DruCoins (post-daily):', drucoins);
 
-    // Quota virtual basada en DruCoins
     const quota = await getUserQuotaState(c.env, uid);
 
-    // ¿Ha aceptado términos?
     const row = await c.env.DB.prepare(
       'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
     )
@@ -1828,6 +1546,9 @@ app.get('/api/session/validate', async (c) => {
 
 // ============= AQUÍ TERMINA LA PARTE 2/4 =============
 
+// ============================================================
+// DELETE HISTORY ITEM
+// ============================================================
 app.delete('/api/history/:id', async (c) => {
   console.groupCollapsed(
     '%c🗑 /api/history/:id',
@@ -1864,6 +1585,7 @@ app.delete('/api/history/:id', async (c) => {
 });
 
 // ============= AQUÍ TERMINA LA PARTE 3/4 =============
+
 type HFCompletionResponse = {
   choices?: {
     text?: string;
@@ -1950,17 +1672,11 @@ app.post('/api/interpret', async (c) => {
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
-    // -----------------------------------
-    // BODY
-    // -----------------------------------
     const { context, cards, spreadId } = await c.req.json();
     console.log('Contexto recibido:', context);
     console.log('Cartas recibidas:', cards);
     console.log('Spread:', spreadId);
 
-    // -----------------------------------
-    // AUTH
-    // -----------------------------------
     const auth = c.req.header('Authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
@@ -1982,9 +1698,6 @@ app.post('/api/interpret', async (c) => {
     const isMaster = isMasterUser(email);
     console.log('¿Master?', isMaster);
 
-    // -----------------------------------
-    // DRUCOINS VALIDATION
-    // -----------------------------------
     let remainingBalance = await getDrucoinBalance(c.env, uid);
     if (!isMaster) {
       if (remainingBalance < 1) {
@@ -2027,9 +1740,6 @@ app.post('/api/interpret', async (c) => {
       console.groupEnd();
     }
 
-    // -----------------------------------
-    // BUILD PROMPT
-    // -----------------------------------
     const spreadLabel =
       spreadId === 'celtic-cross-10'
         ? 'Cruz Celta (10 cartas)'
@@ -2037,7 +1747,7 @@ app.post('/api/interpret', async (c) => {
         ? 'Pasado · Presente · Futuro'
         : 'Tirada libre';
 
-    const formattedCards = cards.map((c) => {
+    const formattedCards = cards.map((c: any) => {
       const id = c.cardId;
       const name = cardNamesEs[id] || id;
       return `${name}${c.reversed ? ' (invertida)' : ''}`;
@@ -2061,9 +1771,6 @@ Tareas:
 
     console.log('Prompt final:', prompt);
 
-    // -----------------------------------
-    // LLAMADA HF
-    // -----------------------------------
     const hfToken = c.env.HF_TOKEN;
     if (!hfToken) {
       console.warn('❌ No HF_TOKEN');
@@ -2149,6 +1856,9 @@ Tareas:
   }
 });
 
+// ============================================================
+// AUTH RESET PASSWORD
+// ============================================================
 app.post('/api/auth/reset-password', async (c) => {
   console.groupCollapsed(
     '%c🔁 /api/auth/reset-password',
@@ -2263,13 +1973,13 @@ app.get('/api/readings/list', async (c) => {
       .all();
 
     const items =
-      rows.results?.map((r) => ({
+      rows.results?.map((r: any) => ({
         id: r.id,
         title: r.title,
         createdAt: Number(r.created_at) * 1000,
       })) ?? [];
 
-    console.log('Lecturas encontradas:', items);
+    console.log('Lecturas encontradas:', items.length);
 
     console.groupEnd();
     return c.json({ ok: true, items });
@@ -2307,7 +2017,7 @@ app.get('/api/readings/:id', async (c) => {
 
     console.log('UID:', uid);
 
-    const row = await c.env.DB.prepare(
+    const row: any = await c.env.DB.prepare(
       `SELECT id,title,interpretation,cards_json,spreadId,
               strftime('%s',created_at) AS created_at
        FROM readings
