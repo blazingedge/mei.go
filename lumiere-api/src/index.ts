@@ -324,16 +324,26 @@ return state;
 //--TAROT DECK--//
 
 app.get('/api/decks', async (c) => {
-  const CDN = c.env.CDN_BASE;
+  console.groupCollapsed('%c🃏 /api/decks', 'color:#ffcc80;font-weight:bold;');
 
-  const cards = DECK.map(card => ({
-    id: card.id,
-    name: card.name,
-    suit: card.suit,
-    imageUrl: `${CDN}/${card.id}.webp`
-  }));
-  return c.json({ ok: true, cards });
+  try {
+    const cards = DECK.map(card => ({
+      id: card.id,
+      name: card.name,
+      suit: card.suit,
+      number: (card as any).number ?? null, // si tienes number en DECK
+    }));
+
+    console.log('Cartas enviadas (DECK):', cards.length);
+    console.groupEnd();
+    return c.json(cards);        // 👈👈 OJO: devolvemos UN ARRAY, no { ok, cards }
+  } catch (err) {
+    console.error('💥 /api/decks error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
 });
+
 
 
 app.get('/api/spreads', (c) => {
@@ -619,6 +629,8 @@ spreadId?: string | null;
 title?: string | null;
 plan?: PlanId;
 };
+
+
 
 async function insertReadingRecord(env: Env, payload: ReadingInsertPayload): Promise<string> {
 const plan = payload.plan ?? (await ensureUserPlan(env, payload.uid));
@@ -1173,129 +1185,121 @@ return c.json(resp);
 // AUTH — REGISTRO (Firebase Email + Password)
 // ============================================================
 app.post('/api/auth/register', async (c) => {
-console.groupCollapsed('%c📝 /api/auth/register', 'color:#00e676;font-weight:bold;');
+  console.groupCollapsed('%c📝 /api/auth/register', 'color:#00e676;font-weight:bold;');
 
-try {
-const body = await c.req.json().catch(() => null);
+  try {
+    const body = await c.req.json().catch(() => null);
 
-if (!body || !body.email || !body.password) {
-console.warn('❌ Falta email o password');
-console.groupEnd();
-return c.json({ ok: false, error: 'missing_fields' });
-}
+    if (!body || !body.email || !body.password) {
+      console.warn('❌ Falta email o password');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_fields' }, 400);
+    }
 
-const email = String(body.email).trim().toLowerCase();
-const password = String(body.password).trim();
+    const email = String(body.email).trim().toLowerCase();
+    const password = String(body.password).trim();
 
-const apiKey = c.env.FIREBASE_API_KEY || '';
+    const apiKey = c.env.FIREBASE_API_KEY || '';
 
-// ====== FIREBASE SIGNUP ======
-const resp = await fetch(
-`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-{
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({
-email,
-password,
-returnSecureToken: true,
-}),
-}
-);
+    // ======================================================
+    // 🔐 FIREBASE SIGNUP
+    // ======================================================
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
 
-const data: any = await resp.json().catch(() => ({}));
+    const data: any = await resp.json().catch(() => ({}));
+    console.log('Firebase signup response:', data);
 
-console.log('Firebase signup response:', data);
-
-// Detectar error de firebase
+    // ======================================================
+    // ❌ ERROR DE FIREBASE (bloque único, sin duplicados)
+    // ======================================================
     if (!resp.ok || !data.idToken) {
       console.warn('❌ Error Firebase:', data);
-    // Detectar error de firebase
-if (!resp.ok || !data.idToken) {
-  console.warn('❌ Error Firebase:', data);
 
-  const fbError =
-    data?.error?.message ||
-    data?.error?.errors?.[0]?.message ||
-    'firebase_error';
+      const fbError =
+        data?.error?.message ||
+        data?.error?.errors?.[0]?.message ||
+        'firebase_error';
 
-  // 🔍 Mapeo a un mensaje humano
-  let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
+      // Mapeo humano
+      let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
 
-  switch (fbError) {
-    case 'EMAIL_EXISTS':
-      userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
-      break;
+      switch (fbError) {
+        case 'EMAIL_EXISTS':
+          userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
+          break;
 
-    case 'INVALID_EMAIL':
-      userMessage = 'El correo no tiene un formato válido.';
-      break;
+        case 'INVALID_EMAIL':
+          userMessage = 'El correo no tiene un formato válido.';
+          break;
 
-    case 'MISSING_PASSWORD':
-      userMessage = 'Debes indicar una contraseña.';
-      break;
+        case 'MISSING_PASSWORD':
+          userMessage = 'Debes indicar una contraseña.';
+          break;
 
-    // Firebase suele devolver algo tipo:
-    // WEAK_PASSWORD : Password should be at least 6 characters
-    default:
-      if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
-        userMessage =
-          'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
-      } else if (typeof fbError === 'string') {
-        // Por si quieres ver el código exacto en UI:
-        userMessage = `Error al registrar: ${fbError}`;
+        default:
+          if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
+            userMessage =
+              'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
+          } else if (typeof fbError === 'string') {
+            userMessage = `Error al registrar: ${fbError}`;
+          }
+          break;
       }
-      break;
-  }
-
-      console.groupEnd();
-  return c.json(
-    {
-      ok: false,
-      error: fbError,
-      message: userMessage,
-    },
-    400
-  );
-}
 
       console.groupEnd();
       return c.json(
         {
           ok: false,
           error: fbError,
+          message: userMessage,
         },
         400
       );
     }
 
-const uid = data.localId;
+    // ======================================================
+    // ✔️ REGISTRO EXITOSO
+    // ======================================================
+    const uid = data.localId;
 
-// ====== VERIFICACIÓN DE CORREO ======
-await sendFirebaseEmailVerification(apiKey, data.idToken);
+    // Enviar verificación de email
+    await sendFirebaseEmailVerification(apiKey, data.idToken);
 
-// ====== GUARDAR EN DB ======
-await c.env.DB.prepare(
-`INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
-      VALUES (?, ?, 'luz', ?, ?)`
-)
-.bind(uid, email, Date.now(), Date.now())
-.run();
+    // Guardar usuario en DB
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
+       VALUES (?, ?, 'luz', ?, ?)`
+    )
+      .bind(uid, email, Date.now(), Date.now())
+      .run();
 
-await ensureDrucoinWallet(c.env, uid);
+    // Crear o asegurar billetera de DruCoins
+    await ensureDrucoinWallet(c.env, uid);
 
-console.groupEnd();
-return c.json({ ok: true });
+    console.groupEnd();
+    return c.json({ ok: true });
 
-} catch (err: any) {
-console.error('💥 /api/auth/register error:', err?.message || err);
-console.groupEnd();
-return c.json(
-{ ok: false, error: 'internal_server_error' },
-500
-);
-}
+  } catch (err: any) {
+    console.error('💥 /api/auth/register error:', err?.message || err);
+    console.groupEnd();
+    return c.json(
+      { ok: false, error: 'internal_server_error' },
+      500
+    );
+  }
 });
+
 
 
 // ============================================================
