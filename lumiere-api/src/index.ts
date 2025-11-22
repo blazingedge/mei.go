@@ -1300,7 +1300,52 @@ app.post('/api/auth/register', async (c) => {
   }
 });
 
+//-------- HACER TIRADA-----------------//
 
+app.post('/api/draw', async (c) => {
+  try {
+    // Body
+    const body = await c.req.json();
+    const spreadId = body.spreadId ?? 'celtic-cross-10';
+    const allowsReversed = body.allowsReversed ?? true;
+
+    // Semilla
+    const seedInput = body.seed ?? Date.now().toString();
+    const seedNum = hashSeed(seedInput);
+    const rnd = rng32(seedNum);
+
+    // Count
+    const count = 
+      spreadId === 'ppf-3' ? 3 :
+      spreadId === 'free' ? 9 : 10;
+
+    // Shuflle
+    const ids = [...DECK.map(d => d.id)];
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+
+    const selected = ids.slice(0, count);
+
+    const cards = selected.map((id, index) => ({
+      position: index + 1,
+      cardId: id,
+      reversed: allowsReversed ? rnd() < 0.4 : false
+    }));
+
+    return c.json({
+      ok: true,
+      spreadId,
+      seed: seedInput,
+      cards
+    });
+
+  } catch (err) {
+    console.error('/api/draw ERROR', err);
+    return c.json({ ok: false }, 500);
+  }
+});
 
 // ============================================================
 // AUTH — LOGIN (Firebase Email + Password)
@@ -2533,3 +2578,26 @@ console.log(
 );
 
 export default app;
+
+function hashSeed(seedInput: any): number {
+  // FNV-1a 32-bit hash to convert any seed string into a 32-bit integer
+  const s = String(seedInput ?? '');
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function rng32(seedNum: number): () => number {
+  // Mulberry32-like PRNG returning a function that yields floats in [0,1)
+  let a = seedNum >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
