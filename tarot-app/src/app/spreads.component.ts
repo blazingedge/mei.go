@@ -150,8 +150,8 @@ export class SpreadsComponent implements OnInit, OnDestroy {
   loading = false;
 
   // Imagen de loading místico
-  loadingWizardMobile : string = `${environment.CDN_BASE}/cards/magoceltaloadinmobile.webp`;
-  loadingWizardDesktop = `${environment.CDN_BASE}/cards/magoceltaloadingweb.webm`;
+  loadingWizardMobile: string = `${environment.CDN_BASE}/cards/magoceltaloadingmobile.webm`;
+  loadingWizardDesktop: string = `${environment.CDN_BASE}/cards/magoceltaloadinweb.webp`;
 
   deckError: string | null = null;
   deckCount = 0;
