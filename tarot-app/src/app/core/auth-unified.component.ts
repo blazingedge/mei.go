@@ -185,6 +185,9 @@ skipIntro() {
   }
 }
 
+
+
+
   private async resetPersistedSession() {
     try {
       await this.auth.logout();
