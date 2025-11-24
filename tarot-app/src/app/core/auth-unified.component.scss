@@ -236,6 +236,10 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
+  background-image: url('/assets/home_logback.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 
   .intro-text {
     font-family: 'Cinzel', serif;
@@ -254,4 +258,34 @@ input {
 }
 #cf-turnstile iframe {
   border-radius: 12px;
+}
+
+.intro-sound-btn,
+.intro-skip-btn {
+  position: absolute;
+  z-index: 1000;
+  padding: 10px 18px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: 0.2s ease;
+  font-size: 14px;
+}
+
+.intro-sound-btn:hover,
+.intro-skip-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.intro-sound-btn {
+  bottom: 25px;
+  left: 25px;
+}
+
+.intro-skip-btn {
+  bottom: 25px;
+  right: 25px;
 }

@@ -4,7 +4,20 @@
 <div class="intro-overlay" *ngIf="showIntro">
   <app-intro-particles></app-intro-particles>
   <h1 class="intro-text">El meigo</h1>
+
+  <!-- 🔊 Activar sonido -->
+  <button class="intro-sound-btn" (click)="enableSound()">
+    Activar sonido
+  </button>
+
+  <!-- ⏭️ Saltar intro -->
+  <button class="intro-skip-btn" (click)="skipIntro()">
+    Saltar intro
+  </button>
 </div>
+
+
+
 
 <!-- ===========================================================
      🧿 LAYOUT PRINCIPAL AUTH

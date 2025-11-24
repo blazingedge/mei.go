@@ -43,6 +43,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   acceptedTerms = false;
   forgotEmail = false;
   showForgotModal = false;
+  introaudio!: HTMLAudioElement;
+  audioUnlocked = false;
+
 
   loading = false;
   loginError = '';
@@ -149,14 +152,38 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   async ngOnInit() {
     this.resumeGoogleRedirect();
 
-     
+  
+
 
     this.auth.termsAccepted$
       .pipe(takeUntil(this.destroy$))
       .subscribe((accepted) => {
         this.acceptedTerms = accepted;
       });
+
+
+      
   }
+
+   enableSound() {
+  if (this.audioUnlocked) return;
+
+  this.introaudio.play().catch(err => {
+    console.warn("Autoplay bloqueado:", err);
+  });
+
+  this.audioUnlocked = true;
+}
+
+skipIntro() {
+  this.showIntro = false;
+
+  // Detener audio si está sonando
+  if (this.introaudio && !this.introaudio.paused) {
+    this.introaudio.pause();
+    this.introaudio.currentTime = 0;
+  }
+}
 
   private async resetPersistedSession() {
     try {
@@ -173,6 +200,9 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
   }
+  
+
+  
 
   async onLogin() {
     this.auth.authFlowStarted = true;
@@ -232,6 +262,8 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     }
   }
 
+  
+
   private finishAuthFlow() {
     this.auth.authFlowStarted = false;
     this.loginError = '';
@@ -239,6 +271,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
       this.router.navigate(['/spreads']);
     }
   }
+
 
   async onRegister() {
     if (!this.acceptedTerms) {
