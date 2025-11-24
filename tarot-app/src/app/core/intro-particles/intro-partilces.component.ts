@@ -33,6 +33,14 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
   private imgs: HTMLImageElement[] = [];
   private width = 0;
   private height = 0;
+  textProgress = 0; 
+  private maxTextOpacity = 0.9;
+
+  private vortexStrength = 0;     // 0 = sin remolino, 1 = remolino completo
+private vortexX = 0;
+private vortexY = 0;
+private revealText = false;
+private textOpacity = 0;
 
   ngOnInit(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -46,6 +54,9 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
       this.spawnInitial();
       this.loop();
     });
+    this.vortexX = this.width / 2;
+    this.vortexY = this.height / 2;
+
   }
 
 
@@ -109,44 +120,108 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
   
 
   private update() {
-    const t = performance.now() / 1000;
-    const wind = Math.sin(t * 0.35) * 0.25;
+  const t = performance.now() / 1000;
+  const wind = Math.sin(t * 0.35) * 0.25;
 
-    for (let i = this.leaves.length - 1; i >= 0; i--) {
-      const L = this.leaves[i];
-      L.vx += wind * 0.02 * (0.5 + Math.random() * 0.5);
-      L.x += L.vx;
-      L.y += L.vy;
-      L.r += L.vr;
+  // 🔥 Activación del remolino tras 2.5s
+  if (performance.now() > 2500) {
+    this.vortexStrength = Math.min(1, this.vortexStrength + 0.003);
 
-      if (L.y > this.height * 0.65) {
-        L.alpha = Math.max(0, L.alpha - 0.008);
-      }
-
-      if (L.y > this.height + 60 || L.x < -50 || L.x > this.width + 50 || L.alpha <= 0.02) {
-        this.leaves.splice(i, 1);
-        this.spawnLeaf(true);
-      }
+    if (this.vortexStrength > 0.5) {
+      this.revealText = true;
     }
   }
 
+  for (let i = this.leaves.length - 1; i >= 0; i--) {
+    const L = this.leaves[i];
 
+    // Movimiento normal
+    L.vx += wind * 0.02 * (0.5 + Math.random() * 0.5);
+    L.x += L.vx;
+    L.y += L.vy;
+    L.r += L.vr;
 
+    // 🌪️ EFECTO REMOLINO
+    if (this.vortexStrength > 0) {
+      const dx = this.vortexX - L.x;
+      const dy = this.vortexY - L.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
+      // Fuerza del remolino
+      const force = (this.vortexStrength * 0.03) / dist;
 
-  private draw() {
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.width, this.height);
+      L.vx += dx * force;
+      L.vy += dy * force;
 
-    for (const L of this.leaves) {
-      ctx.save();
-      ctx.globalAlpha = L.alpha;
-      ctx.translate(L.x, L.y);
-      ctx.rotate(L.r);
-      const img = this.imgs[L.imgIdx];
-      const s = L.size;
-      ctx.drawImage(img, -s / 2, -s / 2, s, s);
-      ctx.restore();
+      // Extra giro para dar dinamismo
+      L.vr += (Math.random() - 0.5) * 0.01;
+
+      // Si está muy cerca del centro, desvanecer hoja
+      if (dist < 120) {
+        L.alpha = Math.max(0, L.alpha - 0.02);
+      }
+    }
+
+    // Fade natural cuando están más bajas
+    if (L.y > this.height * 0.65) {
+      L.alpha = Math.max(0, L.alpha - 0.008);
+    }
+
+    // Cuando mueren → reaparecer desde arriba
+    if (
+      L.y > this.height + 60 ||
+      L.x < -50 ||
+      L.x > this.width + 50 ||
+      L.alpha <= 0.02
+    ) {
+      this.leaves.splice(i, 1);
+      this.spawnLeaf(true);
     }
   }
 }
+
+
+
+
+
+
+private draw() {
+  const ctx = this.ctx;
+  ctx.clearRect(0, 0, this.width, this.height);
+
+  // 🌿 Dibujar hojas
+  for (const L of this.leaves) {
+    ctx.save();
+    ctx.globalAlpha = L.alpha;
+    ctx.translate(L.x, L.y);
+    ctx.rotate(L.r);
+    const img = this.imgs[L.imgIdx];
+    const s = L.size;
+    ctx.drawImage(img, -s / 2, -s / 2, s, s);
+    ctx.restore();
+  }
+
+  // ✨ REVELAR “EL MEIGO”
+  if (this.revealText) {
+    this.textOpacity = Math.min(1, this.textOpacity + 0.015);
+
+    ctx.save();
+    ctx.globalAlpha = this.textOpacity;
+
+    ctx.font = '64px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 230, 200, 1)';
+
+    // Brillo mágico
+    ctx.shadowColor = 'rgba(255, 200, 120, 0.45)';
+    ctx.shadowBlur = 24;
+
+    ctx.fillText('EL MEIGO', this.width / 2, this.height / 2 + 20);
+
+    ctx.restore();
+  }
+}
+
+
+}
+
