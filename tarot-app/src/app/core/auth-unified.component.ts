@@ -12,7 +12,6 @@ import { TermsCoordinatorService } from './services/terms-coordinator.service';
 import { TermsModalComponent } from '../components/terms-modal.component';
 import { ForgotPasswordModalComponent } from '../components/forgot-password-modal.component';
 
-
 declare global {
   interface Window {
     turnstile?: any;
@@ -149,23 +148,20 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   }
 }
 
-  async ngOnInit() {
-    this.resumeGoogleRedirect();
+  ngOnInit() {
+  this.resumeGoogleRedirect();
 
-  
+  // cargar audio
+  this.introaudio! = new Audio(`${environment.CDN_BASE}/audio/elmeigovoice.ogg`);
+  this.introaudio!.volume = 0.8;
+
+  this.auth.termsAccepted$
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(accepted => this.acceptedTerms = accepted);
+}
 
 
-    this.auth.termsAccepted$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((accepted) => {
-        this.acceptedTerms = accepted;
-      });
-
-
-      
-  }
-
-   enableSound() {
+enableSound() {
   if (this.audioUnlocked) return;
 
   this.introaudio.play().catch(err => {
@@ -178,7 +174,6 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
 skipIntro() {
   this.showIntro = false;
 
-  // Detener audio si está sonando
   if (this.introaudio && !this.introaudio.paused) {
     this.introaudio.pause();
     this.introaudio.currentTime = 0;
@@ -265,6 +260,8 @@ skipIntro() {
     }
   }
 
+
+  
   
 
   private finishAuthFlow() {

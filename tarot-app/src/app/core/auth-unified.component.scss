@@ -249,6 +249,10 @@ input {
   }
 }
 
+.intro-overlay.ng-animating {
+  opacity: 0 !important;
+}
+
 #cf-turnstile {
   margin-top: 18px;
   padding: 8px;

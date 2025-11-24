@@ -33,48 +33,31 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
   private imgs: HTMLImageElement[] = [];
   private width = 0;
   private height = 0;
-  private audioUnlocked = false;
-  showIntro = true;
-  private introAudio!: HTMLAudioElement;
-  
-ngOnInit(): void {
-  const canvas = this.canvasRef.nativeElement;
-  this.ctx = canvas.getContext('2d')!;
-  this.resize();
 
-  this.preloadIntro(); // Solo CARGA, no reproduce
+  ngOnInit(): void {
+    const canvas = this.canvasRef.nativeElement;
+    this.ctx = canvas.getContext('2d')!;
+    this.resize();
 
-  // Precarga hojas 🍂
-  this.preloadImages([
-    'assets/leaves/leaf1.webp',
-    'assets/leaves/leaf2.webp'
-  ]).then(() => {
-    this.spawnInitial();
-    this.loop();
-  });
-
+    this.preloadImages([
+      'assets/leaves/leaf1.webp',
+      'assets/leaves/leaf2.webp'
+    ]).then(() => {
+      this.spawnInitial();
+      this.loop();
+    });
   }
-
-  
-
 
 
   ngOnDestroy(): void {
     cancelAnimationFrame(this.raf);
   }
-
   private playMeigoIntro() {
   const audio = new Audio(`${environment.CDN_BASE}/audio/elmeigovoice.ogg`);
   audio.volume = 0.75;
   audio.play().catch(err => {
     console.warn("No se pudo reproducir intro:", err);
   });
-}
-
-preloadIntro() {
-  const audio = new Audio(`${environment.CDN_BASE}/audio/elmeigovoice.ogg`);
-  audio.volume = 0.8;
-  this.introAudio = audio;
 }
 
 
@@ -147,13 +130,7 @@ preloadIntro() {
     }
   }
 
- unlockIntroAudio() {
-  if (!this.introAudio) return;
 
-  this.introAudio.play().catch(() => {
-    console.warn("El usuario aún no ha interactuado.");
-  });
-}
 
 
 
