@@ -32,7 +32,7 @@
   } from '../services/spreads.service';
 
   import { ImageLoaderService } from '../services/image-loader.service';
-  import { Auth } from '@angular/fire/auth';
+  import { Auth, idToken } from '@angular/fire/auth';
 
   import { NewlineToBrPipe } from './pipes/new-line-to-br-pipe';
 
@@ -944,26 +944,25 @@
   // ------------------------------------------------------------
   // Mostrar significado de carta (overlay)
   // ------------------------------------------------------------
-  async openCardMeaning(pc: Placed) {
-  console.group('%c[Card Meaning] openCardMeaning()', 'color:#ba68c8');
 
+
+async openCardMeaning(pc: Placed) {
+  console.group('%c[Card Meaning] openCardMeaning()', 'color:#ba68c8');
   console.log('→ Carta:', pc);
 
-  // Abrir modal
   this.showCardOverlay = true;
   this.overlayCardTitle = this.deckMap.get(pc.cardId)?.name || pc.cardId;
   this.loadingCardMeaning = true;
   this.overlayCardMeaning = '';
 
   try {
-    console.log('→ Llamando API /card-meaning');
+    const token = await this.auth.currentUser?.getIdToken();
 
     const res = await fetch(`${environment.API_BASE}/card-meaning`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        // AUTH AGREGADO 🔥 (antes no enviabas token → estaba mal)
-        Authorization: `Bearer ${this.idToken}` 
+        Authorization: `Bearer ${token || ''}`,
       },
       body: JSON.stringify({
         name: pc.cardId,
@@ -974,9 +973,6 @@
     const data = await res.json();
     console.log('→ Meaning recibido:', data);
 
-    // ============================
-    // 🔥 1. LÍMITE ALCANZADO
-    // ============================
     if (data.limitReached) {
       this.overlayCardMeaning = `
         <strong>Límite alcanzado</strong><br><br>
@@ -990,14 +986,8 @@
       return;
     }
 
-    // ============================
-    // 🔥 2. SIGNIFICADO NORMAL
-    // ============================
-    if (data.ok && data.meaning) {
-      this.overlayCardMeaning = data.meaning;
-    } else {
-      this.overlayCardMeaning = 'Sin descripción disponible.';
-    }
+    this.overlayCardMeaning =
+      (data.ok && data.meaning) ? data.meaning : 'Sin descripción disponible.';
 
   } catch (err) {
     console.error('❌ Error obteniendo significado', err);
@@ -1008,7 +998,6 @@
   this.cdr.markForCheck();
   console.groupEnd();
 }
-
 
 
 
