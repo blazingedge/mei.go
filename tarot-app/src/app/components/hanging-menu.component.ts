@@ -1,36 +1,40 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+
+export type HangingMenuItem = {
+  label: string;
+  action: string;
+};
 
 @Component({
-  standalone: true,
   selector: 'app-hanging-menu',
+  standalone: true,
   imports: [CommonModule],
   templateUrl: './hanging-menu.component.html',
-  styleUrls: ['./hanging-menu.component.scss']
+  styleUrls: ['./hanging-menu.component.scss'],
 })
 export class HangingMenuComponent {
+
   @Input() title = 'Menú';
-  @Input() closeOnSelect = true;
+  @Input() items: HangingMenuItem[] = [];
+
+  // ✅ importante: el Output emite *string*, no Event
   @Output() action = new EventEmitter<string>();
 
   open = false;
 
-  toggle() {
+  toggleOpen() {
     this.open = !this.open;
   }
 
-  close() {
-    this.open = false;
+  onContentClick(ev: MouseEvent) {
+    // para que un click dentro del panel no cierre el menú
+    ev.stopPropagation();
   }
 
-  onContentClick(event: Event) {
-    const target =
-      (event.target as HTMLElement)?.closest('[data-action]') || null;
-
-    if (target) {
-      const value = target.getAttribute('data-action') ?? '';
-      this.action.emit(value);
-      if (this.closeOnSelect) this.close();
-    }
+  onItemClick(act: string, ev: MouseEvent) {
+    ev.stopPropagation();
+    this.action.emit(act);
+    this.open = false;
   }
 }

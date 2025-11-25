@@ -1453,3 +1453,36 @@
   50% { transform: translateY(-10px); }
   100% { transform: translateY(0); }
 }
+
+@keyframes grimorioOpen {
+  0% {
+    transform: scale(0.8) rotateX(25deg);
+    opacity: 0;
+    filter: blur(6px);
+    box-shadow: 0 0 0 transparent;
+  }
+  60% {
+    transform: scale(1.02) rotateX(0deg);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: scale(1) rotateX(0deg);
+    opacity: 1;
+    box-shadow:
+      0 0 22px rgba(255, 232, 180, 0.6),
+      0 0 48px rgba(255, 210, 120, 0.25);
+  }
+}
+
+.grimorio-appear {
+  animation: grimorioOpen 0.65s ease-out forwards;
+  transform-origin: 50% 100%;
+  border-radius: 18px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 248, 231, 0.96),
+    rgba(251, 236, 204, 0.98)
+  );
+}
+

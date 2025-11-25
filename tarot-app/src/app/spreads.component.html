@@ -1,7 +1,14 @@
 ﻿<!-- ===========================================================
+      MENÚ COLGANTE (HANGING MENU)
+     =========================================================== -->
+<app-hanging-menu
+  [items]="hangingMenuItems"
+  (action)="handleMenuAction($event)">
+</app-hanging-menu>
+
+<!-- ===========================================================
       LAYOUT GENERAL — Rail / Board / Panel
      =========================================================== -->
-
 <div class="layout">
 
   <!-- ===========================================================
@@ -87,128 +94,136 @@
   <!-- ===========================================================
         MOBILE LAYOUT
        =========================================================== -->
+  @if (isMobile) {
 
-@if (isMobile) {
+  <div class="mobile-layout">
 
-<div class="mobile-layout">
+    <!-- TOP BAR -->
+    <div class="mobile-top-bar">
 
-  <!-- TOP BAR -->
-  <div class="mobile-top-bar">
+      <div class="drucoins-hud bubble">
+        <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
+        <span class="count">{{ drucoinBalance }}</span>
+      </div>
 
-    <div class="drucoins-hud bubble">
-      <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
-      <span class="count">{{ drucoinBalance }}</span>
+      <div class="mobile-spread-select">
+        <label>Tipo de tirada</label>
+        <div class="select-wrap">
+          <select [(ngModel)]="spreadId"
+                  (ngModelChange)="onSpreadChange()"
+                  [disabled]="dealing">
+            @for (def of spreads; track def.id) {
+              <option [value]="def.id">{{ def.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <button type="button"
+              class="logout-btn"
+              (click)="logout()"
+              aria-label="Cerrar sesión">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"
+                d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9" />
+        </svg>
+      </button>
+
     </div>
 
-    <div class="mobile-spread-select">
-      <label>Tipo de tirada</label>
-      <div class="select-wrap">
-        <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
-          @for (def of spreads; track def.id) {
-            <option [value]="def.id">{{ def.name }}</option>
-          }
-        </select>
-      </div>
+    <!-- ===========================================================
+            PANEL PRINCIPAL – CARTA / SIGNIFICADO / INTERPRETACIÓN
+         =========================================================== -->
+    <div class="mobile-card-panel" [class.empty]="!placed.length">
+
+      @if (placed.length > 0) {
+
+        <!-- Vista de carta -->
+        <div class="card-preview">
+          <img class="card-face"
+               [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+               alt="{{ placed[focusIdx]?.cardId }}"
+               (click)="openCardMeaning(placed[focusIdx])" />
+        </div>
+
+        <!-- MODO SIGNIFICADO DE CARTA -->
+        @if (showCardOverlay) {
+          <div class="mobile-meaning-page grimorio-appear">
+            <h4>{{ overlayCardTitle }}</h4>
+            <p [innerHTML]="overlayCardMeaning"></p>
+          </div>
+        }
+
+        <!-- MODO INTERPRETACIÓN RESUMIDA -->
+        @else {
+          <div class="interpret-preview">
+            <h4>Interpretación</h4>
+            <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+          </div>
+        }
+
+      } @else {
+
+        <!-- Sin cartas -->
+        <div class="empty-mobile-state">
+          <p>Aún no hay cartas repartidas.</p>
+          <button type="button"
+                  class="btn-main secondary"
+                  (click)="hacerTirada()"
+                  [disabled]="!canDeal">
+            Hacer tirada
+          </button>
+        </div>
+
+      }
+
     </div>
 
-    <button type="button" class="logout-btn" (click)="logout()" aria-label="Cerrar sesión">
-      <svg width="18" height="18" viewBox="0 0 24 24">
-        <path fill="none" stroke="currentColor" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round"
-              d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9" />
-      </svg>
-    </button>
+    <!-- Contador -->
+    <p class="mobile-card-counter">
+      Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
+    </p>
 
-  </div>
+    <!-- Botón de interpretación -->
+    <div class="mobile-action-group">
+      <button type="button"
+              class="btn-main"
+              (click)="startInterpretation()"
+              [disabled]="!activeCards.length || !hasEnoughDrucoins || isInterpreting">
+        Interpretar tirada
+        <span class="cost-chip">-1 DruCoin</span>
+      </button>
 
-  <!-- ===========================================================
-          PANEL PRINCIPAL – CARTA / SIGNIFICADO / INTERPRETACIÓN
-       =========================================================== -->
-  <div class="mobile-card-panel" [class.empty]="!placed.length">
-
-    @if (placed.length > 0) {
-
-      <!-- Vista de carta -->
-      <div class="card-preview">
-        <img class="card-face"
-             [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-             alt="{{ placed[focusIdx]?.cardId }}"
-             (click)="openCardMeaning(placed[focusIdx])" />
-      </div>
-
-      <!-- MODO SIGNIFICADO DE CARTA -->
-      @if (showCardOverlay) {
-        <div class="mobile-meaning-page grimorio-appear">
-          <h4>{{ overlayCardTitle }}</h4>
-          <p [innerHTML]="overlayCardMeaning"></p>
-        </div>
+      @if (!hasEnoughDrucoins) {
+        <p class="drucoin-warning">Necesitas DruCoins para interpretar.</p>
       }
+    </div>
 
-      <!-- MODO INTERPRETACIÓN RESUMIDA -->
-      @else {
-        <div class="interpret-preview">
-          <h4>Interpretación</h4>
-          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-        </div>
-      }
+  </div> <!-- /mobile-layout -->
 
-    } @else {
-
-      <!-- Sin cartas -->
-      <div class="empty-mobile-state">
-        <p>Aún no hay cartas repartidas.</p>
-        <button type="button" class="btn-main secondary"
-                (click)="hacerTirada()" [disabled]="!canDeal">
-          Hacer tirada
-        </button>
-      </div>
-
-    }
-
+  <!-- Menú inferior móvil -->
+  <div class="bottom-menu--icons">
+    <button class="ghost-btn ghost--shuffle"
+            (click)="toggleShuffle()"
+            title="Barajar"></button>
+    <button class="ghost-btn ghost--history"
+            (click)="openHistory()"
+            title="Historial"></button>
+    <button class="ghost-btn ghost--saved"
+            (click)="toggleBookPanel()"
+            title="Grimorio"></button>
   </div>
 
-  <!-- Contador -->
-  <p class="mobile-card-counter">
-    Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
-  </p>
-
-  <!-- Botón de interpretación -->
-  <div class="mobile-action-group">
-    <button type="button"
-            class="btn-main"
-            (click)="startInterpretation()"
-            [disabled]="!activeCards.length || !hasEnoughDrucoins || isInterpreting">
-      Interpretar tirada
-      <span class="cost-chip">-1 DruCoin</span>
-    </button>
-
-    @if (!hasEnoughDrucoins) {
-      <p class="drucoin-warning">Necesitas DruCoins para interpretar.</p>
-    }
-  </div>
-
-</div> <!-- /mobile-layout -->
-
-<!-- Menú inferior móvil -->
-<div class="bottom-menu--icons">
-  <button class="ghost-btn ghost--shuffle" (click)="toggleShuffle()" title="Barajar"></button>
-  <button class="ghost-btn ghost--history" (click)="openHistory()" title="Historial"></button>
-  <button class="ghost-btn ghost--saved" (click)="toggleBookPanel()" title="Grimorio"></button>
-</div>
-
-} 
-
-
-
-  <!-- FIN MOBILE -->
-   @else {
+  } @else {
 
 
 
   <!-- ===========================================================
         DESKTOP BOARD
        =========================================================== -->
-  <section class="board" [style.backgroundImage]="boardBgUrl ? 'url(' + boardBgUrl + ')' : null">
+  <section class="board"
+           [style.backgroundImage]="boardBgUrl">
 
     <div class="spread-select">
       <span class="label">Elige tirada</span>
@@ -231,7 +246,6 @@
       </div>
     </div>
 
-
     @if (isFree && layers.length > 1) {
       <div class="layer-pills">
         @for (layer of layers; let i = $index; track layer.id) {
@@ -244,11 +258,9 @@
       </div>
     }
 
-
     @if (!activeCards.length && deckReady && !dealing) {
       <p class="board-empty">Haz clic en el mazo para comenzar una lectura.</p>
     }
-
 
     <div class="slot"
          *ngFor="let slot of slots; trackBy: trackSlot"
@@ -256,7 +268,6 @@
          [style.--y]="slot.y + '%'"
          [style.--r]="slot.r + 'deg'"
          [attr.data-pos]="slot.position"></div>
-
 
     <div class="card"
          *ngFor="let pc of activeCards; trackBy: trackCard"
@@ -274,9 +285,7 @@
         <img class="back" [src]="backUrl" alt="back" draggable="false" />
         <img class="front" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" draggable="false" />
       </div>
-
     </div>
-
 
     <div class="board-actions">
       <button class="btn-main"
@@ -285,7 +294,6 @@
         @if (dealing) { Barajando... } @else { Nueva tirada }
       </button>
     </div>
-
 
     <div class="deck-pile"
          (click)="onDeckClick()"
@@ -309,7 +317,8 @@
   <!-- DRUCOINS HUD DESKTOP -->
   <div class="drucoins-hud" title="Tus DruCoins disponibles">
     <img class="coin"
-         src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" />
+         src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp"
+         alt="DruCoins" />
     <div class="counter">
       <strong>{{ drucoinBalance }}</strong>
       <small>DruCoins</small>
@@ -342,8 +351,7 @@
         <label class="context-label">Contexto o pregunta:</label>
         <textarea [(ngModel)]="userContextInput"
                   rows="4"
-                  placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional...">
-        </textarea>
+                  placeholder="Ejemplo: Quiero entender el rumbo de mi vida profesional..."></textarea>
       </div>
 
       <div class="context-action">
@@ -362,8 +370,7 @@
   </aside>
   }
 
-} <!-- FIN DESKTOP @else -->
-
+  } <!-- FIN DESKTOP @else -->
 
 </div> <!-- /layout -->
 
@@ -372,7 +379,7 @@
 <!-- INTERPRETACIÓN MOBILE MODAL -->
 @if (showMobileInterpretModal) {
   <div class="mobile-interpret-overlay" (click)="closeMobileInterpretation()">
-    <div class="mobile-interpret-panel" (click)="$event.stopPropagation()">
+    <div class="mobile-interpret-panel grimorio-appear" (click)="$event.stopPropagation()">
       <header>
         <h3>Interpretar tirada</h3>
         <button type="button" class="close" (click)="closeMobileInterpretation()">×</button>
@@ -407,7 +414,7 @@
 <!-- HISTORIAL -->
 @if (showHistory) {
   <div class="history-overlay" (click)="closeHistory()">
-    <div class="history-panel" (click)="$event.stopPropagation()">
+    <div class="history-panel grimorio-appear" (click)="$event.stopPropagation()">
 
       <header>
         <h3>Historial de lecturas</h3>
@@ -445,7 +452,7 @@
 <!-- LECTURAS GUARDADAS -->
 @if (showSavedReadings) {
   <div class="saved-overlay" (click)="closeSavedReadings()">
-    <div class="saved-panel" (click)="$event.stopPropagation()">
+    <div class="saved-panel grimorio-appear" (click)="$event.stopPropagation()">
 
       <header>
         <h3>Tus interpretaciones guardadas</h3>
@@ -476,10 +483,11 @@
 }
 
 
+
 <!-- DETALLE DE LECTURA GUARDADA -->
 @if (savedDetail || savedDetailLoading) {
   <div class="history-modal-interpretation" (click)="closeSavedInterpretation()">
-    <div class="history-modal-interpretation__dialog" (click)="$event.stopPropagation()">
+    <div class="history-modal-interpretation__dialog grimorio-appear" (click)="$event.stopPropagation()">
       <header>
         <h3>{{ savedDetail?.title || 'Interpretación' }}</h3>
         <button type="button" class="close" (click)="closeSavedInterpretation()">&times;</button>
@@ -502,8 +510,8 @@
 
 <!-- OVERLAY SIGNIFICADO -->
 @if (showCardOverlay) {
-  <div class="card-meaning-overlay grimorio-appear" (click)="closeCardOverlay()">
-    <div class="meaning-box" (click)="$event.stopPropagation()">
+  <div class="card-meaning-overlay" (click)="closeCardOverlay()">
+    <div class="meaning-box grimorio-appear" (click)="$event.stopPropagation()">
 
       <header>
         <h3>{{ overlayCardTitle }}</h3>
@@ -527,7 +535,7 @@
 <!-- INTERPRETACIÓN IA -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
-    <div class="interpret-container" (click)="$event.stopPropagation()">
+    <div class="interpret-container grimorio-appear" (click)="$event.stopPropagation()">
 
       <header class="interpret-header">
         <span class="icon"></span>
@@ -569,12 +577,10 @@
 
 
 
-
-
 <!-- MODAL AUTOMÁTICO DE DONACIÓN (DruCoins) -->
 @if (drucoinBalance <= 0 && !isInterpreting) {
   <div class="donation-overlay">
-    <div class="donation-modal" (click)="$event.stopPropagation()">
+    <div class="donation-modal grimorio-appear" (click)="$event.stopPropagation()">
       <h2>Sin DruCoins</h2>
       <p>
         Necesitas DruCoins para interpretar nuevas tiradas.

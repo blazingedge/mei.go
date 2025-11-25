@@ -1,13 +1,23 @@
 <div class="hanging-menu" [class.open]="open">
-  <button type="button" class="hanger-tab" (click)="toggle()">
-    <span class="rope"></span>
+
+  <!-- Botón colgante -->
+  <button class="hanger" type="button" (click)="toggleOpen()">
     <span class="label">{{ title }}</span>
     <span class="caret" [class.open]="open">⌄</span>
   </button>
 
-  <div class="sheet" [class.open]="open">
-    <div class="sheet-inner" (click)="onContentClick($event)">
-      <ng-content></ng-content>
+  <!-- Hoja deslizante -->
+  <div class="sheet" [class.open]="open" (click)="onContentClick($event)">
+    <div class="sheet-inner">
+      <ul>
+        <li *ngFor="let item of items">
+          <button type="button"
+                  (click)="onItemClick(item.action, $event)">
+            {{ item.label }}
+          </button>
+        </li>
+      </ul>
     </div>
   </div>
+
 </div>
