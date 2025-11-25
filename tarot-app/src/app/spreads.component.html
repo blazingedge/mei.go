@@ -87,196 +87,121 @@
   <!-- ===========================================================
         MOBILE LAYOUT
        =========================================================== -->
-  @if (isMobile) {
 
-  <div class="mobile-layout">
+@if (isMobile) {
 
-    <!-- TOP BAR -->
-    <div class="mobile-top-bar">
+<div class="mobile-layout">
 
-      <div class="drucoins-hud bubble">
-        <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
-        <span class="count">{{ drucoinBalance }}</span>
-      </div>
+  <!-- TOP BAR -->
+  <div class="mobile-top-bar">
 
-      <div class="mobile-spread-select">
-        <label>Tipo de tirada</label>
-        <div class="select-wrap">
-          <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
-            @if (spreads.length) {
-              @for (def of spreads; track def.id) {
-                <option [value]="def.id">{{ def.name }}</option>
-              }
-            } @else {
-              <option value="celtic-cross-10">Cruz Celta</option>
-              <option value="ppf-3">Pasado - Presente - Futuro</option>
-              <option value="free">Libre</option>
-            }
-          </select>
-        </div>
-      </div>
-
-      <button type="button" class="logout-btn" (click)="logout()" aria-label="Cerrar sesión">
-        <svg width="18" height="18" viewBox="0 0 24 24">
-          <path fill="none" stroke="currentColor" stroke-width="1.6"
-                stroke-linecap="round" stroke-linejoin="round"
-                  d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9" />
-        </svg>
-      </button>
-
+    <div class="drucoins-hud bubble">
+      <img src="assets/ui/drucoin.webp" alt="Drucoins" class="coin" />
+      <span class="count">{{ drucoinBalance }}</span>
     </div>
 
+    <div class="mobile-spread-select">
+      <label>Tipo de tirada</label>
+      <div class="select-wrap">
+        <select [(ngModel)]="spreadId" (ngModelChange)="onSpreadChange()" [disabled]="dealing">
+          @for (def of spreads; track def.id) {
+            <option [value]="def.id">{{ def.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
 
-    <!-- PANEL PRINCIPAL (carta / interpretación) -->
-    <div class="mobile-card-panel" [class.empty]="!placed.length">
+    <button type="button" class="logout-btn" (click)="logout()" aria-label="Cerrar sesión">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path fill="none" stroke="currentColor" stroke-width="1.6"
+              stroke-linecap="round" stroke-linejoin="round"
+              d="M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9" />
+      </svg>
+    </button>
 
-      @if (placed.length > 0) {
+  </div>
 
-        <div class="card-preview">
-          <img class="card-face"
-               [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-               alt="{{ placed[focusIdx]?.cardId }}"
-               (click)="openCardMeaning(placed[focusIdx])" />
+  <!-- ===========================================================
+          PANEL PRINCIPAL – CARTA / SIGNIFICADO / INTERPRETACIÓN
+       =========================================================== -->
+  <div class="mobile-card-panel" [class.empty]="!placed.length">
+
+    @if (placed.length > 0) {
+
+      <!-- Vista de carta -->
+      <div class="card-preview">
+        <img class="card-face"
+             [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+             alt="{{ placed[focusIdx]?.cardId }}"
+             (click)="openCardMeaning(placed[focusIdx])" />
+      </div>
+
+      <!-- MODO SIGNIFICADO DE CARTA -->
+      @if (showCardOverlay) {
+        <div class="mobile-meaning-page grimorio-appear">
+          <h4>{{ overlayCardTitle }}</h4>
+          <p [innerHTML]="overlayCardMeaning"></p>
         </div>
-
-        @if (!showCardOverlay) {
-          <div class="interpret-preview">
-            <h4>Interpretación</h4>
-            <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-          </div>
-        } @else {
-          <div class="empty-mobile-state">
-            <p>Aún no hay cartas repartidas.</p>
-            <button type="button" class="btn-main secondary"
-                    (click)="hacerTirada()" [disabled]="!canDeal">
-              Hacer tirada
-            </button>
-          </div>
-        }
-
-      } @else {
-
-        <div class="empty-mobile-state">
-          <p>Aún no hay cartas repartidas.</p>
-          <button type="button" class="btn-main secondary"
-                  (click)="hacerTirada()" [disabled]="!canDeal">
-            Hacer tirada
-          </button>
-        </div>
-
       }
 
-    </div>
-
-    <p class="mobile-card-counter">
-      Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
-    </p>
-
-    <div class="mobile-action-group">
-      <button type="button"
-              class="btn-main"
-              (click)="startInterpretation()"
-              [disabled]="!activeCards.length || !hasEnoughDrucoins || isInterpreting">
-        Interpretar tirada
-        <span class="cost-chip">-1 DruCoin</span>
-      </button>
-      @if (!hasEnoughDrucoins) {
-        <p class="drucoin-warning">Necesitas DruCoins para interpretar.</p>
+      <!-- MODO INTERPRETACIÓN RESUMIDA -->
+      @else {
+        <div class="interpret-preview">
+          <h4>Interpretación</h4>
+          <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+        </div>
       }
-    </div>
-
-
-    <!-- BOOK PANEL -->
-    <!-- PANEL PRINCIPAL (carta / interpretación) -->
-<div class="mobile-card-panel" [class.empty]="!placed.length">
-
-  @if (placed.length > 0) {
-
-    <div class="card-preview">
-      <img class="card-face"
-           [src]="getFrontUrl(placed[focusIdx]?.cardId)"
-           alt="{{ placed[focusIdx]?.cardId }}"
-           (click)="openCardMeaning(placed[focusIdx])" />
-    </div>
-
-    <!-- ================================
-         INTERPRETACIÓN O SIGNIFICADO
-         ================================ -->
-    @if (!showCardOverlay) {
-
-      <!-- Interpretación general -->
-      <div class="interpret-preview">
-        <h4>Interpretación</h4>
-        <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
-      </div>
 
     } @else {
 
-      <!-- SIGNIFICADO DE LA CARTA (GRIMORIO MOBILE) -->
-      <div class="mobile-meaning-page grimorio-appear">
-
-        <h4 class="mobile-meaning-title">{{ overlayCardTitle }}</h4>
-
-        @if (loadingCardMeaning) {
-          <p><em>Consultando significado...</em></p>
-        } @else {
-          <p [innerHTML]="overlayCardMeaning"></p>
-        }
-
+      <!-- Sin cartas -->
+      <div class="empty-mobile-state">
+        <p>Aún no hay cartas repartidas.</p>
+        <button type="button" class="btn-main secondary"
+                (click)="hacerTirada()" [disabled]="!canDeal">
+          Hacer tirada
+        </button>
       </div>
 
     }
 
-  } @else {
-
-    <div class="empty-mobile-state">
-      <p>Aún no hay cartas repartidas.</p>
-      <button type="button" class="btn-main secondary"
-              (click)="hacerTirada()" [disabled]="!canDeal">
-        Hacer tirada
-      </button>
-    </div>
-
-  }
-
-</div>
-    <!-- FIN BOOK PANEL -->
-
-
-    <!-- MOBILE CAROUSEL -->
-    @if (placed.length > 0) {
-      <div class="mobile-carousel">
-        <div class="carousel-track">
-          @for (pc of placed; track pc.cardId) {
-            <div class="carousel-card">
-              <div class="card-wrapper" [class.reversed]="pc.reversed">
-                <img class="card-face" [src]="getFrontUrl(pc.cardId)" alt="{{ pc.cardId }}" />
-                <p class="card-name">{{ deckMap.get(pc.cardId)?.name || pc.cardId }}</p>
-                <button (click)="openCardMeaning(pc)">Ver significado</button>
-              </div>
-            </div>
-          }
-        </div>
-
-        <div class="carousel-nav">
-          <button (click)="prevCard()">&lt;</button>
-          <span>{{ focusIdx + 1 }} / {{ placed.length }}</span>
-          <button (click)="nextCard()">&gt;</button>
-        </div>
-      </div>
-    }
-
-  </div> <!-- /mobile-layout -->
-
-  <!-- Menú inferior móvil -->
-  <div class="bottom-menu--icons">
-    <button class="ghost-btn ghost--shuffle" (click)="toggleShuffle()" title="Barajar"></button>
-    <button class="ghost-btn ghost--history" (click)="openHistory()" title="Historial"></button>
-    <button class="ghost-btn ghost--saved" (click)="toggleBookPanel()" title="Grimorio"></button>
   </div>
 
+  <!-- Contador -->
+  <p class="mobile-card-counter">
+    Carta {{ placed.length ? (focusIdx + 1) : 0 }} / {{ placed.length || 0 }}
+  </p>
+
+  <!-- Botón de interpretación -->
+  <div class="mobile-action-group">
+    <button type="button"
+            class="btn-main"
+            (click)="startInterpretation()"
+            [disabled]="!activeCards.length || !hasEnoughDrucoins || isInterpreting">
+      Interpretar tirada
+      <span class="cost-chip">-1 DruCoin</span>
+    </button>
+
+    @if (!hasEnoughDrucoins) {
+      <p class="drucoin-warning">Necesitas DruCoins para interpretar.</p>
+    }
+  </div>
+
+</div> <!-- /mobile-layout -->
+
+<!-- Menú inferior móvil -->
+<div class="bottom-menu--icons">
+  <button class="ghost-btn ghost--shuffle" (click)="toggleShuffle()" title="Barajar"></button>
+  <button class="ghost-btn ghost--history" (click)="openHistory()" title="Historial"></button>
+  <button class="ghost-btn ghost--saved" (click)="toggleBookPanel()" title="Grimorio"></button>
+</div>
+
+} 
+
+
+
   <!-- FIN MOBILE -->
-  } @else {
+   @else {
 
 
 
