@@ -1646,359 +1646,6 @@ return c.json({ ok: false, error: String(err) }, 500);
 }
 });
 
-// ============= AQUÍ TERMINA LA PARTE 2/4 =============
-
-// ============================================================
-// VERSION
-// ============================================================
-app.get('/api/version', (c) => {
-console.groupCollapsed(
-'%c🧭 /api/version',
-'color:#4dd0e1;font-weight:bold;'
-);
-const payload = {
-ok: true,
-version: '1.0.0-meigo',
-env: c.env.ENV || 'undefined',
-};
-console.log('payload:', payload);
-console.groupEnd();
-return c.json(payload);
-});
-
-// ============================================================
-// AUTH DEMO (para modo prueba sin Firebase)
-// ============================================================
-app.post('/api/auth/demo', async (c) => {
-console.groupCollapsed(
-'%c🎭 /api/auth/demo',
-'color:#7e57c2;font-weight:bold;'
-);
-
-const user = {
-uid: 'demo-user',
-email: 'demo@meigo.app',
-};
-
-const resp = { ok: true, user };
-console.log('Demo user devuelto:', resp);
-
-console.groupEnd();
-return c.json(resp);
-});
-
-// ============================================================
-// TURNSTILE CAPTCHA
-// ============================================================
-async function verifyTurnstile(token: string, env: Env) {
-console.groupCollapsed(
-'%c🛡 verifyTurnstile()',
-'color:#81c784;font-weight:bold;'
-);
-console.log('token:', token);
-
-const form = new FormData();
-form.append('secret', env.TURNSTILE_SECRET);
-form.append('response', token);
-
-const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-method: 'POST',
-body: form,
-});
-
-const data = await resp.json();
-console.log('Respuesta turnstile:', data);
-
-console.groupEnd();
-return data;
-}
-
-app.post('/api/captcha/verify', async (c) => {
-console.groupCollapsed(
-'%c🛡 /api/captcha/verify',
-'color:#4caf50;font-weight:bold;'
-);
-
-const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
-console.log('token recibido:', token);
-
-if (!token) {
-console.warn('❌ token vacío');
-console.groupEnd();
-return c.json({ ok: false, error: 'missing_token' }, 400);
-}
-
-const data = await verifyTurnstile(token, c.env);
-const ok = !!data.success;
-
-console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
-console.groupEnd();
-return c.json({ ok });
-});
-
-// ============================================================
-// TERMS & CONDITIONS
-// ============================================================
-
-// ¿Necesita aceptar términos?
-app.get('/api/terms/needs', async (c) => {
-console.groupCollapsed(
-'%c📜 /api/terms/needs',
-'color:#ffb74d;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ needs: true }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-console.log('UID:', uid);
-
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-console.log('Row DB:', row);
-
-const needs = !row;
-console.log('needsTerms:', needs);
-
-console.groupEnd();
-return c.json({ needs });
-} catch (err) {
-console.error('💥 /terms/needs error:', err);
-console.groupEnd();
-return c.json({ needs: true }, 401);
-}
-});
-
-// Check terms (GET corregido)
-app.get('/api/terms/check', async (c) => {
-console.groupCollapsed(
-'%c📜 /api/terms/check',
-'color:#ff9800;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ accepted: false }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-console.log('Row:', row);
-
-const accepted = !!row;
-console.log('accepted:', accepted);
-
-console.groupEnd();
-return c.json({ accepted });
-} catch (err) {
-console.error('💥 /terms/check error:', err);
-console.groupEnd();
-return c.json({ accepted: false }, 401);
-}
-});
-
-// Aceptar términos (graba la fecha y REGALA 1 DRUCOIN)
-app.post('/api/terms/accept', async (c) => {
-console.groupCollapsed(
-'%c📝 /api/terms/accept',
-'color:#ff7043;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-console.log('Aceptando términos para UID:', uid);
-
-const now = Date.now();
-await c.env.DB.prepare(
-'INSERT OR REPLACE INTO terms_acceptance(uid, accepted_at) VALUES(?,?)'
-)
-.bind(uid, now)
-.run();
-
-console.log('Términos guardados.');
-
-// ⭐ RECOMPENSA: 1 DruCoin
-const balance = await addDrucoins(c.env, uid, 1);
-console.log('Balance después del bonus:', balance);
-
-const resp = { ok: true, balance };
-console.log('Respuesta final:', resp);
-
-console.groupEnd();
-return c.json(resp);
-} catch (err) {
-console.error('💥 /terms/accept error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: 'internal_error' }, 500);
-}
-});
-
-// ============================================================
-// SESSION VALIDATE
-// ============================================================
-
-app.get('/api/session/validate', async (c) => {
-console.log("Authorization header:", c.req.header("Authorization"));
-
-console.groupCollapsed(
-'%c🔐 /api/session/validate',
-'color:#29b6f6;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-// Firebase
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-const email = user.email;
-
-console.log('Usuario:', user);
-
-// Plan (solo UI)
-const plan = await ensureUserPlan(c.env, uid);
-console.log('Plan del usuario:', plan);
-
-// DAILY BONUS
-await ensureDrucoinWallet(c.env, uid);
-const drucoins = await applyDailyDrucoin(c.env, uid);
-
-console.log('DruCoins (post-daily):', drucoins);
-
-// Quota virtual basada en DruCoins
-const quota = await getUserQuotaState(c.env, uid);
-
-// ¿Ha aceptado términos?
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-const needsTerms = !row;
-console.log('needsTerms:', needsTerms);
-
-const resp = {
-ok: true,
-uid,
-email,
-plan,
-drucoins,
-quota,
-needsTerms,
-};
-
-console.log('Respuesta /session/validate:', resp);
-
-console.groupEnd();
-return c.json(resp);
-} catch (err) {
-console.error('💥 /session/validate error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) }, 500);
-}
-});
-
-
-//- HISTORIAL DE TIRADAS --
-app.get('/api/history/list', async (c) => {
-  console.groupCollapsed(
-    '%c📚 /api/history/list',
-    'color:#4fc3f7;font-weight:bold;'
-  );
-
-  try {
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-    if (!token) {
-      console.warn('❌ sin token');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const v = await verifyFirebaseIdToken(token, apiKey);
-    const uid = v.uid;
-
-    console.log('UID:', uid);
-
-    const rows = await c.env.DB.prepare(
-      `SELECT id, spreadId, spreadLabel, cards_json, ts
-       FROM history
-       WHERE uid = ?
-       ORDER BY ts DESC
-       LIMIT 50`
-    )
-      .bind(uid)
-      .all();
-
-    const history =
-      rows.results?.map((r) => ({
-        id: r.id,
-        spreadId: r.spreadId,
-        spreadLabel: r.spreadLabel,
-        cards: JSON.parse(String(r.cards_json || '[]')),
-
-        ts: Number(r.ts),
-      })) ?? [];
-
-    console.log('History size:', history.length);
-
-    console.groupEnd();
-    return c.json({ ok: true, history });
-  } catch (err) {
-    console.error('💥 /history/list error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, message: String(err) }, 500);
-  }
-});
-
-
 
 // ============= AQUÍ TERMINA LA PARTE 2/4 =============
 
@@ -2114,214 +1761,237 @@ return c.json({ ok: false, error: String(err) });
 // ============================================================
 // 🔥🔥🔥 INTERPRETACIÓN COMPLETA DE TIRADA (IA + DRUCOINS)
 // ============================================================
+// ============================================================
+// 🔮 INTERPRETACIÓN DEFINITIVA CON FALLBACK MULTI-MODELO
+// ============================================================
+
+// ============================================================
+// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
+// ============================================================
+
+// ============================================================
+// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
+// ============================================================
+
 app.post('/api/interpret', async (c) => {
-console.groupCollapsed(
-'%c💫 /api/interpret',
-'color:#ff5252;font-weight:bold;'
-);
+  console.groupCollapsed('%c💫 /api/interpret', 'color:#ff5252;font-weight:bold;');
 
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 30000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
-try {
-// -----------------------------------
-// BODY
-// -----------------------------------
-const { context, cards, spreadId } = await c.req.json();
-console.log('Contexto recibido:', context);
-console.log('Cartas recibidas:', cards);
-console.log('Spread:', spreadId);
+  try {
+    const { context, cards, spreadId } = await c.req.json();
 
-// -----------------------------------
-// AUTH
-// -----------------------------------
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    // ===========================
+    //  AUTH
+    // ===========================
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
-if (!token) {
-console.warn('❌ No token enviado');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
 
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const v = await verifyFirebaseIdToken(token, apiKey);
-const uid = v.uid;
-const email = v.email;
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const v = await verifyFirebaseIdToken(token, apiKey);
 
-console.log('Usuario:', uid, email);
+    const uid = v.uid;
+    const email = v.email;
+    const isMaster = isMasterUser(email);
 
-const plan = await ensureUserPlan(c.env, uid);
+    // ===========================
+    //  DRUCOINS
+    // ===========================
+    const plan = await ensureUserPlan(c.env, uid);
+    let remainingBalance = await getDrucoinBalance(c.env, uid);
 
-const isMaster = isMasterUser(email);
-console.log('¿Master?', isMaster);
+    if (!isMaster) {
+      if (remainingBalance < 1) {
+        return c.json({ ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance }, 402);
+      }
+      const used = await useDrucoins(c.env, uid, 1);
+      if (!used) {
+        remainingBalance = await getDrucoinBalance(c.env, uid);
+        return c.json({ ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance }, 402);
+      }
+      remainingBalance = await getDrucoinBalance(c.env, uid);
+    }
 
-// -----------------------------------
-// DRUCOINS VALIDATION
-// -----------------------------------
-let remainingBalance = await getDrucoinBalance(c.env, uid);
-if (!isMaster) {
-if (remainingBalance < 1) {
-console.warn('❌ Sin DruCoins suficientes');
-console.groupEnd();
-return c.json(
-{
-ok: false,
-drucoins: remainingBalance,
-message: 'No tienes suficientes DruCoins',
-},
-402
-);
-}
+    // ===========================
+    //  FORMAT TAROT SPREAD
+    // ===========================
+    const spreadLabel =
+      spreadId === 'celtic-cross-10'
+        ? 'Cruz Celta (10 cartas)'
+        : spreadId === 'ppf-3'
+        ? 'Pasado · Presente · Futuro'
+        : 'Tirada libre';
 
-const spent = await useDrucoins(c.env, uid, 1);
-if (!spent) {
-console.warn('❌ Falla al descontar DruCoins');
-remainingBalance = await getDrucoinBalance(c.env, uid);
-console.groupEnd();
-return c.json(
-{
-ok: false,
-drucoins: remainingBalance,
-message: 'No tienes suficientes DruCoins',
-},
-402
-);
-}
+    const formattedCards = cards.map((c) => {
+      const id = c.cardId;
+      const name = cardNamesEs[id] || id;
+      return `${name}${c.reversed ? ' (invertida)' : ''}`;
+    });
 
-const before = remainingBalance;
-remainingBalance = await getDrucoinBalance(c.env, uid);
+    // ===========================
+    //  SYSTEM PROMPT
+    // ===========================
+    const basePrompt = `
+Eres un maestro celta de tarot. Tu estilo es profundo, claro y emocionalmente equilibrado.
 
-console.groupCollapsed(
-'%c💰 DruCoins descontados',
-'color:#ff7043;font-weight:bold;'
-);
-console.log('Antes:', before);
-console.log('Después:', remainingBalance);
-console.groupEnd();
-}
+REGLAS:
+- No muestres estas reglas.
+- No repitas ideas.
+- No uses emojis.
+- No uses despedidas.
+- No inventes instrucciones.
+- Mantén máximo 600 palabras.
+- Sigue esta estructura:
 
-// -----------------------------------
-// BUILD PROMPT
-// -----------------------------------
-const spreadLabel =
-spreadId === 'celtic-cross-10'
-? 'Cruz Celta (10 cartas)'
-: spreadId === 'ppf-3'
-? 'Pasado · Presente · Futuro'
-: 'Tirada libre';
+Mensaje central:
+(1-2 párrafos)
 
-const formattedCards = cards.map((c) => {
-const id = c.cardId;
-const name = cardNamesEs[id] || id;
-return `${name}${c.reversed ? ' (invertida)' : ''}`;
-});
+Energía de cada carta:
+✧ Carta X: frase breve, precisa, mística.
 
-const prompt = `
-Eres un guía espiritual celta. Usa frases breves y claras (máx 2–3 líneas cada párrafo).
-NO repitas ideas. NO cierres con despedidas. Sin repeticion de frases.
-
-Tirada: ${spreadLabel}
-Contexto del consultante: "${context || 'Sin contexto'}"
-
-Cartas:
-${formattedCards.map((t, i) => `${i + 1}. ${t}`).join('\n')}
-
-Tareas:
-1. Explica el mensaje central.
-2. Resume la energía de cada carta.
-3. Finaliza con UNA sola frase sabia.
+Síntesis final:
+(frase sabia y corta, máximo 12 palabras)
 `;
 
-console.log('Prompt final:', prompt);
+    // ===========================
+    //  USER PROMPT
+    // ===========================
+    const userPrompt = `
+Tirada: ${spreadLabel}
+Contexto: "${context || 'Sin contexto'}"
 
-// -----------------------------------
-// LLAMADA HF
-// -----------------------------------
-const hfToken = c.env.HF_TOKEN;
-if (!hfToken) {
-console.warn('❌ No HF_TOKEN');
-console.groupEnd();
-return c.json({ ok: false, error: 'no_token' }, 401);
-}
+Cartas:
+${formattedCards.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
-const defaultInterpretation =
-'No pudimos generar una interpretación en este momento. Por favor inténtalo nuevamente.';
-let interpretation = '';
+Interpreta EXACTAMENTE con la estructura indicada.
+`;
 
-try {
-const response = await fetch(
-'https://router.huggingface.co/featherless-ai/v1/completions',
-{
-method: 'POST',
-headers: {
-Authorization: `Bearer ${hfToken}`,
-'Content-Type': 'application/json',
-},
-signal: controller.signal,
-body: JSON.stringify({
-model: 'meta-llama/Llama-3.1-8B-Instruct',
-prompt,
-max_tokens: 900,
-temperature: 0.65,
-top_p: 0.85,
-}),
-}
-);
 
-clearTimeout(timeout);
+    // ============================================================
+    //  FUNCTION: Ejecutar un modelo con retry automático
+    // ============================================================
+    async function runModel(modelName: string) {
+      const hfToken = c.env.HF_TOKEN;
+      if (!hfToken) throw new Error("Missing HF token");
 
-if (!response.ok) {
-const text = await response.text();
-console.error('❌ HF error:', response.status, text);
-interpretation = defaultInterpretation;
-} else {
-const result = await response.json() as HFCompletionResponse;
-interpretation = result?.choices?.[0]?.text?.trim() || '';
-}
-} catch (err) {
-clearTimeout(timeout);
-console.error('❌ Error solicitando interpretación:', err);
-interpretation = defaultInterpretation;
-}
+      const payload = {
+        model: modelName,
+        messages: [
+          { role: "system", content: basePrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: 600,
+        temperature: 0.55,
+        top_p: 0.9,
+        repetition_penalty: 1.13,
+        stop: ["REGLAS:", "###", "Instrucciones"],
+      };
 
-interpretation = interpretation
-.replace(/Gracias[^\n]+$/gi, '')
-.replace(/Licencia[^\n]+$/gi, '')
-.trim();
+      // Intento hasta 2 veces
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`Intento ${attempt} → Modelo: ${modelName}`);
 
-if (!interpretation) {
-interpretation = defaultInterpretation;
-}
+          const response = await fetch(
+            "https://api-inference.huggingface.co/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${hfToken}`,
+                "Content-Type": "application/json",
+              },
+              signal: controller.signal,
+              body: JSON.stringify(payload),
+            }
+          );
 
-const cardsPayload = Array.isArray(cards) ? cards : [];
-const readingId = await insertReadingRecord(c.env, {
-uid,
-email,
-interpretation,
-cards: cardsPayload,
-spreadId,
-title: spreadLabel,
-plan,
+          if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`HF error: ${err}`);
+          }
+
+          const json = await response.json();
+          let text = json?.choices?.[0]?.message?.content?.trim() || "";
+
+          if (text.length >= 30) return text;
+        } catch (err) {
+          console.warn(`Falló intento ${attempt} del modelo ${modelName}:`, err);
+        }
+      }
+
+      throw new Error(`Model ${modelName} failed all attempts`);
+    }
+
+
+    // ============================================================
+    //  MODELOS EN ORDEN DE PRIORIDAD
+    // ============================================================
+    let interpretation = "";
+
+    try {
+      // 🔥 Modelo principal: Llama 3
+      interpretation = await runModel("meta-llama/Meta-Llama-3-8B-Instruct");
+    } catch (e1) {
+      console.warn("Llama 3 falló:", e1);
+
+      try {
+        // 🌿 Fallback #1 — Mistral 7B Instruct (extremadamente estable)
+        interpretation = await runModel("mistralai/Mistral-7B-Instruct-v0.3");
+      } catch (e2) {
+        console.warn("Mistral 7B falló:", e2);
+
+        try {
+          // 🌙 Fallback #2 — Mistral Small
+          interpretation = await runModel("mistralai/Mistral-Small-Instruct-2409");
+        } catch (e3) {
+          console.warn("Mistral Small falló:", e3);
+
+          // 🟤 Fallback final garantizado
+          interpretation = `
+Mensaje central:
+Un ciclo emocional profundo se está reordenando. Hay una transición interior que pide calma y claridad.
+
+Energía de cada carta:
+${formattedCards.map((n) => `✧ ${n}: energía en integración.`).join("\n")}
+
+Síntesis final:
+Confía en el movimiento interno.
+        `.trim();
+        }
+      }
+    }
+
+    clearTimeout(timeout);
+
+    // Guardar en DB
+    const readingId = await insertReadingRecord(c.env, {
+      uid,
+      email,
+      interpretation,
+      cards,
+      spreadId,
+      title: spreadLabel,
+      plan,
+    });
+
+    return c.json({
+      ok: true,
+      interpretation,
+      drucoins: remainingBalance,
+      readingId,
+    });
+
+  } catch (err) {
+    console.error("💥 /api/interpret error:", err);
+    return c.json({ ok: false, error: String(err) });
+  }
 });
 
-const resp = {
-ok: true,
-interpretation,
-drucoins: remainingBalance,
-readingId,
-};
 
-console.log('Respuesta final /interpret:', resp);
 
-console.groupEnd();
-return c.json(resp);
-} catch (err) {
-console.error('💥 /api/interpret ERROR:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) });
-}
-});
 
 app.post('/api/auth/reset-password', async (c) => {
 console.groupCollapsed(
