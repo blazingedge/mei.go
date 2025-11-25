@@ -187,34 +187,60 @@
 
 
     <!-- BOOK PANEL -->
-    <div class="book-panel" [class.open]="showBookPanel">
-      <div class="page left-page" (click)="toggleBookPanel()"></div>
+    <!-- PANEL PRINCIPAL (carta / interpretación) -->
+<div class="mobile-card-panel" [class.empty]="!placed.length">
 
-      <div class="page right-page">
-        <header>
-          <h2>El Grimorio</h2>
-          <button class="close" (click)="toggleBookPanel()">Cerrar</button>
-        </header>
+  @if (placed.length > 0) {
 
-        <section>
-          <h3>Suscripciones</h3>
-          <p>Modo Sabiduría: hasta 30 tiradas al mes.</p>
-          <p>Modo Quántico: tiradas ilimitadas + IA avanzada.</p>
-          <button class="btn-subs" (click)="openSubscription()">Ver planes</button>
-        </section>
-
-        <section>
-          <h3>Cuenta</h3>
-          <p>Revisa tu perfil, lecturas guardadas y progreso.</p>
-          <button (click)="openProfile()">Mi cuenta</button>
-        </section>
-
-        <section>
-          <h3>Información</h3>
-          <button (click)="openPrivacy()">Privacidad</button>
-        </section>
-      </div>
+    <div class="card-preview">
+      <img class="card-face"
+           [src]="getFrontUrl(placed[focusIdx]?.cardId)"
+           alt="{{ placed[focusIdx]?.cardId }}"
+           (click)="openCardMeaning(placed[focusIdx])" />
     </div>
+
+    <!-- ================================
+         INTERPRETACIÓN O SIGNIFICADO
+         ================================ -->
+    @if (!showCardOverlay) {
+
+      <!-- Interpretación general -->
+      <div class="interpret-preview">
+        <h4>Interpretación</h4>
+        <p [innerHTML]="overlayCardMeaning || 'Toca la carta para ver su significado…'"></p>
+      </div>
+
+    } @else {
+
+      <!-- SIGNIFICADO DE LA CARTA (GRIMORIO MOBILE) -->
+      <div class="mobile-meaning-page grimorio-appear">
+
+        <h4 class="mobile-meaning-title">{{ overlayCardTitle }}</h4>
+
+        @if (loadingCardMeaning) {
+          <p><em>Consultando significado...</em></p>
+        } @else {
+          <p [innerHTML]="overlayCardMeaning"></p>
+        }
+
+      </div>
+
+    }
+
+  } @else {
+
+    <div class="empty-mobile-state">
+      <p>Aún no hay cartas repartidas.</p>
+      <button type="button" class="btn-main secondary"
+              (click)="hacerTirada()" [disabled]="!canDeal">
+        Hacer tirada
+      </button>
+    </div>
+
+  }
+
+</div>
+    <!-- FIN BOOK PANEL -->
 
 
     <!-- MOBILE CAROUSEL -->
@@ -551,7 +577,7 @@
 
 <!-- OVERLAY SIGNIFICADO -->
 @if (showCardOverlay) {
-  <div class="card-meaning-overlay" (click)="closeCardOverlay()">
+  <div class="card-meaning-overlay grimorio-appear" (click)="closeCardOverlay()">
     <div class="meaning-box" (click)="$event.stopPropagation()">
 
       <header>
