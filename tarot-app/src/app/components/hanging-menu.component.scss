@@ -1,11 +1,106 @@
-.hanging-menu {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
+:host {
+  display: inline-block;
 }
 
+/* Contenedor principal */
+.hanging-menu {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;   /* se alinea a la derecha del HUD */
+}
+
+/* Botón que cuelga del “techo” */
+.hanger-tab {
+  appearance: none;
+  border: 1px solid rgba(214,178,94,0.55);
+  background: rgba(8, 10, 20, 0.9);
+  color: #f8f3dc;
+  cursor: pointer;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.85rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.55);
+}
+
+/* cuerdita */
+.hanger-tab .rope {
+  width: 2px;
+  height: 16px;
+  background: rgba(214,178,94,0.8);
+  display: inline-block;
+}
+
+/* engranaje celta */
+.hanger-tab .icon {
+  width: 30px;
+  height: 30px;
+  display: inline-block;
+  border-radius: 999px;
+  background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/settings_celtic.webp');
+  background-size: cover;
+  background-position: center;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,0.7));
+}
+
+/* texto “MENÚ” */
+.hanger-tab .label {
+  font-size: 0.8rem;
+}
+
+/* caret */
+.hanger-tab .caret {
+  font-size: 0.9rem;
+  transition: transform 0.3s ease;
+}
+
+.hanger-tab .caret.open {
+  transform: rotate(180deg);
+}
+
+/* ===========================
+   DROPDOWN (papiro colgando)
+   =========================== */
+.sheet {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+
+  width: min(420px, 95vw);
+  max-width: 420px;
+
+  transform-origin: top center;
+  transform: translateY(-6px) scaleY(0.0);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+  z-index: 50;
+}
+
+.sheet.open {
+  transform: translateY(0) scaleY(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* papiro */
+.sheet-inner {
+  border-radius: 0 0 28px 28px;
+  background: linear-gradient(180deg, rgba(253,247,228,0.96), rgba(236,213,170,0.96));
+  border: 1px solid rgba(168,134,62,0.45);
+  padding: 1.2rem 1.5rem 1.5rem;
+  box-shadow: 0 18px 35px rgba(0,0,0,0.35);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* lista y botones */
 .menu-list {
   list-style: none;
   margin: 0;
@@ -16,51 +111,27 @@
   list-style: none;
 }
 
-.hanger-tab {
-  appearance: none;
+.sheet-inner button {
+  width: 100%;
+  margin-bottom: 0.5rem;
   border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
   font-family: 'Cinzel', serif;
-  letter-spacing: 0.08em;
-  position: relative;
+  font-size: 0.85rem;
+  background: rgba(0,0,0,0.04);
+  color: #3b2f19;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
 
-  /* ✅ aquí va el icono, sin repetir .hanger-tab */
-  .icon {
-    width: 30px;
-    height: 30px;
-    display: inline-block;          /* importante */
-    border-radius: 999px;
-    background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/settings_celtic.webp');
-    background-size: cover;
-    background-position: center;
-    filter: drop-shadow(0 0 8px rgba(0,0,0,0.7));
-  }
+.sheet-inner button:last-child {
+  margin-bottom: 0;
+}
 
-  .rope {
-    width: 2px;
-    height: 16px;
-    background: rgba(214,178,94,0.8);
-    display: inline-block;
-  }
-
-  .label {
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    color: rgba(230,234,245,0.9);
-  }
-
-  .caret {
-    transition: transform 0.3s ease;
-    color: rgba(230,234,245,0.9);
-
-    &.open {
-      transform: rotate(180deg);
-    }
-  }
+.sheet-inner button:hover {
+  background: rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.25);
 }
