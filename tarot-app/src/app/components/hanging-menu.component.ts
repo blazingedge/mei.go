@@ -15,7 +15,10 @@ export type HangingMenuItem = {
 })
 export class HangingMenuComponent {
 
-  @Input() title = 'Menú';
+  
+  @Input() title = '';
+
+  
   @Input() items: HangingMenuItem[] = [];
 
   // ✅ importante: el Output emite *string*, no Event
@@ -38,7 +41,5 @@ export class HangingMenuComponent {
     this.open = false;
   }
 
-  onAction(ev: MouseEvent) {
-    ev.stopPropagation();
-  }
+  
 }
