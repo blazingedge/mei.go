@@ -319,11 +319,6 @@
       </div>
     </div>
 
-    <app-hanging-menu
-      class="top-menu"
-      [items]="hangingMenuItems"
-      (action)="handleMenuAction($event)">
-    </app-hanging-menu>
   </div>
 
   <!-- …resto de tu board (slots, cartas, mazo, botón “Nueva tirada”… ) -->
@@ -345,6 +340,14 @@
   <aside class="panel">
 
     <h3>Lectura</h3>
+
+    
+    <app-hanging-menu
+  class="hanging-menu trigger-menu icon"
+  [items]="hangingMenuItems"
+  (action)="handleMenuAction($event)">
+</app-hanging-menu>
+
 
     <div class="cards-list">
       @for (pc of activeCards; track pc.position) {

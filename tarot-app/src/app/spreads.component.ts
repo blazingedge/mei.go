@@ -204,7 +204,6 @@
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
       { label: 'Configuración', action: 'settings' },
-      { label: 'Lecturas guardadas', action: 'saved' },
       { label: 'Premium / Drucoins', action: 'premium' },
       { label: 'Cerrar sesión', action: 'logout' },
     ];
