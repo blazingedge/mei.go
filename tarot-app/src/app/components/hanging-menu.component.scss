@@ -4,6 +4,17 @@
   flex-direction: column;
   align-items: center;
   position: relative;
+  
+}
+
+.menu-list {
+  list-style: none;  /* quita los puntos */
+  margin: 0;
+  padding: 0;
+}
+
+.menu-list li {
+  list-style: none;
 }
 
 .hanger-tab {
@@ -19,6 +30,16 @@
   font-family: 'Cinzel', serif;
   letter-spacing: 0.08em;
   position: relative;
+
+  .hanger-tab .icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/settings_celtic.webp');
+  background-size: cover;
+  background-position: center;
+  filter: drop-shadow(0 0 8px rgba(0,0,0,0.7));
+}
 
   .rope {
     width: 2px;
