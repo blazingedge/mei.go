@@ -1478,11 +1478,10 @@
 .grimorio-appear {
   animation: grimorioOpen 0.65s ease-out forwards;
   transform-origin: 50% 100%;
-  border-radius: 18px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 248, 231, 0.96),
-    rgba(251, 236, 204, 0.98)
-  );
+  /* solo animación y un poquito de glow, SIN cambiar el background */
+  box-shadow:
+    0 0 18px rgba(255, 232, 180, 0.5),
+    0 0 36px rgba(255, 210, 120, 0.25);
 }
+
 

@@ -20,7 +20,7 @@
   import { BreakpointObserver } from '@angular/cdk/layout';
   import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
   import { firstValueFrom } from 'rxjs';
-
+  import { PaypalDonationComponent } from './components/paypal-donation.component';
   import { environment } from '../environments/environment';
 
   import {
@@ -29,6 +29,7 @@
     SpreadDef,
     DrawResult,
     DrawCard,
+    
   } from '../services/spreads.service';
 
   import { ImageLoaderService } from '../services/image-loader.service';
@@ -99,7 +100,7 @@
       FormsModule,
       DragDropModule,
       HangingMenuComponent,
-      NewlineToBrPipe,
+      PaypalDonationComponent, 
     ],
     templateUrl: './spreads.component.html',
     styleUrls: ['./spreads.component.scss', './mobile.scss'],
@@ -194,6 +195,11 @@
     savedDetailSafe: SafeHtml | null = null;
     savedDetailLoading = false;
     savedError: string | null = null;
+
+    showDrucoinModal = false;
+
+
+  
 
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
@@ -357,10 +363,15 @@
     // ============================================
   // DRUCOINS / TERMS / LECTURA — PARTE 2 / 4
   // ============================================
+  private openDrucoinModal() {
+    this.showDrucoinModal = true;
+    this.setBodyModalState('drucoin-modal', true);
+  }
 
-  // ---------------------------
-  // Verificación de saldo
-  // ---------------------------
+  closeDrucoinModal() {
+    this.showDrucoinModal = false;
+    this.setBodyModalState('drucoin-modal', false);
+  }
 
   // ======================================================
   // PARTE 1 — VIEWPORT + BACKGROUND
@@ -372,7 +383,7 @@
   }
 
 
-  private ensureHasDrucoins(): boolean {
+    private ensureHasDrucoins(): boolean {
     console.groupCollapsed('%c[Drucoins] ensureHasDrucoins()', 'color:#0ff');
 
     console.log('→ Balance actual:', this.drucoinBalance);
@@ -385,11 +396,14 @@
     }
 
     console.warn('❌ No hay suficientes DruCoins');
-    alert('No tienes DruCoins suficientes para interpretar la tirada.');
+
+    // Antes: alert(...)
+    this.openDrucoinModal();
 
     console.groupEnd();
     return false;
   }
+
 
   // ---------------------------
   // Verificación de lectura (Términos + Drucoins)

@@ -1,10 +1,4 @@
-﻿<!-- ===========================================================
-      MENÚ COLGANTE (HANGING MENU)
-     =========================================================== -->
-<app-hanging-menu
-  [items]="hangingMenuItems"
-  (action)="handleMenuAction($event)">
-</app-hanging-menu>
+﻿
 
 <!-- ===========================================================
       LAYOUT GENERAL — Rail / Board / Panel
@@ -315,15 +309,26 @@
 
 
   <!-- DRUCOINS HUD DESKTOP -->
-  <div class="drucoins-hud" title="Tus DruCoins disponibles">
-    <img class="coin"
-         src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp"
-         alt="DruCoins" />
-    <div class="counter">
-      <strong>{{ drucoinBalance }}</strong>
-      <small>DruCoins</small>
+   <!-- TOP RIGHT HUD (solo desktop): DruCoins + menú -->
+  <div class="top-right-hud" *ngIf="!isMobile">
+
+    <div class="drucoins-hud" title="Tus DruCoins disponibles">
+      <img class="coin"
+           src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" />
+      <div class="counter">
+        <strong>{{ drucoinBalance }}</strong>
+        <small>DruCoins</small>
+      </div>
     </div>
+
+    <app-hanging-menu
+      class="top-menu"
+      [items]="hangingMenuItems"
+      (action)="handleMenuAction($event)">
+    </app-hanging-menu>
+
   </div>
+
 
 
 
@@ -535,7 +540,7 @@
 <!-- INTERPRETACIÓN IA -->
 @if (showInterpretation) {
   <div class="interpret-modal" (click)="closeInterpret()">
-    <div class="interpret-container grimorio-appear" (click)="$event.stopPropagation()">
+    <div class="interpret-container" (click)="$event.stopPropagation()">
 
       <header class="interpret-header">
         <span class="icon"></span>
@@ -575,11 +580,10 @@
   </div>
 }
 
-
-
+        
 <!-- MODAL AUTOMÁTICO DE DONACIÓN (DruCoins) -->
-@if (drucoinBalance <= 0 && !isInterpreting) {
-  <div class="donation-overlay">
+@if (showDrucoinModal) {
+  <div class="donation-overlay" (click)="closeDrucoinModal()">
     <div class="donation-modal grimorio-appear" (click)="$event.stopPropagation()">
       <h2>Sin DruCoins</h2>
       <p>
@@ -590,6 +594,8 @@
       <p class="donation-hint">
         Tu apoyo mantiene vivo el grimorio. 🔮
       </p>
+
+       <app-paypal-donation></app-paypal-donation>
 
       <div class="actions">
         <button class="btn-main" (click)="openSubscription()">Ver opciones</button>
