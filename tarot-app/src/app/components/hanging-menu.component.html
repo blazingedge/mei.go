@@ -2,17 +2,18 @@
   <button class="hanger-tab" (click)="toggleOpen()">
     <span class="rope"></span>
 
-    <span class="icon"></span> <!-- 👈 aquí va el engranaje -->
+    <span class="icon"></span>
 
-    <span class="label">Menú</span>
+    <span class="label">{{ title }}</span>
     <span class="caret" [class.open]="open">▾</span>
   </button>
 
   <div class="sheet" [class.open]="open">
-    <div class="sheet-inner">
+    <div class="sheet-inner" (click)="onContentClick($event)">
       <ul class="menu-list">
         <li *ngFor="let item of items">
-          <button type="button" (click)="onAction(item.action)">
+          <button type="button"
+                  (click)="onItemClick(item.action, $event)">
             {{ item.label }}
           </button>
         </li>

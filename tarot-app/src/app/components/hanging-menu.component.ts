@@ -37,4 +37,8 @@ export class HangingMenuComponent {
     this.action.emit(act);
     this.open = false;
   }
+
+  onAction(ev: MouseEvent) {
+    ev.stopPropagation();
+  }
 }
