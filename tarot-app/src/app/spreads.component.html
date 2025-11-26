@@ -304,14 +304,12 @@
 
     </div>
 
-  </section>
+       <!-- TOP RIGHT HUD (solo desktop): DruCoins + menú -->
+  <section class="board"
+         [style.backgroundImage]="boardBgUrl">
 
-
-
-  <!-- DRUCOINS HUD DESKTOP -->
-   <!-- TOP RIGHT HUD (solo desktop): DruCoins + menú -->
+  <!-- HUD arriba a la derecha -->
   <div class="top-right-hud" *ngIf="!isMobile">
-
     <div class="drucoins-hud" title="Tus DruCoins disponibles">
       <img class="coin"
            src="https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/drucoins.webp" />
@@ -326,8 +324,18 @@
       [items]="hangingMenuItems"
       (action)="handleMenuAction($event)">
     </app-hanging-menu>
-
   </div>
+
+  <!-- …resto de tu board (slots, cartas, mazo, botón “Nueva tirada”… ) -->
+</section>
+
+
+  </section>
+
+
+
+  <!-- DRUCOINS HUD DESKTOP -->
+
 
 
 
