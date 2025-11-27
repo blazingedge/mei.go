@@ -15,20 +15,19 @@ account_id = "493e88a4d1183b18984cfc5b311d3459"
 port = 8787
 
 # =============================
-# 🧱 Variables globales (dev + prod)
+# 🧱 Variables 
 # =============================
 [vars]
 ENV = "production"
 
+# dominios permitidos para CORS
 CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://*.mei-go.pages.dev"
 
-TURNSTILE_SECRET = "0x4AAAAAACAX4iEbfnnt_c96NCHxHMNZuIg"
+# Firebase API key (esta puede ser pública, igual que en Angular)
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 
-PAY_PAL_CLIENT_ID = "ASsFTtjHp9oEj8w7nzfBRNe6TLqvbqdGNYCJVUZ0Y89xje8RPpO0Nk3pqrSWjTcMl-4lsUIAxhVpPNlB"
-PAYPAL_SECRET    = "EHn8XGmbn2Ts_8NqbnzwooSe8AfhOrRK3oocxzSRmv03m6lWnaQCGf-MHSv8Wb1xKWWtJGPAlUOx9WTz"
-PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com"
-
+# Base de la API de PayPal (OJO: api-m.sandbox, no sandbox.paypal.com)
+PAYPAL_API_BASE  = "https://api-m.sandbox.paypal.com"
 
 
 # =============================
@@ -46,5 +45,3 @@ database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
 binding = "TAROT_LIMIT"
 id = "48edb618e2bf4833af6cc13fcc7678d5"
 preview_id = "48edb618e2bf4833af6cc13fcc7678d5"
-
-

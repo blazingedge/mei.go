@@ -48,8 +48,11 @@ export class PaypalDonationComponent implements OnInit, OnDestroy {
   // ============================
   //   SDK DE PAYPAL
   // ============================
-  private loadPaypalSdk() {
-  console.log('[PayPalCmp] loadPaypalSdk');
+ // paypal-donation.component.ts
+
+private loadPaypalSdk() {
+  console.log('[PayPalCmp] loadPaypalSdk()');
+  console.log('[PayPalCmp] CLIENT_ID desde env:', environment.PAY_PAL_CLIENT_ID);
 
   if (window.paypal) {
     console.log('[PayPalCmp] window.paypal ya existe, renderButtons()');
@@ -58,27 +61,33 @@ export class PaypalDonationComponent implements OnInit, OnDestroy {
   }
 
   this.loading = true;
+
   const script = document.createElement('script');
 
-  // 👇 AQUÍ EL CAMBIO
-  script.src = `https://www.paypal.com/sdk/js?client-id=${environment.PAY_PAL_CLIENT_ID}&currency=EUR&intent=CAPTURE&components=buttons`;
+  const src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(
+    environment.PAY_PAL_CLIENT_ID
+  )}&currency=EUR&components=buttons`;
 
+  console.log('[PayPalCmp] src SDK:', src);
+
+  script.src = src;
   script.async = true;
 
   script.onload = () => {
-    console.log('[PayPalCmp] script.onload → PayPal SDK cargado');
+    console.log('[PayPalCmp] script.onload → SDK cargado');
     this.loading = false;
     this.renderButtons();
   };
 
-  script.onerror = (ev) => {
-    console.error('[PayPalCmp] script.onerror → fallo al cargar PayPal', ev);
+  script.onerror = (err) => {
+    console.error('[PayPalCmp] script.onerror → fallo al cargar PayPal', err);
     this.loading = false;
     this.error = 'No se pudo cargar PayPal. Intenta más tarde.';
   };
 
   document.body.appendChild(script);
 }
+
 
 
   // ============================
