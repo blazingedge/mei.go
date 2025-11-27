@@ -597,21 +597,38 @@
   <div class="donation-overlay" (click)="closeDrucoinModal()">
     <div class="donation-modal grimorio-appear" (click)="$event.stopPropagation()">
       <h2>Sin DruCoins</h2>
-      <p>
-        Necesitas DruCoins para interpretar nuevas tiradas.
-        Puedes conseguir más en la sección <strong>Premium / Drucoins</strong>.
+
+      <p class="donation-title">
+        Tu apoyo mantiene vivo el grimorio 🔮
       </p>
+
+      <p class="donation-text">
+        Esta tirada usa IA alojada en servidores reales: Cloudflare Workers y R2 para las cartas,
+        Hugging Face para el modelo de interpretación y Firebase para la autenticación.
+        Todo eso genera costes mensuales (servidores, almacenamiento y API de IA).
+      </p>
+
+      <p class="donation-text">
+        En lugar de llenar Meigo de anuncios o suscripciones agresivas, prefiero
+        que quien pueda ayude con una pequeña donación. Incluso el equivalente a un café,
+        multiplicado por muchas personas, mantiene abierto el grimorio día y noche.
+      </p>
+
+      <!-- Aquí va tu bloque de PayPal -->
+      <app-paypal-donation (close)="closeDrucoinModal()"></app-paypal-donation>
 
       <p class="donation-hint">
-        Tu apoyo mantiene vivo el grimorio. 🔮
+        Más adelante, las contribuciones estarán ligadas a DruCoins de forma
+        automática. Por ahora, tu donación ayuda directamente a cubrir los costes
+        de servidor y seguir mejorando Meigo.
       </p>
 
-       <app-paypal-donation></app-paypal-donation>
-
       <div class="actions">
-        <button class="btn-main" (click)="openSubscription()">Ver opciones</button>
-        <button class="btn-secondary" (click)="toggleBookPanel()">Abrir Grimorio</button>
+        <!-- Por ahora solo dejamos PayPal, sin planes de suscripción -->
+        <button class="btn-secondary" (click)="closeDrucoinModal()">Cerrar</button>
       </div>
     </div>
   </div>
 }
+
+

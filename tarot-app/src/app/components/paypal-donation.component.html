@@ -1,26 +1,27 @@
 <div class="donation-box">
   <p class="donation-text">
-    Este es un proyecto independiente. Tu donación ayuda a mantener el servidor
-    y seguir mejorando la experiencia de Meigo. Un café multiplicado por cientos
-    mantiene vivo el grimorio. 🔮
+    Si quieres apoyar el proyecto, puedes hacerlo con una donación a través de PayPal.
   </p>
 
-<form class="paypal-donate-form"
-      action="https://www.paypal.com/donate"
-      method="post"
-      target="_top">
-  <input type="hidden" name="hosted_button_id" value="67NFAL4G9MGJ4" />
-  <input type="image"
-         src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif"
+  <form class="paypal-donate-form"
+        action="https://www.paypal.com/donate"
+        method="post"
+        target="_top">
+    <input type="hidden" name="hosted_button_id" value="67NFAL4G9MGJ4" />
+    <input type="image"
+           src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif"
+           border="0"
+           name="submit"
+           title="Donar con PayPal"
+           alt="Donate with PayPal button" />
+    <img alt=""
          border="0"
-         name="submit"
-         title="PayPal - The safer, easier way to pay online!"
-         alt="Donate with PayPal button" />
-  <img alt=""
-       border="0"
-       src="https://www.paypal.com/en_ES/i/scr/pixel.gif"
-       width="1"
-       height="1" />
-</form>
+         src="https://www.paypal.com/en_ES/i/scr/pixel.gif"
+         width="1"
+         height="1" />
+  </form>
 
+  <button type="button" class="close-btn" (click)="onCloseClick()">
+    Cerrar
+  </button>
 </div>

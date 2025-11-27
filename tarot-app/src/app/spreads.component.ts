@@ -259,14 +259,25 @@
       // Observador para móvil/desktop
       this.observeViewport();
 
+      let lastBalance=0;
+
       // Solo manejamos DRUCOINS ahora
       this.authService.drucoinBalance$
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe((balance) => {
-          console.debug('%c[DruCoins Updated]', 'color:#0f0', balance);
-          this.drucoinBalance = balance ?? 0;
-          this.cdr.markForCheck();
-        });
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((balance) => {
+      console.debug('%c[DruCoins Updated]', 'color:#0f0', balance);
+      this.drucoinBalance = balance ?? 0;
+
+      // 👉 Detectar transición a 0
+      if (!this.showDrucoinModal && lastBalance > 0 && this.drucoinBalance <= 0) {
+        console.log('→ DruCoins llegaron a 0, abriendo modal de donación');
+        this.openDrucoinModal();
+        this.showDrucoinModal = true;
+      }
+
+      lastBalance = this.drucoinBalance;
+      this.cdr.markForCheck();
+    });
     }
 
     // ============================================
@@ -448,7 +459,7 @@
   // INTERPRETACIÓN IA (principal flujo) — DRUCOINS
   // =======================================================
 
-  startInterpretation() {
+  async startInterpretation() {
     console.group('%c[Interpretation] startInterpretation()', 'color:#f0f');
 
     if (!this.activeCards.length) {
@@ -480,6 +491,9 @@
       console.groupEnd();
       return;
     }
+
+   
+
 
     console.log('→ Desktop interpretation → confirmContext()');
     console.groupEnd();
@@ -854,18 +868,34 @@
       console.log('→ Worker status:', res.status);
 
       if (res.status === 402) {
-        const payload = await res.json().catch(() => ({}));
-        console.error('❌ No tenía DruCoins suficientes:', payload);
-
-        if (typeof payload?.drucoins === 'number') {
-          this.authService.updateDrucoinBalance(payload.drucoins);
-          this.sessionService.setDrucoins(payload.drucoins);
+        let payload: any = {};
+        try {
+          payload = await res.json();
+        } catch {
+          payload = {};
         }
 
-        alert(payload?.message || 'No tienes DruCoins suficientes.');
+        console.error('❌ No tenía DruCoins suficientes:', payload);
+
+        const serverBalance =
+          typeof payload?.drucoins === 'number' ? payload.drucoins : 0;
+
+        // Sincronizamos todo con el balance real del servidor
+        this.authService.updateDrucoinBalance(serverBalance);
+        this.sessionService.setDrucoins(serverBalance);
+        this.drucoinBalance = serverBalance;
+
+        // Abrimos el modal de donación en lugar de solo alert
+        this.openDrucoinModal();
+
+        // Limpieza de estado de interpretación
+        this.isInterpreting = false;
+        this.setBodyModalState('interpreting', false);
+        this.cdr.markForCheck();
         console.groupEnd();
         return;
       }
+
 
       const data = await res.json();
       console.log('→ Worker response JSON:', data);

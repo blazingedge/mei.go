@@ -26,6 +26,13 @@ TURNSTILE_SECRET = "0x4AAAAAACAX4iEbfnnt_c96NCHxHMNZuIg"
 
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 
+
+PAYPAL_CLIENT_ID = "ARphUEv8VII0aKQ7h-dt_8eN-ik-DtwZ5OrJjK40nD4HMGBvIckcLBS8wCYPVQN6LcaeVXTJKoOAfPKO"
+PAYPAL_SECRET    = "TU_SECRET_AQUI"
+PAYPAL_API_BASE  = "https://api-m.paypal.com" # live
+
+
+
 # =============================
 # 🔗 Base de datos D1 (Cloudflare)
 # =============================
@@ -41,3 +48,5 @@ database_id = "f4ddacad-92d2-4068-9f25-81dd83a05dc5"
 binding = "TAROT_LIMIT"
 id = "48edb618e2bf4833af6cc13fcc7678d5"
 preview_id = "48edb618e2bf4833af6cc13fcc7678d5"
+
+

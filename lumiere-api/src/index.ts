@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import { DECK } from './deck';
+import { verifyTurnstile } from './verifyturnstile';
 
 
 // ============================================================
@@ -1405,40 +1406,64 @@ return c.json({ ok: false, error: 'internal_error' }, 500);
 // TURNSTILE CAPTCHA
 // ============================================================
 
-type TurnstileResponse = {
-success?: boolean;
-challenge_ts?: string;
-hostname?: string;
-error_codes?: string[];
-};
-
-
 
 app.post('/api/captcha/verify', async (c) => {
-console.groupCollapsed(
-'%c🛡 /api/captcha/verify',
-'color:#4caf50;font-weight:bold;'
-);
+  console.groupCollapsed(
+    '%c🛡 /api/captcha/verify',
+    'color:#4caf50;font-weight:bold;'
+  );
 
-const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
-console.log('token recibido:', token);
+  try {
+    const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
+    console.log('token recibido:', token);
 
-if (!token) {
-console.warn('❌ token vacío');
-console.groupEnd();
-return c.json({ ok: false, error: 'missing_token' }, 400);
-}
+    if (!token) {
+      console.warn('❌ token vacío');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_token' }, 400);
+    }
 
-const data = await verifyTurnstile(token, c.env) as TurnstileResponse;
+    console.log('¿TURNSTILE_SECRET definido?', !!(c.env as any).TURNSTILE_SECRET);
 
-const ok = !!data.success;
+    const data = await verifyTurnstile(token, c.env);
+    const ok = !!data.success;
 
-console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
+    console.log('Respuesta Turnstile:', data);
+    console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
 
+    console.groupEnd();
+    return c.json({ ok, data });
 
-console.groupEnd();
-return c.json({ ok });
+  } catch (err: any) {
+    console.error('💥 Error en /api/captcha/verify:', err?.message || err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'server_error' }, 500);
+  }
 });
+
+
+
+
+export async function verifyTurnstile(token: string, env: Env): Promise<TurnstileResponse> {
+  // Usa SIEMPRE el FormData global del runtime de Cloudflare
+  const formData = new FormData();
+  formData.append('secret', env.TURNSTILE_SECRET);
+  formData.append('response', token);
+
+  const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!resp.ok) {
+    console.error('❌ /siteverify status:', resp.status);
+    throw new Error(`turnstile_http_${resp.status}`);
+  }
+
+  const json = (await resp.json()) as TurnstileResponse;
+  console.log('Turnstile JSON:', json);
+  return json;
+}
 
 // ============================================================
 // TERMS & CONDITIONS
@@ -1855,6 +1880,10 @@ export async function resetMeaningCount(env: Env, uid: string) {
 // 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
 // ============================================================
 
+// ============================================================
+// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
+// ============================================================
+
 app.post('/api/interpret', async (c) => {
   console.groupCollapsed('%c💫 /api/interpret', 'color:#ff5252;font-weight:bold;');
 
@@ -1880,15 +1909,18 @@ app.post('/api/interpret', async (c) => {
     const isMaster = isMasterUser(email);
 
     // ===========================
-    //  DRUCOINS
+    //  DRUCOINS (CHEQUEO PREVIO)
     // ===========================
- const plan = await ensureUserPlan(c.env, uid);
-let remainingBalance = await getDrucoinBalance(c.env, uid);
+    const plan = await ensureUserPlan(c.env, uid);
+    let remainingBalance = await getDrucoinBalance(c.env, uid);
 
-// Solo se verifica, NO SE DESCUENTA
-if (!isMaster && remainingBalance < 1) {
-  return c.json({ ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance }, 402);
-}
+    // Solo se verifica aquí; el descuento real se hace DESPUÉS de la interpretación
+    if (!isMaster && remainingBalance < 1) {
+      return c.json(
+        { ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance },
+        402
+      );
+    }
 
     // ===========================
     //  FORMAT TAROT SPREAD
@@ -1939,30 +1971,29 @@ Tirada: ${spreadLabel}
 Contexto: "${context || 'Sin contexto'}"
 
 Cartas:
-${formattedCards.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+${formattedCards.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
 Interpreta EXACTAMENTE con la estructura indicada.
 `;
-
 
     // ============================================================
     //  FUNCTION: Ejecutar un modelo con retry automático
     // ============================================================
     async function runModel(modelName: string) {
       const hfToken = c.env.HF_TOKEN;
-      if (!hfToken) throw new Error("Missing HF token");
+      if (!hfToken) throw new Error('Missing HF token');
 
       const payload = {
         model: modelName,
         messages: [
-          { role: "system", content: basePrompt },
-          { role: "user", content: userPrompt },
+          { role: 'system', content: basePrompt },
+          { role: 'user', content: userPrompt },
         ],
         max_tokens: 600,
         temperature: 0.55,
         top_p: 0.9,
         repetition_penalty: 1.13,
-        stop: ["REGLAS:", "###", "Instrucciones"],
+        stop: ['REGLAS:', '###', 'Instrucciones'],
       };
 
       // Intento hasta 2 veces
@@ -1971,12 +2002,12 @@ Interpreta EXACTAMENTE con la estructura indicada.
           console.log(`Intento ${attempt} → Modelo: ${modelName}`);
 
           const response = await fetch(
-            "https://api-inference.huggingface.co/v1/chat/completions",
+            'https://api-inference.huggingface.co/v1/chat/completions',
             {
-              method: "POST",
+              method: 'POST',
               headers: {
                 Authorization: `Bearer ${hfToken}`,
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
               signal: controller.signal,
               body: JSON.stringify(payload),
@@ -1989,7 +2020,7 @@ Interpreta EXACTAMENTE con la estructura indicada.
           }
 
           const json = await response.json();
-          let text = json?.choices?.[0]?.message?.content?.trim() || "";
+          let text = json?.choices?.[0]?.message?.content?.trim() || '';
 
           if (text.length >= 30) return text;
         } catch (err) {
@@ -2000,66 +2031,63 @@ Interpreta EXACTAMENTE con la estructura indicada.
       throw new Error(`Model ${modelName} failed all attempts`);
     }
 
-
     // ============================================================
-    //  MODELOS EN ORDEN DE PRIORIDAD
+    //  MODELOS EN ORDEN DE PRIORIDAD + FALLBACK
     // ============================================================
-    // ============================================================
-//  MODELOS EN ORDEN DE PRIORIDAD
-// ============================================================
-let interpretation = "";
-let usedFallback = false;
-
-try {
-  interpretation = await runModel("meta-llama/Meta-Llama-3-8B-Instruct");
-} catch (e1) {
-  console.warn("Llama 3 falló:", e1);
-
-  try {
-    interpretation = await runModel("mistralai/Mistral-7B-Instruct-v0.3");
-  } catch (e2) {
-    console.warn("Mistral 7B falló:", e2);
+    let interpretation = '';
+    let usedFallback = false;
 
     try {
-      interpretation = await runModel("mistralai/Mistral-Small-Instruct-2409");
-    } catch (e3) {
-      console.warn("Mistral Small falló:", e3);
+      interpretation = await runModel('meta-llama/Meta-Llama-3-8B-Instruct');
+    } catch (e1) {
+      console.warn('Llama 3 falló:', e1);
 
-      // Fallback final
-      usedFallback = true;
-      interpretation = `
+      try {
+        interpretation = await runModel('mistralai/Mistral-7B-Instruct-v0.3');
+      } catch (e2) {
+        console.warn('Mistral 7B falló:', e2);
+
+        try {
+          interpretation = await runModel('mistralai/Mistral-Small-Instruct-2409');
+        } catch (e3) {
+          console.warn('Mistral Small falló:', e3);
+
+          // Fallback final
+          usedFallback = true;
+          interpretation = `
 Mensaje central:
 Un ciclo emocional profundo se está reordenando. Hay una transición interior que pide calma y claridad.
 
 Energía de cada carta:
-${formattedCards.map((n) => `✧ ${n}: energía en integración.`).join("\n")}
+${formattedCards.map((n) => `✧ ${n}: energía en integración.`).join('\n')}
 
 Síntesis final:
 Confía en el movimiento interno.
-      `.trim();
+          `.trim();
+        }
+      }
     }
-  }
-}
 
-clearTimeout(timeout);
+    clearTimeout(timeout);
 
-// ===========================
-// 🔥 DESCONTAR DRUCOIN SOLO SI NO ES FALLBACK
-// ===========================
-if (!isMaster && !usedFallback) {
-  const used = await useDrucoins(c.env, uid, 1);
-  if (!used) {
-    return c.json({
-      ok: false,
-      message: "No se pudo descontar DruCoin",
-      drucoins: await getDrucoinBalance(c.env, uid)
-    });
-  }
-  remainingBalance = await getDrucoinBalance(c.env, uid);
-} else if (usedFallback) {
-  console.log("❗ NO se descontó DruCoin porque fue fallback final.");
-}
+    // ===========================
+    // 🔥 DESCONTAR DRUCOIN SIEMPRE (SALVO MASTER)
+    // ===========================
+    if (!isMaster) {
+      const used = await useDrucoins(c.env, uid, 1);
+      if (!used) {
+        return c.json({
+          ok: false,
+          message: 'No se pudo descontar DruCoin',
+          drucoins: await getDrucoinBalance(c.env, uid),
+        });
+      }
+      remainingBalance = await getDrucoinBalance(c.env, uid);
+    }
 
+    if (usedFallback) {
+      console.log('⚠️ Interpretación con FALLBACK, pero igual se descontó DruCoin.');
+    }
 
     // Guardar en DB
     const readingId = await insertReadingRecord(c.env, {
@@ -2078,14 +2106,12 @@ if (!isMaster && !usedFallback) {
       drucoins: remainingBalance,
       readingId,
     });
-
   } catch (err) {
-    console.error("💥 /api/interpret error:", err);
+    console.error('💥 /api/interpret error:', err);
     return c.json({ ok: false, error: String(err) });
   }
-
-  
 });
+
 
 
 
