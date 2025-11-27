@@ -1027,7 +1027,7 @@ declare class DigestStream extends WritableStream<ArrayBuffer | ArrayBufferView>
     get bytesWritten(): number | bigint;
 }
 /**
- * A decoder for a specific method, that is a specific character encoding, like utf-8, iso-8859-2, koi8, cp1261, gbk, etc. A decoder takes a stream of bytes as input and emits a stream of code points. For a more scalable, non-native library, see StringView – a C-like representation of strings based on typed arrays.
+ * A decoder for a specific method, that is a specific character encoding, like utf-8, iso-8859-2, koi8, cp1261, gbk, etc. A decoder takes a stream of bytes as input and emits a stream of code points. For a more scalable, non-native library, see StringView – a C-like representation of strings based on typed arrays.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/TextDecoder)
  */
@@ -1260,7 +1260,7 @@ interface DocumentEnd {
     append(content: string, options?: ContentOptions): DocumentEnd;
 }
 /**
- * This is the event type for fetch events dispatched on the service worker global scope. It contains information about the fetch, including the request and how the receiver will treat the response. It provides the event.respondWith() method, which allows us to provide a response to this fetch.
+ * This is the event type for fetch events dispatched on the service worker global scope. It contains information about the fetch, including the request and how the receiver will treat the response. It provides the event.respondWith() method, which allows us to provide a response to this fetch.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/FetchEvent)
  */
@@ -1273,7 +1273,7 @@ declare abstract class FetchEvent extends ExtendableEvent {
 }
 type HeadersInit = Headers | Iterable<Iterable<string>> | Record<string, string>;
 /**
- * This Fetch API interface allows you to perform various actions on HTTP request and response headers. These actions include retrieving, setting, adding to, and removing. A Headers object has an associated header list, which is initially empty and consists of zero or more name and value pairs.  You can add to this using methods like append() (see Examples.) In all methods of this interface, header names are matched by case-insensitive byte sequence.
+ * This Fetch API interface allows you to perform various actions on HTTP request and response headers. These actions include retrieving, setting, adding to, and removing. A Headers object has an associated header list, which is initially empty and consists of zero or more name and value pairs.  You can add to this using methods like append() (see Examples.) In all methods of this interface, header names are matched by case-insensitive byte sequence.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/Headers)
  */
@@ -1887,7 +1887,7 @@ declare abstract class ReadableByteStreamController {
     error(reason: any): void;
 }
 /**
- * This Streams API interface represents a controller allowing control of a WritableStream's state. When constructing a WritableStream, the underlying sink is given a corresponding WritableStreamDefaultController instance to manipulate.
+ * This Streams API interface represents a controller allowing control of a WritableStream's state. When constructing a WritableStream, the underlying sink is given a corresponding WritableStreamDefaultController instance to manipulate.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/WritableStreamDefaultController)
  */
@@ -1918,7 +1918,7 @@ interface ReadableWritablePair<R = any, W = any> {
     readable: ReadableStream<R>;
 }
 /**
- * This Streams API interface provides a standard abstraction for writing streaming data to a destination, known as a sink. This object comes with built-in backpressure and queuing.
+ * This Streams API interface provides a standard abstraction for writing streaming data to a destination, known as a sink. This object comes with built-in backpressure and queuing.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/WritableStream)
  */
@@ -2000,7 +2000,7 @@ interface TextDecoderStreamTextDecoderStreamInit {
     ignoreBOM?: boolean;
 }
 /**
- * This Streams API interface provides a built-in byte length queuing strategy that can be used when constructing streams.
+ * This Streams API interface provides a built-in byte length queuing strategy that can be used when constructing streams.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/ByteLengthQueuingStrategy)
  */
@@ -2012,7 +2012,7 @@ declare class ByteLengthQueuingStrategy implements QueuingStrategy<ArrayBufferVi
     get size(): (chunk?: any) => number;
 }
 /**
- * This Streams API interface provides a built-in byte length queuing strategy that can be used when constructing streams.
+ * This Streams API interface provides a built-in byte length queuing strategy that can be used when constructing streams.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/CountQueuingStrategy)
  */
@@ -2137,7 +2137,7 @@ interface UnsafeTraceMetrics {
     fromTrace(item: TraceItem): TraceMetrics;
 }
 /**
- * The URL interface represents an object providing static methods used for creating object URLs.
+ * The URL interface represents an object providing static methods used for creating object URLs.
  *
  * [MDN Reference](https://developer.mozilla.org/docs/Web/API/URL)
  */

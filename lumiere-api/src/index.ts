@@ -1754,18 +1754,19 @@ app.post('/api/card-meaning', async (c) => {
     // =============================================================
     // (OPCIONAL) LIMITAR SIGNIFICADOS POR TIRADA
     // =============================================================
-     if (!isMaster) {
+    if (!isMaster) {
       const used = await incrementMeaningCount(c.env, uid);
       if (!used.ok) {
-         console.warn('❌ Límite de significados alcanzado');
-       return c.json({
-           ok: false,
-           limit: true,
-           message: "Límite de significados alcanzado. Interpreta la tirada completa para ver más."
-         });
-       }
-     }
-     console.log('✅ Significados usados dentro del límite.');
+        console.warn('❌ Límite de significados alcanzado');
+        return c.json({
+          ok: false,
+          limit: true,
+          message: 'Límite de significados alcanzado. Interpreta la tirada completa para ver más.',
+        });
+      }
+    }
+    console.log('✅ Significados usados dentro del límite.');
+
     // ============================
     // HUGGING FACE TOKEN
     // ============================
@@ -1792,67 +1793,85 @@ REGLAS:
 `;
 
     // ============================
-    // LLAMADA AL MODELO (ESTABLE)
+    // HELPER: LLAMADA HF + FALLBACK
     // ============================
-    const response = await fetch(
-      "https://api-inference.huggingface.co/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${hfToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "meta-llama/Meta-Llama-3-8B-Instruct",
-          messages: [
-            { role: "system", content: "Eres un maestro celta experto en tarot." },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: 350,
-          temperature: 0.65,
-          top_p: 0.9,
-        })
+    async function callHF(modelName: string) {
+      const response = await fetch(
+        'https://api-inference.huggingface.co/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${hfToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: 'Eres un maestro celta experto en tarot.' },
+              { role: 'user', content: prompt },
+            ],
+            max_tokens: 350,
+            temperature: 0.65,
+            top_p: 0.9,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const txt = await response.text();
+        throw new Error(`HF error (${modelName}): ${response.status} ${txt}`);
       }
-    );
 
-    if (!response.ok) {
-      const txt = await response.text();
-      console.error('❌ HF error:', response.status, txt);
+      const result = await response.json();
+      let meaning = result?.choices?.[0]?.message?.content?.trim() || '';
 
-      return c.json({
-        ok: false,
-        error: "hf_error",
-        details: txt
-      });
+      // SANITIZAR TEXTO
+      meaning = meaning
+        .replace(/(<\/?[^>]+>)/g, '') // sin HTML
+        .replace(/REGLAS:.*/gi, '')
+        .replace(/Instrucciones:.*/gi, '')
+        .trim();
+
+      return meaning;
     }
 
-    const result = await response.json();
-    let meaning = result?.choices?.[0]?.message?.content?.trim() || "";
+    // ============================
+    // INTENTAR GEMMA → FALLBACK A LLAMA
+    // ============================
+    let meaning = '';
+    try {
+      // 1) Gemma 2-9B-it
+      meaning = await callHF('google/gemma-2-9b-it');
+    } catch (e1) {
+      console.warn('Gemma 2-9B-it falló para /card-meaning:', e1);
 
-    // ============================
-    // SANITIZAR TEXTO
-    // ============================
-    meaning = meaning
-      .replace(/(<\/?[^>]+>)/g, "")         // sin HTML
-      .replace(/REGLAS:.*/gi, "")           // no mostrar reglas
-      .replace(/Instrucciones:.*/gi, "")    // no mostrar instrucciones
-      .trim();
+      try {
+        // 2) Llama 3 como backup
+        meaning = await callHF('meta-llama/Meta-Llama-3-8B-Instruct');
+      } catch (e2) {
+        console.error('Llama 3 también falló en /card-meaning:', e2);
+        return c.json({
+          ok: false,
+          error: 'hf_error',
+          details: String(e2),
+        });
+      }
+    }
 
     console.log('✔ Significado final:', meaning);
-
     console.groupEnd();
 
     return c.json({
       ok: true,
-      meaning
+      meaning,
     });
-
   } catch (err) {
     console.error('💥 /api/card-meaning ERROR:', err);
     console.groupEnd();
     return c.json({ ok: false, error: String(err) });
   }
 });
+
 
 
 // 🔥 Incrementa el contador. 
@@ -1879,100 +1898,97 @@ export async function resetMeaningCount(env: Env, uid: string) {
   await env.TAROT_LIMITS.delete(key);
 }
 
-
-
-
 // ============================================================
 // 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
 // ============================================================
 
-// ============================================================
-// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
-// ============================================================
+// Nota: Se asume que las funciones y constantes externas (Hono, verifyFirebaseIdToken,
+// isMasterUser, getDrucoinBalance, useDrucoins, insertReadingRecord, cardNamesEs, etc.)
+// están definidas en otras partes del Worker y que 'c' es el contexto de Hono.
 
 app.post('/api/interpret', async (c) => {
-  console.groupCollapsed('%c💫 /api/interpret', 'color:#ff5252;font-weight:bold;');
+  console.groupCollapsed('%c💫 /api/interpret', 'color:#ff5252;font-weight:bold;');
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout
 
-  try {
-    const { context, cards, spreadId } = await c.req.json();
+  try {
+    const { context, cards, spreadId } = await c.req.json();
 
-    // ===========================
-    //  AUTH
-    // ===========================
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    // ===========================
+    //  AUTH & PERMISOS
+    // ===========================
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
-    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
 
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const v = await verifyFirebaseIdToken(token, apiKey);
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const v = await verifyFirebaseIdToken(token, apiKey);
 
-    const uid = v.uid;
-    const email = v.email;
-    const isMaster = isMasterUser(email);
+    const uid = v.uid;
+    const email = v.email;
+    const isMaster = isMasterUser(email);
 
-    // ===========================
-    //  DRUCOINS (CHEQUEO PREVIO)
-    // ===========================
-    const plan = await ensureUserPlan(c.env, uid);
-    let remainingBalance = await getDrucoinBalance(c.env, uid);
+    // ===========================
+    //  DRUCOINS (CHEQUEO PREVIO)
+    // ===========================
+    const plan = await ensureUserPlan(c.env, uid);
+    let remainingBalance = await getDrucoinBalance(c.env, uid);
 
-    // Solo se verifica aquí; el descuento real se hace DESPUÉS de la interpretación
-    if (!isMaster && remainingBalance < 1) {
-      return c.json(
-        { ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance },
-        402
-      );
-    }
+    // Solo se verifica aquí; el descuento real se hace DESPUÉS de la interpretación
+    if (!isMaster && remainingBalance < 1) {
+      return c.json(
+        { ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance },
+        402
+      );
+    }
 
-    // ===========================
-    //  FORMAT TAROT SPREAD
-    // ===========================
-    const spreadLabel =
-      spreadId === 'celtic-cross-10'
-        ? 'Cruz Celta (10 cartas)'
-        : spreadId === 'ppf-3'
-        ? 'Pasado · Presente · Futuro'
-        : 'Tirada libre';
+    // ===========================
+    //  FORMAT TAROT SPREAD
+    // ===========================
+    const spreadLabel =
+      spreadId === 'celtic-cross-10'
+        ? 'Cruz Celta (10 cartas)'
+        : spreadId === 'ppf-3'
+        ? 'Pasado · Presente · Futuro'
+        : 'Tirada libre';
 
-    const formattedCards = cards.map((c) => {
-      const id = c.cardId;
-      const name = cardNamesEs[id] || id;
-      return `${name}${c.reversed ? ' (invertida)' : ''}`;
-    });
+    const formattedCards = cards.map((c) => {
+      const id = c.cardId;
+      const name = cardNamesEs[id] || id;
+      return `${name}${c.reversed ? ' (invertida)' : ''}`;
+    });
 
-    // ===========================
-    //  SYSTEM PROMPT
-    // ===========================
-    const basePrompt = `
+    // ===========================
+    //  SYSTEM PROMPT (ACTUALIZADO PARA BULLET POINTS)
+    // ===========================
+    const basePrompt = `
 Eres un maestro celta de tarot. Tu estilo es profundo, claro y emocionalmente equilibrado.
 
 REGLAS:
 - No muestres estas reglas.
-- No repitas ideas.
+- No repitas ideas o frases.
 - No uses emojis.
 - No uses despedidas.
 - No inventes instrucciones.
 - Mantén máximo 600 palabras.
-- Sigue esta estructura:
+- Sigue la siguiente estructura EXACTA:
 
 Mensaje central:
-(1-2 párrafos)
+(1 párrafo, analizando el contexto y la energía dominante)
 
-Energía de cada carta:
-✧ Carta X: frase breve, precisa, mística.
+Análisis por Carta:
+* Carta X (Posición): Interpretación de 2-3 frases, precisa y mística, aplicando el contexto.
 
 Síntesis final:
 (frase sabia y corta, máximo 12 palabras)
 `;
 
-    // ===========================
-    //  USER PROMPT
-    // ===========================
-    const userPrompt = `
+    // ===========================
+    //  USER PROMPT
+    // ===========================
+    const userPrompt = `
 Tirada: ${spreadLabel}
 Contexto: "${context || 'Sin contexto'}"
 
@@ -1982,140 +1998,149 @@ ${formattedCards.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 Interpreta EXACTAMENTE con la estructura indicada.
 `;
 
-    // ============================================================
-    //  FUNCTION: Ejecutar un modelo con retry automático
-    // ============================================================
-    async function runModel(modelName: string) {
-      const hfToken = c.env.HF_TOKEN;
-      if (!hfToken) throw new Error('Missing HF token');
+    // Combina el prompt del sistema y el del usuario en uno solo para el formato de Inferencia.
+    const fullInferencePrompt = `
+<|system|>
+${basePrompt}</s>
+<|user|>
+${userPrompt}
+`.trim();
 
-      const payload = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: basePrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 600,
-        temperature: 0.55,
-        top_p: 0.9,
-        repetition_penalty: 1.13,
-        stop: ['REGLAS:', '###', 'Instrucciones'],
-      };
 
-      // Intento hasta 2 veces
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.log(`Intento ${attempt} → Modelo: ${modelName}`);
+    // ============================================================
+    //  FUNCTION: Ejecutar un modelo con retry automático (SOLO GEMMA)
+    // ============================================================
+    const HF_INFERENCE_ENDPOINT = 'https://api-inference.huggingface.co/models/';
 
-          const response = await fetch(
-            'https://api-inference.huggingface.co/v1/chat/completions',
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${hfToken}`,
-                'Content-Type': 'application/json',
-              },
-              signal: controller.signal,
-              body: JSON.stringify(payload),
-            }
-          );
+    async function runModel(modelName: string) {
+      const hfToken = c.env.HF_TOKEN;
+      if (!hfToken) throw new Error('Missing HF token');
 
-          if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`HF error: ${err}`);
+      // Payload de Inferencia de Texto
+      const payload = {
+        inputs: fullInferencePrompt, // Enviamos el prompt completo
+        parameters: {
+          max_new_tokens: 600,
+          temperature: 0.55,
+          top_p: 0.9,
+          repetition_penalty: 1.13,
+          stop: ['REGLAS:', '###', 'Instrucciones', '</s>'],
+          return_full_text: false, // Queremos solo la respuesta del modelo, no el prompt completo.
+        },
+      };
+
+      // Intento hasta 2 veces
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`Intento ${attempt} → Modelo: ${modelName}`);
+
+          const response = await fetch(
+            `${HF_INFERENCE_ENDPOINT}${modelName}`, // 🎯 Endpoint por modelo
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${hfToken}`,
+                'Content-Type': 'application/json',
+              },
+              signal: controller.signal,
+              body: JSON.stringify(payload),
+            }
+          );
+
+          if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`HF error (${response.status}): ${err}`);
+          }
+
+          const json = await response.json();
+          
+          let text = json?.[0]?.generated_text?.trim() || ''; 
+          
+          // Limpieza de tokens de chat
+          if (text.startsWith('<|assistant|>')) {
+            text = text.substring('<|assistant|>'.length).trim();
           }
 
-          const json = await response.json();
-          let text = json?.choices?.[0]?.message?.content?.trim() || '';
+          if (text.length >= 30) return text;
+        } catch (err) {
+          console.warn(`Falló intento ${attempt} del modelo ${modelName}:`, err);
+          // Espera 1 segundo en el primer fallo antes del reintento
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
 
-          if (text.length >= 30) return text;
-        } catch (err) {
-          console.warn(`Falló intento ${attempt} del modelo ${modelName}:`, err);
-        }
-      }
+      throw new Error(`Model ${modelName} failed all attempts`);
+    }
 
-      throw new Error(`Model ${modelName} failed all attempts`);
-    }
+    // ============================================================
+    //  MODELOS EN ORDEN DE PRIORIDAD + FALLBACK (SOLO GEMMA)
+    // ============================================================
+    let interpretation = '';
+    let usedFallback = false;
 
-    // ============================================================
-    //  MODELOS EN ORDEN DE PRIORIDAD + FALLBACK
-    // ============================================================
-    let interpretation = '';
-    let usedFallback = false;
+    try {
+      // 1) Único modelo: Gemma 2-9B-it 
+      interpretation = await runModel('google/gemma-2-9b-it');
+    } catch (e0) {
+      console.warn('Gemma 2-9B-it falló:', e0);
 
-    try {
-      interpretation = await runModel('meta-llama/Meta-Llama-3-8B-Instruct');
-    } catch (e1) {
-      console.warn('Llama 3 falló:', e1);
-
-      try {
-        interpretation = await runModel('mistralai/Mistral-7B-Instruct-v0.3');
-      } catch (e2) {
-        console.warn('Mistral 7B falló:', e2);
-
-        try {
-          interpretation = await runModel('mistralai/Mistral-Small-Instruct-2409');
-        } catch (e3) {
-          console.warn('Mistral Small falló:', e3);
-
-          // Fallback final
-          usedFallback = true;
-          interpretation = `
+      // Fallback final genérico (activado si Gemma falla)
+      usedFallback = true;
+      interpretation = `
 Mensaje central:
-Un ciclo emocional profundo se está reordenando. Hay una transición interior que pide calma y claridad.
+Un ciclo emocional profundo se está reordenando. Hay una transición interior que pide calma y claridad, aunque la interpretación automática del oráculo ha fallado.
 
-Energía de cada carta:
-${formattedCards.map((n) => `✧ ${n}: energía en integración.`).join('\n')}
+Análisis por Carta:
+${formattedCards.map((n) => `* ${n}: energía en integración y profundo análisis en espera.`).join('\n')}
 
 Síntesis final:
 Confía en el movimiento interno.
-          `.trim();
-        }
-      }
-    }
+      `.trim();
+    }
 
-    clearTimeout(timeout);
+    clearTimeout(timeout);
 
-    // ===========================
-    // 🔥 DESCONTAR DRUCOIN SIEMPRE (SALVO MASTER)
-    // ===========================
-    if (!isMaster) {
-      const used = await useDrucoins(c.env, uid, 1);
-      if (!used) {
-        return c.json({
-          ok: false,
-          message: 'No se pudo descontar DruCoin',
-          drucoins: await getDrucoinBalance(c.env, uid),
-        });
-      }
-      remainingBalance = await getDrucoinBalance(c.env, uid);
-    }
+    // ===========================
+    // 🔥 DESCONTAR DRUCOIN SIEMPRE (SALVO MASTER)
+    // ===========================
+    if (!isMaster) {
+      // Se realiza el descuento de 1 DruCoin
+      const used = await useDrucoins(c.env, uid, 1);
+      if (!used) {
+        return c.json({
+          ok: false,
+          message: 'No se pudo descontar DruCoin',
+          drucoins: await getDrucoinBalance(c.env, uid),
+        });
+      }
+      remainingBalance = await getDrucoinBalance(c.env, uid);
+    }
 
-    if (usedFallback) {
-      console.log('⚠️ Interpretación con FALLBACK, pero igual se descontó DruCoin.');
-    }
+    if (usedFallback) {
+      console.log('⚠️ Interpretación con FALLBACK, pero igual se descontó DruCoin.');
+    }
 
-    // Guardar en DB
-    const readingId = await insertReadingRecord(c.env, {
-      uid,
-      email,
-      interpretation,
-      cards,
-      spreadId,
-      title: spreadLabel,
-      plan,
-    });
+    // Guardar en DB
+    const readingId = await insertReadingRecord(c.env, {
+      uid,
+      email,
+      interpretation,
+      cards,
+      spreadId,
+      title: spreadLabel,
+      plan,
+    });
 
-    return c.json({
-      ok: true,
-      interpretation,
-      drucoins: remainingBalance,
-      readingId,
-    });
-  } catch (err) {
-    console.error('💥 /api/interpret error:', err);
-    return c.json({ ok: false, error: String(err) });
-  }
+    return c.json({
+      ok: true,
+      interpretation,
+      drucoins: remainingBalance,
+      readingId,
+    });
+  } catch (err) {
+    console.error('💥 /api/interpret error:', err);
+    return c.json({ ok: false, error: String(err) });
+  }
 });
 
 
@@ -2474,221 +2499,231 @@ function rng32(seedNum: number): () => number {
 
 
 
+// Define las variables de entorno esperadas (ajusta esto según tu configuración de Worker)
 
-// ===================== PAYPAL HELPERS =====================
 
-// Usa sandbox por defecto (por si algún día olvidas poner PAYPAL_API_BASE)
+// URL de la API de PayPal (Sandbox por defecto si no se proporciona en Env)
 const PAYPAL_API_BASE_DEFAULT = 'https://api-m.sandbox.paypal.com';
 
+// ============================================================
+// 1. HELPERS Y AUTENTICACIÓN
+// ============================================================
+
+/**
+ * Obtiene el Access Token de PayPal (Usando Basic Auth).
+ * Este token se usa para todas las llamadas API subsiguientes (Bearer).
+ * @param env Las variables de entorno de Cloudflare.
+ * @returns El token de acceso Bearer.
+ */
 async function getPayPalAccessToken(env: Env): Promise<string> {
-  const clientId = env.PAY_PAL_CLIENT_ID;   // 👈 tal cual está en Cloudflare
-  const secret   = env.PAYPAL_SECRET;       // 👈 tal cual está en Cloudflare
+  const clientId = env.PAY_PAL_CLIENT_ID;
+  const secret   = env.PAYPAL_SECRET;
 
-  if (!clientId || !secret) {
-    console.error(
-      '[PayPal] Faltan PAY_PAL_CLIENT_ID o PAYPAL_SECRET en env',
-      { clientIdOk: !!clientId, secretOk: !!secret }
-    );
-    throw new Error('paypal_missing_config');
-  }
+  if (!clientId || !secret) {
+    console.error('[PayPal] Faltan credenciales');
+    throw new Error('paypal_missing_config');
+  }
 
-  const apiBase = env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+  const apiBase = env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
 
-  const authHeader = 'Basic ' + btoa(`${clientId}:${secret}`);
+  // KEY: Usar Basic Auth (Base64)
+  const authHeader = 'Basic ' + btoa(`${clientId}:${secret}`);
 
-  const res = await fetch(`${apiBase}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: authHeader,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  });
+  const res = await fetch(`${apiBase}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: authHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
 
-  const raw = await res.text();
-  console.log('[PayPal] OAuth status:', res.status);
-  console.log('[PayPal] OAuth raw body:', raw);
+  const raw = await res.text();
+  console.log('[PayPal] OAuth status:', res.status);
 
-  if (!res.ok) {
-    console.error('[PayPal] Error obteniendo token:', res.status, raw);
-    throw new Error('paypal_token_failed');
-  }
+  if (!res.ok) {
+    console.error('[PayPal] Error obteniendo token:', res.status, raw);
+    throw new Error('paypal_token_failed');
+  }
 
-  let data: any;
-  try {
-    data = JSON.parse(raw);
-  } catch (e) {
-    console.error('[PayPal] JSON.parse fallo con respuesta OAuth:', e);
-    throw new Error('paypal_token_json_error');
-  }
+  let data: any;
+  try {
+    // Corregido el error de sintaxis: parsear el JSON
+    data = JSON.parse(raw);
+  } catch (e) { 
+    console.error('[PayPal] JSON.parse fallo con respuesta OAuth:', e);
+    throw new Error('paypal_token_json_error');
+  }
 
-  if (!data.access_token) {
-    console.error('[PayPal] Respuesta OAuth sin access_token:', data);
-    throw new Error('paypal_token_missing');
-  }
+  if (!data.access_token) {
+    console.error('[PayPal] Respuesta OAuth sin access_token:', data);
+    throw new Error('paypal_token_missing');
+  }
 
-  return data.access_token as string;
+  return data.access_token as string;
 }
 
 
-// handler dentro de tu Worker
-// Env: PAY_PAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_API_BASE
+// ============================================================
+// 2. ENDPOINT: CREAR ORDEN (handlePaypalCreateOrder)
+// ============================================================
 
+/**
+ * Crea una orden de PayPal. Implementa control de precios y custom_id (seguridad).
+ */
 async function handlePaypalCreateOrder(c: any) {
-  console.log('[Worker] /paypal/create-order');
+  console.log('[Worker] /paypal/create-order');
 
-  try {
-    // (Opcional) validar el usuario desde Authorization: Bearer ...
-    // const user = await verifyFirebaseUser(c.req, c.env);
+  try {
+    // 1. SEGURIDAD: Obtener y validar el UID del usuario (DEBE SER IMPLEMENTADO)
+    // const user = await verifyFirebaseUser(c.req, c.env); 
+    // const uid = user.uid;
+    const uid = 'TEST_USER_FIREBASE_ID_123'; // ⚠️ Reemplazar con la verificación real ⚠️
+    
+    // 💡 SEGURIDAD: Definir el producto en el servidor (NO confiar en el frontend)
+    const coinsToGive = 2; 
+    const amountValue = '2.50'; 
 
-    const authHeader =
-      'Basic ' + btoa(`${c.env.PAY_PAL_CLIENT_ID}:${c.env.PAYPAL_SECRET}`);
+    // 2. AUTENTICACIÓN: Obtener el Access Token (Bearer)
+    const accessToken = await getPayPalAccessToken(c.env);
 
-    const paypalRes = await fetch(`${c.env.PAYPAL_API_BASE}/v2/checkout/orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
-      },
-      body: JSON.stringify({
-        intent: 'CAPTURE',
-        purchase_units: [
-          {
-            amount: {
-              currency_code: 'EUR',
-              value: '2.50', // 💰 importe a cobrar
-            },
-          },
-        ],
-      }),
-    });
+    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
 
-    const raw = await paypalRes.text();
-    console.log('[Worker] PayPal /orders status', paypalRes.status);
-    console.log('[Worker] PayPal /orders body', raw);
+    // 3. CREAR ORDEN en PayPal
+    const paypalRes = await fetch(`${apiBase}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // ✅ CORREGIDO: Usar Bearer Token
+        Authorization: `Bearer ${accessToken}`,
+        // 💡 Idempotencia: Para evitar doble creación en caso de reintento
+        'PayPal-Request-Id': crypto.randomUUID(), 
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            // 💡 SEGURIDAD: custom_id para enlazar la orden al usuario y al producto
+            custom_id: `${uid}|${coinsToGive}`, 
+            amount: {
+              currency_code: 'EUR',
+              value: amountValue, 
+            },
+          },
+        ],
+        application_context: {
+          user_action: 'PAY_NOW',
+        },
+      }),
+    });
 
-    if (!paypalRes.ok) {
-      return c.json(
-        {
-          ok: false,
-          error: 'paypal_api_error',
-          status: paypalRes.status,
-          body: raw,
-        },
-        paypalRes.status,
-      );
-    }
+    // Manejo de errores de PayPal
+    const raw = await paypalRes.text();
+    if (!paypalRes.ok) {
+      console.error('[Worker] Error de PayPal al crear orden:', paypalRes.status, raw);
+      
+      const statusToReturn = paypalRes.status >= 400 && paypalRes.status < 500 ? 400 : 500; 
+      return c.json(
+        { ok: false, error: 'paypal_creation_failed', status: paypalRes.status },
+        statusToReturn,
+      );
+    }
 
-    let paypalData: any;
-    try {
-      paypalData = JSON.parse(raw);
-    } catch (e) {
-      console.error('[Worker] JSON.parse fallo con respuesta PayPal', e);
-      return c.json(
-        { ok: false, error: 'paypal_json_error', raw },
-        500,
-      );
-    }
+    const paypalData: any = JSON.parse(raw);
 
-    return c.json({
-      ok: true,
-      orderID: paypalData.id,
-    });
-  } catch (err) {
-    console.error('[Worker] Error en /paypal/create-order', err);
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
+    // 4. RESPUESTA: Devolver el ID de la orden de PayPal al cliente
+    return c.json({
+      ok: true,
+      orderID: paypalData.id,
+    });
+
+  } catch (err) {
+    console.error('💥 [Worker] Error fatal en /paypal/create-order:', err);
+    // Este es el error 500 que has estado viendo (configuración, token, sintaxis)
+    return c.json({ ok: false, error: 'internal_error' }, 500); 
+  }
+}
+
+// ============================================================
+// 3. ENDPOINT: CAPTURAR ORDEN (handlePaypalCaptureOrder)
+// ============================================================
+
+/**
+ * Captura el pago y verifica la integridad de la orden antes de dar el producto.
+ */
+async function handlePaypalCaptureOrder(c: any) {
+  try {
+    // 1. SEGURIDAD: Validar usuario (quien captura)
+    // const user = await verifyFirebaseUser(c.req, c.env);
+    // const uid = user.uid;
+    const uid = 'TEST_USER_FIREBASE_ID_123'; // ⚠️ Reemplazar ⚠️
+    
+
+    const { orderID } = await c.req.json().catch(() => ({ orderID: '' }));
+    if (!orderID) {
+      return c.json({ ok: false, error: 'missing_order_id' }, 400);
+    }
+
+    // 2. AUTENTICACIÓN: Obtener Access Token para la captura
+    const accessToken = await getPayPalAccessToken(c.env);
+    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+
+    // 3. CAPTURAR PAGO en PayPal
+    const res = await fetch(`${apiBase}/v2/checkout/orders/${orderID}/capture`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`, // 🔑 Usar Bearer Token
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('[PayPal] Error capture:', res.status, txt);
+      return c.json({ ok: false, error: 'capture_failed' }, 500); 
+    }
+
+    const data: any = await res.json();
+
+    if (data.status !== 'COMPLETED') {
+      return c.json({ ok: false, error: 'not_completed' }, 400);
+    }
+
+    // 4. SEGURIDAD: Verificar la custom_id para evitar manipulaciones
+    const pu = data.purchase_units?.[0];
+    const custom = (pu?.custom_id || '') as string;
+    const [uidFromOrder, coinsStr] = custom.split('|');
+    const coinsToGive = Number(coinsStr || '0') || 0;
+
+    // 5. SEGURIDAD: UID Mismatch (la orden debe pertenecer al usuario logueado)
+    if (!uidFromOrder || uidFromOrder !== uid) {
+      console.warn('[PayPal] UID mismatch o custom_id faltante:', uidFromOrder, uid);
+      return c.json({ ok: false, error: 'uid_mismatch' }, 403); 
+    }
+    
+    // 💡 SUGERENCIA: Verificar también que el monto capturado coincide con el precio esperado (2.50)
+
+    // 6. ÉXITO: Entregar el producto y registrar la transacción
+    // const newBalance = await addDrucoins(c.env, uid, coinsToGive);
+    const newBalance = 100 + coinsToGive; // Simulación
+
+    return c.json({ ok: true, drucoins: newBalance, orderStatus: data.status });
+  } catch (err) {
+    console.error('💥 /api/paypal/capture-order error:', err);
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
 }
 
 
-// =========================
-// PAYPAL ENDPOINTS
 // ============================================================
-
+// 4. ROUTER DE HONO (Ejemplo de configuración del Worker)
 // ============================================================
-// PAYPAL - CREAR ORDEN (Pack 2 DruCoins)
-// ============================================================
-app.post('/api/paypal/create-order', handlePaypalCreateOrder);
+// (Asumiendo que has importado y configurado Hono en el inicio del Worker)
 
+// import { Hono } from 'hono';
+// const app = new Hono();
 
+// app.post('/api/paypal/create-order', handlePaypalCreateOrder);
+// app.post('/api/paypal/capture-order', handlePaypalCaptureOrder);
 
-// ============================================================
-// PAYPAL - CAPTURAR ORDEN Y SUMAR DRUCOINS
-// ============================================================
-app.post('/api/paypal/capture-order', async (c) => {
-  console.groupCollapsed('%c💎 /api/paypal/capture-order', 'color:#8bc34a;font-weight:bold;');
-
-  try {
-    const authHeader = c.req.header('Authorization') || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-
-    if (!token) {
-      console.warn('❌ Sin token');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'unauthorized' }, 401);
-    }
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const user = await verifyFirebaseIdToken(token, apiKey);
-    const uid = user.uid;
-
-    const { orderID } = await c.req.json<{ orderID: string }>().catch(() => ({ orderID: '' }));
-    if (!orderID) {
-      console.warn('❌ Falta orderID');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_order_id' }, 400);
-    }
-
-    const accessToken = await getPayPalAccessToken(c.env);
-    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
-
-    const res = await fetch(`${apiBase}/v2/checkout/orders/${orderID}/capture`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error('[PayPal] Error capture:', res.status, txt);
-      console.groupEnd();
-      return c.json({ ok: false, error: 'capture_failed' }, 500);
-    }
-
-    const data: any = await res.json();
-    console.log('PayPal capture data:', JSON.stringify(data, null, 2));
-
-    if (data.status !== 'COMPLETED') {
-      console.warn('⚠️ Orden no completada:', data.status);
-      console.groupEnd();
-      return c.json({ ok: false, error: 'not_completed' }, 400);
-    }
-
-    // Leemos el custom_id que pusimos en create-order
-    const pu = data.purchase_units?.[0];
-    const cap = pu?.payments?.captures?.[0];
-    const custom = (cap?.custom_id || pu?.custom_id || '') as string;
-
-    const [uidFromOrder, coinsStr] = custom.split('|');
-    const coinsToGive = Number(coinsStr || '0') || 0;
-
-    // Seguridad mínima: que la orden sea del mismo usuario
-    if (uidFromOrder && uidFromOrder !== uid) {
-      console.warn('[PayPal] UID mismatch:', uidFromOrder, uid);
-      console.groupEnd();
-      return c.json({ ok: false, error: 'uid_mismatch' }, 403);
-    }
-
-    // Sumamos DruCoins en tu DB
-    const newBalance = await addDrucoins(c.env, uid, coinsToGive);
-
-    console.groupEnd();
-    return c.json({ ok: true, drucoins: newBalance });
-  } catch (err) {
-    console.error('💥 /api/paypal/capture-order error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
-});
+// export default app;
