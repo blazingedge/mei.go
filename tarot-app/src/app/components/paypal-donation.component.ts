@@ -51,7 +51,8 @@ export class PaypalDonationComponent implements OnInit, OnDestroy {
 
     this.loading = true;
     const script = document.createElement('script');
-    script.src = `https://www.paypal.com/sdk/js?client-id=${environment.PAY_PAL_CLIENT_ID}&currency=EUR`;
+    script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=EUR&intent=CAPTURE&components=buttons';
+
     script.async = true;
 
     script.onload = () => {
