@@ -23,14 +23,11 @@ ENV = "production"
 CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://*.mei-go.pages.dev"
 
 TURNSTILE_SECRET = "0x4AAAAAACAX4iEbfnnt_c96NCHxHMNZuIg"
-
 FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
 
-
-PAYPAL_CLIENT_ID = "ARphUEv8VII0aKQ7h-dt_8eN-ik-DtwZ5OrJjK40nD4HMGBvIckcLBS8wCYPVQN6LcaeVXTJKoOAfPKO"
+PAY_PAL_CLIENT_ID = "ARphUEv8VII0aKQ7h-dt_8eN-ik-DtwZ5OrJjK40nD4HMGBvIckcLBS8wCYPVQN6LcaeVXTJKoOAfPKO"
 PAYPAL_SECRET    = "EE4wejLxEYa7j6I-lsFZ5Jer-J--sj1iXtbjPAPPTqBlKhtr7Qfc8C65iSedSNIvRTCW1uSTzUPiOIe5"
 PAYPAL_API_BASE  = "https://api-m.paypal.com" # live
-
 
 
 # =============================
