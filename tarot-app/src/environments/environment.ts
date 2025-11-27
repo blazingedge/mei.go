@@ -3,7 +3,7 @@ export const environment = {
   API_BASE: 'http://127.0.0.1:8787/api',
   CDN_BASE: 'https://lumiere-api.laife91.workers.dev/cdn',
   CARD_BACK_URL: '',
-  PAY_PAL_CLIENT_ID: 'ARphUEv8VII0aKQ7h-dt_8eN-ik-DtwZ5OrJjK40nD4HMGBvIckcLBS8wCYPVQN6LcaeVXTJKoOAfPKO',
+  PAY_PAL_CLIENT_ID: 'ASsFTtjHp9oEj8w7nzfBRNe6TLqvbqdGNYCJVUZ0Y89xje8RPpO0Nk3pqrSWjTcMl-4lsUIAxhVpPNlB',
   firebase: {
     apiKey: "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ",
     authDomain: "meigo-app.firebaseapp.com",

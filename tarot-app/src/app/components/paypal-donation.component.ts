@@ -49,43 +49,37 @@ export class PaypalDonationComponent implements OnInit, OnDestroy {
   //   SDK DE PAYPAL
   // ============================
   private loadPaypalSdk() {
-    console.groupCollapsed('%c[PayPalCmp] loadPaypalSdk', 'color:#9cf');
-    console.log('[PayPalCmp] Entrando a loadPaypalSdk');
-    console.log('[PayPalCmp] window.paypal existe?', !!window.paypal);
+  console.log('[PayPalCmp] loadPaypalSdk');
 
-    if (window.paypal) {
-      console.log('[PayPalCmp] SDK ya estaba cargado, llamando a renderButtons() directamente');
-      console.groupEnd();
-      this.renderButtons();
-      return;
-    }
-
-    this.loading = true;
-    const script = document.createElement('script');
-    script.src = 'https://www.paypal.com/sdk/js?client-id=sb&currency=EUR&intent=CAPTURE&components=buttons';
-
-    console.log('[PayPalCmp] Inyectando script PayPal:', script.src);
-
-    script.async = true;
-
-    script.onload = () => {
-      console.log('%c[PayPalCmp] script.onload → SDK de PayPal cargado', 'color:#0f0');
-      this.loading = false;
-      console.log('[PayPalCmp] window.paypal tras onload?', !!window.paypal);
-      this.renderButtons();
-      console.groupEnd();
-    };
-
-    script.onerror = (ev) => {
-      console.error('%c[PayPalCmp] script.onerror → fallo al cargar PayPal', 'color:#f55', ev);
-      this.loading = false;
-      this.error = 'No se pudo cargar PayPal. Intenta más tarde.';
-      console.groupEnd();
-    };
-
-    document.body.appendChild(script);
-    console.groupEnd();
+  if (window.paypal) {
+    console.log('[PayPalCmp] window.paypal ya existe, renderButtons()');
+    this.renderButtons();
+    return;
   }
+
+  this.loading = true;
+  const script = document.createElement('script');
+
+  // 👇 AQUÍ EL CAMBIO
+  script.src = `https://www.paypal.com/sdk/js?client-id=${environment.PAY_PAL_CLIENT_ID}&currency=EUR&intent=CAPTURE&components=buttons`;
+
+  script.async = true;
+
+  script.onload = () => {
+    console.log('[PayPalCmp] script.onload → PayPal SDK cargado');
+    this.loading = false;
+    this.renderButtons();
+  };
+
+  script.onerror = (ev) => {
+    console.error('[PayPalCmp] script.onerror → fallo al cargar PayPal', ev);
+    this.loading = false;
+    this.error = 'No se pudo cargar PayPal. Intenta más tarde.';
+  };
+
+  document.body.appendChild(script);
+}
+
 
   // ============================
   //   BOTONES PAYPAL
