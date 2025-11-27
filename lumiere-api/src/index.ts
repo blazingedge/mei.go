@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import { DECK } from './deck';
 import { verifyTurnstile } from './verifyturnstile';
+import { APIUserAbortError } from 'openai';
 
 
 // ============================================================
@@ -43,6 +44,11 @@ FIREBASE_API_KEY?: string;
 
 RESEND_API_KEY?: string;      // 🔹 para email de bienvenida
 RESEND_FROM_EMAIL?: string;   // ej: 'Meigo <no-reply@meigo.app>'
+
+// 🔐 PayPal
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_SECRET?: string;
+  PAYPAL_API_BASE?: string; // opcional, por si cambias a sandbox
 };
 
 
@@ -2316,6 +2322,78 @@ return c.json({ ok: false, error: String(err) });
 });
 
 // ============================================================
+// PAYPAL - CREAR ORDEN (Pack 2 DruCoins)
+// ============================================================
+app.post('/api/paypal/create-order', async (c) => {
+  console.groupCollapsed('%c💳 /api/paypal/create-order', 'color:#cddc39;font-weight:bold;');
+
+  try {
+    // --- Auth Firebase (igual que en otros endpoints) ---
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!token) {
+      console.warn('❌ Sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    // --- Token PayPal ---
+    const accessToken = await getPayPalAccessToken(c.env);
+    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+
+    // Por ahora pack fijo de 2 DruCoins a 0.70 €
+    const amountValue = '0.70';
+    const coinsToGive = 2;
+
+    const body = {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          amount: {
+            currency_code: 'EUR',
+            value: amountValue,
+          },
+          custom_id: `${uid}|${coinsToGive}`,
+          description: 'Pack 2 DruCoins - Meigo',
+        },
+      ],
+    };
+
+    const res = await fetch(`${apiBase}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[PayPal] Error create order:', res.status, errText);
+      console.groupEnd();
+      return c.json({ ok: false }, 500);
+    }
+
+    const data: any = await res.json();
+    console.log('PayPal order creada:', data.id);
+
+    console.groupEnd();
+    return c.json({ ok: true, orderID: data.id });
+  } catch (err) {
+    console.error('💥 /api/paypal/create-order error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+
+// ============================================================
 // CDN PROXY — /cdn/*
 // ============================================================
 app.get('/cdn/*', async (c) => {
@@ -2394,3 +2472,223 @@ function rng32(seedNum: number): () => number {
   };
 }
 
+
+
+
+// ===================== PAYPAL HELPERS =====================
+
+// Usa sandbox por defecto (por si algún día olvidas poner PAYPAL_API_BASE)
+const PAYPAL_API_BASE_DEFAULT = 'https://api-m.sandbox.paypal.com';
+
+async function getPayPalAccessToken(env: Env): Promise<string> {
+  const clientId = env.PAY_PAL_CLIENT_ID;   // 👈 tal cual está en Cloudflare
+  const secret   = env.PAYPAL_SECRET;       // 👈 tal cual está en Cloudflare
+
+  if (!clientId || !secret) {
+    console.error(
+      '[PayPal] Faltan PAY_PAL_CLIENT_ID o PAYPAL_SECRET en env',
+      { clientIdOk: !!clientId, secretOk: !!secret }
+    );
+    throw new Error('paypal_missing_config');
+  }
+
+  const apiBase = env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+
+  const authHeader = 'Basic ' + btoa(`${clientId}:${secret}`);
+
+  const res = await fetch(`${apiBase}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: authHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+
+  const raw = await res.text();
+  console.log('[PayPal] OAuth status:', res.status);
+  console.log('[PayPal] OAuth raw body:', raw);
+
+  if (!res.ok) {
+    console.error('[PayPal] Error obteniendo token:', res.status, raw);
+    throw new Error('paypal_token_failed');
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    console.error('[PayPal] JSON.parse fallo con respuesta OAuth:', e);
+    throw new Error('paypal_token_json_error');
+  }
+
+  if (!data.access_token) {
+    console.error('[PayPal] Respuesta OAuth sin access_token:', data);
+    throw new Error('paypal_token_missing');
+  }
+
+  return data.access_token as string;
+}
+
+
+// handler dentro de tu Worker
+// Env: PAY_PAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_API_BASE
+
+async function handlePaypalCreateOrder(c: any) {
+  console.log('[Worker] /paypal/create-order');
+
+  try {
+    // (Opcional) validar el usuario desde Authorization: Bearer ...
+    // const user = await verifyFirebaseUser(c.req, c.env);
+
+    const authHeader =
+      'Basic ' + btoa(`${c.env.PAY_PAL_CLIENT_ID}:${c.env.PAYPAL_SECRET}`);
+
+    const paypalRes = await fetch(`${c.env.PAYPAL_API_BASE}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            amount: {
+              currency_code: 'EUR',
+              value: '2.50', // 💰 importe a cobrar
+            },
+          },
+        ],
+      }),
+    });
+
+    const raw = await paypalRes.text();
+    console.log('[Worker] PayPal /orders status', paypalRes.status);
+    console.log('[Worker] PayPal /orders body', raw);
+
+    if (!paypalRes.ok) {
+      return c.json(
+        {
+          ok: false,
+          error: 'paypal_api_error',
+          status: paypalRes.status,
+          body: raw,
+        },
+        paypalRes.status,
+      );
+    }
+
+    let paypalData: any;
+    try {
+      paypalData = JSON.parse(raw);
+    } catch (e) {
+      console.error('[Worker] JSON.parse fallo con respuesta PayPal', e);
+      return c.json(
+        { ok: false, error: 'paypal_json_error', raw },
+        500,
+      );
+    }
+
+    return c.json({
+      ok: true,
+      orderID: paypalData.id,
+    });
+  } catch (err) {
+    console.error('[Worker] Error en /paypal/create-order', err);
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+}
+
+
+// =========================
+// PAYPAL ENDPOINTS
+// ============================================================
+
+// ============================================================
+// PAYPAL - CREAR ORDEN (Pack 2 DruCoins)
+// ============================================================
+app.post('/api/paypal/create-order', handlePaypalCreateOrder);
+
+
+
+// ============================================================
+// PAYPAL - CAPTURAR ORDEN Y SUMAR DRUCOINS
+// ============================================================
+app.post('/api/paypal/capture-order', async (c) => {
+  console.groupCollapsed('%c💎 /api/paypal/capture-order', 'color:#8bc34a;font-weight:bold;');
+
+  try {
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!token) {
+      console.warn('❌ Sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    const { orderID } = await c.req.json<{ orderID: string }>().catch(() => ({ orderID: '' }));
+    if (!orderID) {
+      console.warn('❌ Falta orderID');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_order_id' }, 400);
+    }
+
+    const accessToken = await getPayPalAccessToken(c.env);
+    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+
+    const res = await fetch(`${apiBase}/v2/checkout/orders/${orderID}/capture`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('[PayPal] Error capture:', res.status, txt);
+      console.groupEnd();
+      return c.json({ ok: false, error: 'capture_failed' }, 500);
+    }
+
+    const data: any = await res.json();
+    console.log('PayPal capture data:', JSON.stringify(data, null, 2));
+
+    if (data.status !== 'COMPLETED') {
+      console.warn('⚠️ Orden no completada:', data.status);
+      console.groupEnd();
+      return c.json({ ok: false, error: 'not_completed' }, 400);
+    }
+
+    // Leemos el custom_id que pusimos en create-order
+    const pu = data.purchase_units?.[0];
+    const cap = pu?.payments?.captures?.[0];
+    const custom = (cap?.custom_id || pu?.custom_id || '') as string;
+
+    const [uidFromOrder, coinsStr] = custom.split('|');
+    const coinsToGive = Number(coinsStr || '0') || 0;
+
+    // Seguridad mínima: que la orden sea del mismo usuario
+    if (uidFromOrder && uidFromOrder !== uid) {
+      console.warn('[PayPal] UID mismatch:', uidFromOrder, uid);
+      console.groupEnd();
+      return c.json({ ok: false, error: 'uid_mismatch' }, 403);
+    }
+
+    // Sumamos DruCoins en tu DB
+    const newBalance = await addDrucoins(c.env, uid, coinsToGive);
+
+    console.groupEnd();
+    return c.json({ ok: true, drucoins: newBalance });
+  } catch (err) {
+    console.error('💥 /api/paypal/capture-order error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});

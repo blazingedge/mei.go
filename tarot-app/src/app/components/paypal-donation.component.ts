@@ -119,50 +119,57 @@ private loadPaypalSdk() {
 
           // 1) Tu front pide al Worker que cree la orden
           createOrder: async () => {
-            console.groupCollapsed('%c[PayPalCmp] createOrder', 'color:#0f9');
-            try {
-              console.log('[PayPalCmp] createOrder → obteniendo token de usuario...');
-              const token = await this.authService.getIdToken();
-              console.log('[PayPalCmp] Token obtenido?', !!token);
+  console.log('[PayPalCmp] createOrder');
 
-              if (!token) {
-                this.error = 'Debes iniciar sesión para comprar DruCoins.';
-                console.warn('[PayPalCmp] createOrder → sin token / usuario no logueado');
-                throw new Error('no_auth');
-              }
+  try {
+    const token = await this.authService.getIdToken();
+    console.log('[PayPalCmp] Firebase token?', token ? 'OK' : 'NULL');
 
-              const url = `${environment.API_BASE}/paypal/create-order`;
-              console.log('[PayPalCmp] createOrder → llamando a', url);
+    if (!token) {
+      this.error = 'Debes iniciar sesión para comprar DruCoins.';
+      throw new Error('no_auth');
+    }
 
-              const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              });
+    const res = await fetch(`${environment.API_BASE}/paypal/create-order`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-              console.log('[PayPalCmp] createOrder → status', res.status);
-              const data = await res.json().catch((e) => {
-                console.error('[PayPalCmp] createOrder → error parseando JSON', e);
-                throw e;
-              });
-              console.log('[PayPalCmp] createOrder → response JSON:', data);
+    const raw = await res.text();
+    console.log('[PayPalCmp] /paypal/create-order RAW:', res.status, raw);
 
-              if (!res.ok || !data.ok || !data.orderID) {
-                console.error('[PayPalCmp] create-order error:', data);
-                this.error = 'No se pudo iniciar el pago.';
-                throw new Error('create_order_failed');
-              }
+    if (!res.ok) {
+      this.error = 'No se pudo iniciar el pago.';
+      throw new Error(`create_order_failed_status_${res.status}`);
+    }
 
-              console.log('[PayPalCmp] createOrder → orderID devuelto:', data.orderID);
-              console.groupEnd();
-              return data.orderID;
-            } catch (err) {
-              console.error('[PayPalCmp] createOrder error', err);
-              console.groupEnd();
-              throw err;
-            }
-          },
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.error('[PayPalCmp] JSON.parse fallo en create-order', e);
+      this.error = 'Respuesta inesperada del servidor de pagos.';
+      throw e;
+    }
+
+    console.log('[PayPalCmp] /paypal/create-order JSON:', data);
+
+    if (!data.ok || !data.orderID) {
+      console.error('[PayPalCmp] Payload inválido en create-order:', data);
+      this.error = 'No se pudo iniciar el pago.';
+      throw new Error('create_order_invalid_payload');
+    }
+
+    console.log('[PayPalCmp] create-order OK, orderID =', data.orderID);
+    return data.orderID;
+  } catch (err) {
+    console.error('[PayPalCmp] createOrder error', err);
+    throw err;
+  }
+},
+
 
           // 2) PayPal aprueba → tu front pide al Worker que capture
           onApprove: async (data: any) => {
