@@ -217,51 +217,9 @@ await next();
 // =====================
 // CORS (global)
 // =====================
-app.use(
-'*',
-cors({
-origin: (origin, c) => {
-const env = c.env as Env;
-const isDev = !env.ENV || env.ENV === 'development';
 
-// En desarrollo permite localhost
-if (isDev) {
-const localAllowed = ['http://localhost:4200', 'http://127.0.0.1:4200'];
-const incoming = origin || localAllowed[0];
 
-const normalized = incoming.replace('127.0.0.1', 'localhost');
-const ok = localAllowed.some(o => o.replace('127.0.0.1', 'localhost') === normalized);
 
-const resolved = ok ? incoming : localAllowed[0];
-console.log('🌐 [CORS DEV] origin:', origin, '→', resolved);
-return resolved;
-}
-
-// En producción permitir:
-//   - dominio principal
-//   - cualquier preview *.mei-go.pages.dev
-const incoming = origin || 'https://mei-go.pages.dev';
-
-if (incoming === 'https://mei-go.pages.dev') {
-console.log('🌐 [CORS PROD] main origin accepted:', incoming);
-return incoming;
-}
-
-if (incoming.endsWith('.mei-go.pages.dev')) {
-console.log('🌐 [CORS PROD] preview origin accepted:', incoming);
-return incoming;
-}
-
-console.warn('🚫 [CORS PROD] origin bloqueado:', incoming);
-return 'https://mei-go.pages.dev';
-},
-
-allowMethods: ['GET', 'POST', 'OPTIONS'],
-allowHeaders: ['Content-Type', 'Authorization'],
-credentials: true,
-maxAge: 86400,
-})
-);
 
 // =====================
 // User + “Plan” (solo para snapshot de sesión)
@@ -1168,7 +1126,8 @@ return c.json(payload);
 });
 
 // ============================================================
-// AUTH DEMO (para modo prueba sin Firebase)
+// AUTH DEMO (para modo prueba sin 
+// Firebase)
 // ============================================================
 app.post('/api/auth/demo', async (c) => {
 console.groupCollapsed(

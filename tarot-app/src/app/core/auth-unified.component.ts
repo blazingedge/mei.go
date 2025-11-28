@@ -48,13 +48,15 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   audioUnlocked = false;
   aboutOpen = false;
   showWaves = false;
-
+  
   @ViewChild('waveCanvas') waveCanvas?: ElementRef<HTMLCanvasElement>;
  
   private audioCtx?: AudioContext;
   private analyser?: AnalyserNode;
   private dataArray?: Uint8Array;
   private rafId?: number;
+  private phase = 0;
+
 
   loading = false;
   loginError = '';
@@ -140,69 +142,72 @@ private setupVisualizer() {
   source.connect(analyser);
   analyser.connect(audioCtx.destination);
 
-  // 🔹 Guardar en la instancia
   this.audioCtx = audioCtx;
   this.analyser = analyser;
   this.dataArray = dataArray;
 
-  // asegúrate de que el canvas ya tiene tamaño
-  this.resizeCanvas();
   this.animateWaves();
 }
 
-  private animateWaves() {
-    const canvas = this.waveCanvas?.nativeElement;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx || !this.analyser || !this.dataArray) return;
 
-    const draw = () => {
-      this.rafId = requestAnimationFrame(draw);
+  
+private animateWaves() {
+  const canvas = this.waveCanvas?.nativeElement;
+  const ctx = canvas?.getContext('2d');
+  const analyser = this.analyser;
+  const dataArray = this.dataArray;
 
-      
-      const width = canvas.width / (window.devicePixelRatio || 1);
-      const height = canvas.height / (window.devicePixelRatio || 1);
+  if (!canvas || !ctx || !analyser || !dataArray) return;
 
-      ctx.clearRect(0, 0, width, height);
+  const draw = () => {
+    this.rafId = requestAnimationFrame(draw);
 
-      // Fondo oscuro suave
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      ctx.fillRect(0, 0, width, height);
+    // 👇 aquí solo UNA llamada, usando la variable local
+    analyser.getByteFrequencyData(dataArray as any);
 
-      // Nivel medio de energía del audio
-      const avg =
-        this.dataArray!.reduce((sum, v) => sum + v, 0) /
-        this.dataArray!.length;
+    const width = canvas.width / (window.devicePixelRatio || 1);
+    const height = canvas.height / (window.devicePixelRatio || 1);
 
-      const baseAmp = Math.max(avg / 255, 0.2); // 0–1
-      const centerY = height * 0.5;
-      const waves = 3;
+    ctx.clearRect(0, 0, width, height);
 
-      for (let i = 0; i < waves; i++) {
-        const amplitude = baseAmp * height * (0.2 + i * 0.12);
-        const offsetY = centerY + (i - 1) * 10;
-        const freq = 2 + i; // nº de ondas en pantalla
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(0, 0, width, height);
 
-        const alpha = 0.9 - i * 0.25;
-        ctx.strokeStyle = `rgba(214, 180, 108, ${alpha})`;
-        ctx.lineWidth = 2 - i * 0.3;
+    const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
 
-        ctx.beginPath();
-        const segments = 64;
-        for (let j = 0; j <= segments; j++) {
-          const t = j / segments;
-          const x = t * width;
-          const y =
-            offsetY +
-            Math.sin(t * Math.PI * 2 * freq) * amplitude;
-          if (j === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
+    const baseAmp = Math.max(avg / 255, 0.2);
+    const centerY = height * 0.5;
+    const waves = 3;
+
+    this.phase += 0.04;
+
+    for (let i = 0; i < waves; i++) {
+      const amplitude = baseAmp * height * (0.2 + i * 0.12);
+      const offsetY = centerY + (i - 1) * 10;
+      const freq = 2 + i;
+
+      const alpha = 0.9 - i * 0.25;
+      ctx.strokeStyle = `rgba(214, 180, 108, ${alpha})`;
+      ctx.lineWidth = 2 - i * 0.3;
+
+      ctx.beginPath();
+      const segments = 64;
+      for (let j = 0; j <= segments; j++) {
+        const t = j / segments;
+        const x = t * width;
+        const y =
+          offsetY +
+          Math.sin(t * Math.PI * 2 * freq + this.phase) * amplitude;
+        if (j === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
-    };
+      ctx.stroke();
+    }
+  };
 
-    draw();
-  }
+  draw();
+}
+
 
 
 openAboutSection() {
@@ -249,8 +254,11 @@ onAboutClosed() {
   this.resumeGoogleRedirect();
 
   // cargar audio
-  this.introaudio! = new Audio(`${environment.CDN_BASE}/audio/Lobo-de-Luna-y-Sal.ogg`);
-  this.introaudio!.volume = 0.8;
+  this.introaudio = new Audio();
+  this.introaudio.crossOrigin = 'anonymous';
+  this.introaudio.src = `${environment.CDN_BASE}/audio/Lobo-de-Luna-y-Sal.ogg`;
+  this.introaudio.volume = 0.8;
+  
 
   this.auth.termsAccepted$
     .pipe(takeUntil(this.destroy$))

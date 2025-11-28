@@ -326,3 +326,15 @@ input {
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
   }
 }
+
+
+.meigo-wave-visualizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px; // ajusta a gusto
+  width: 100%;
+  pointer-events: none;
+  z-index: 4; // por encima del fondo y hojas, por debajo o al mismo nivel que los botones
+}
