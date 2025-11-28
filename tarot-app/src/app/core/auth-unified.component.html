@@ -146,12 +146,38 @@
                   (click)="openTerms()">
             Ver Términos y Condiciones
           </button>
+
+           <div>
+
+            <button
+    type="button"
+    class="about-meigo-btn"
+    (click)="openAboutSection()">
+    Acerca de Meigo
+  </button>
+   </div>
+
+
+          
         </form>
+
+       
       </section>
 
+      
+
     </div>
-  </div>
-</div>
+
+
+
+<!-- Botón en alguna parte del auth -->
+
+
+<!-- Componente hijo -->
+<app-about-meigo
+  [open]="aboutOpen"
+  (closed)="onAboutClosed()">
+</app-about-meigo>
 
 <!-- ===========================================================
      📝 MODAL DE TÉRMINOS Y CONDICIONES (SE AGREGA AQUÍ)

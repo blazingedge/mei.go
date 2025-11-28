@@ -1730,17 +1730,45 @@ app.post('/api/card-meaning', async (c) => {
   console.groupCollapsed('%c🔎 /api/card-meaning', 'color:#ba68c8;font-weight:bold;');
 
   try {
-    const { name, reversed } = await c.req.json();
-    console.log('Carta solicitada:', name, 'Reversed:', reversed);
+    const body = await c.req.json();
 
     // ============================
-    // AUTH (MANTENEMOS COHERENCIA)
+    //  RESOLVER ID DE CARTA
+    // ============================
+    const rawId =
+      body.name ??
+      body.cardId ??
+      body.id ??
+      body.code ??
+      null;
+
+    const reversed = !!body.reversed;
+
+    console.log('Payload recibido en /card-meaning:', body);
+
+    if (!rawId) {
+      console.warn('⚠ /card-meaning sin id de carta válido:', body);
+      return c.json({ ok: false, error: 'missing_card_id' }, 400);
+    }
+
+    // Mapeo a nombre bonito en español
+    const displayName = cardNamesEs[rawId] ?? rawId;
+    console.log(
+      'Carta solicitada:',
+      displayName,
+      `(id: ${rawId})`,
+      'Reversed:',
+      reversed
+    );
+
+    // ============================
+    //  AUTH (COHERENTE CON /interpret)
     // ============================
     const auth = c.req.header('Authorization') || '';
     const tokenHeader = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
     if (!tokenHeader) {
-      console.warn('❌ No auth');
+      console.warn('❌ No auth en /card-meaning');
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
@@ -1752,112 +1780,184 @@ app.post('/api/card-meaning', async (c) => {
     const isMaster = isMasterUser(email);
 
     // =============================================================
-    // (OPCIONAL) LIMITAR SIGNIFICADOS POR TIRADA
+    //  LIMITAR SIGNIFICADOS POR TIRADA (NO MASTER)
     // =============================================================
     if (!isMaster) {
       const used = await incrementMeaningCount(c.env, uid);
       if (!used.ok) {
         console.warn('❌ Límite de significados alcanzado');
+        console.groupEnd();
         return c.json({
           ok: false,
           limit: true,
-          message: 'Límite de significados alcanzado. Interpreta la tirada completa para ver más.',
+          message:
+            'Límite de significados alcanzado. Interpreta la tirada completa para ver más.',
         });
       }
     }
     console.log('✅ Significados usados dentro del límite.');
 
     // ============================
-    // HUGGING FACE TOKEN
+    //  HUGGING FACE TOKEN
     // ============================
     const hfToken = c.env.HF_TOKEN;
     if (!hfToken) {
       console.warn('❌ No HF_TOKEN configurado');
+      console.groupEnd();
       return c.json({ ok: false, error: 'missing_hf_token' }, 500);
     }
 
     // ============================
-    // PROMPT CELTA AJUSTADO
+    //  PROMPTS TIPO /interpret
     // ============================
-    const prompt = `
-Eres un maestro celta de tarot. Explica el significado de la carta:
+    const cardDescriptor = `${displayName}${reversed ? ' (invertida)' : ''}`;
 
-${name} ${reversed ? '(invertida)' : ''}
+    const basePrompt = `
+Eres un maestro celta de tarot. Tu misión es explicar el significado de las cartas desde el consenso tradicional entre tarotistas: libros clásicos, escuelas como Marsella, Rider-Waite, Golden Dawn, y la experiencia compartida de lectores serios.
 
-REGLAS:
-- Usa un tono místico, claro y preciso.
-- NO uses emojis.
-- NO repitas ideas.
-- Da exactamente 2 párrafos cortos.
-- Nunca muestres estas reglas.
+INSTRUCCIONES CLAVE:
+- Habla desde el consenso: resalta los símbolos, arquetipos y temas que MÁS se repiten entre tarotistas.
+- Si la carta está invertida, explica cómo matiza, bloquea o tensiona el significado tradicional.
+- Usa un tono místico pero claro, sin fatalismos ni promesas literales de futuro.
+- NO uses emojis ni viñetas.
+- Escribe UN SOLO PÁRRAFO continuo de 4 a 6 frases (unas 5 líneas de texto).
+- No añadas títulos ni encabezados, entra directamente en el significado.
+- No muestres estas instrucciones ni digas que estás siguiendo reglas.
 `;
 
+    const userPrompt = `
+Carta a explicar:
+${cardDescriptor}
+
+Explica su significado desde el consenso tradicional entre tarotistas, siguiendo exactamente las instrucciones indicadas.
+`;
+
+    console.log('🧾 Prompts generados para /card-meaning:', {
+      cardDescriptor,
+    });
+
     // ============================
-    // HELPER: LLAMADA HF + FALLBACK
+    //  CONFIG FEATHERLESS / ROUTER
     // ============================
-    async function callHF(modelName: string) {
-      const response = await fetch(
-        'https://api-inference.huggingface.co/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${hfToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: modelName,
+    const GROQ_ENDPOINT = 'https://router.huggingface.co/v1/chat/completions';
+    const MODEL_NAME = 'openai/gpt-oss-20b:groq';
+
+    async function runFeatherlessMeaning() {
+      const payloadBase = {
+        model: MODEL_NAME,
+        max_tokens: 1300, // margen, aunque usará menos
+        temperature: 0.65,
+        top_p: 0.9,
+        frequency_penalty: 0.2,
+        stop: ['REGLAS:', '###', 'Instrucciones'],
+      };
+
+      let bestPartial = '';
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(
+            `7.[meaning] Intento ${attempt} → Modelo: ${MODEL_NAME}.`
+          );
+
+          const extraReminder =
+            attempt === 1
+              ? ''
+              : '\n\nATENCIÓN: La respuesta anterior quedó incompleta o muy corta. Ahora debes ofrecer un párrafo completo siguiendo todas las instrucciones.';
+
+          const payload = {
+            ...payloadBase,
             messages: [
-              { role: 'system', content: 'Eres un maestro celta experto en tarot.' },
-              { role: 'user', content: prompt },
+              { role: 'system', content: basePrompt },
+              { role: 'user', content: userPrompt + extraReminder },
             ],
-            max_tokens: 350,
-            temperature: 0.65,
-            top_p: 0.9,
-          }),
+          };
+
+          const response = await fetch(GROQ_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${hfToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+
+          console.log(
+            `8.[meaning] Respuesta HTTP recibida. Status: ${response.status}`
+          );
+
+          if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(
+              `HF Router (${response.status}): ${txt}`
+            );
+          }
+
+          const result = await response.json();
+          let meaning =
+            result?.choices?.[0]?.message?.content?.trim() || '';
+
+          console.log(
+            `9.[meaning] Texto bruto, longitud: ${meaning.length}`
+          );
+
+          // Limpieza básica
+          meaning = meaning
+            .replace(/(\<\|eot\|\>)/g, '')
+            .replace(/(<\/?[^>]+>)/g, '')
+            .replace(/REGLAS:.*/gi, '')
+            .replace(/Instrucciones:.*/gi, '')
+            .trim();
+
+          if (meaning.length > bestPartial.length) {
+            bestPartial = meaning;
+          }
+
+          console.log(
+            `9.1.[meaning] Texto limpio, longitud: ${meaning.length}`
+          );
+
+          // Criterio sencillo: que haya texto razonable
+          if (meaning.length >= 120) {
+            return meaning;
+          }
+
+          console.warn(
+            `9.2.[meaning] Texto demasiado corto (${meaning.length}). Reintentando...`
+          );
+        } catch (err: any) {
+          console.warn(
+            `7.1.[meaning] Falló intento ${attempt} del modelo ${MODEL_NAME}:`,
+            err
+          );
+          if (attempt < 2) {
+            const delay = 2000 * attempt;
+            console.log(
+              `7.2.[meaning] Esperando ${delay}ms antes del reintento...`
+            );
+            await new Promise((r) => setTimeout(r, delay));
+          } else {
+            throw new Error(
+              `Featherless meaning failed all attempts: ${err.message}`
+            );
+          }
         }
-      );
-
-      if (!response.ok) {
-        const txt = await response.text();
-        throw new Error(`HF error (${modelName}): ${response.status} ${txt}`);
       }
 
-      const result = await response.json();
-      let meaning = result?.choices?.[0]?.message?.content?.trim() || '';
+      if (bestPartial) {
+        console.warn(
+          '9.3.[meaning] Devolviendo texto parcial tras varios intentos.'
+        );
+        return bestPartial;
+      }
 
-      // SANITIZAR TEXTO
-      meaning = meaning
-        .replace(/(<\/?[^>]+>)/g, '') // sin HTML
-        .replace(/REGLAS:.*/gi, '')
-        .replace(/Instrucciones:.*/gi, '')
-        .trim();
-
-      return meaning;
+      throw new Error(`Model ${MODEL_NAME} failed for meaning`);
     }
 
     // ============================
-    // INTENTAR GEMMA → FALLBACK A LLAMA
+    //  EJECUTAR MODELO
     // ============================
-    let meaning = '';
-    try {
-      // 1) Gemma 2-9B-it
-      meaning = await callHF('google/gemma-2-9b-it');
-    } catch (e1) {
-      console.warn('Gemma 2-9B-it falló para /card-meaning:', e1);
-
-      try {
-        // 2) Llama 3 como backup
-        meaning = await callHF('meta-llama/Meta-Llama-3-8B-Instruct');
-      } catch (e2) {
-        console.error('Llama 3 también falló en /card-meaning:', e2);
-        return c.json({
-          ok: false,
-          error: 'hf_error',
-          details: String(e2),
-        });
-      }
-    }
-
+    const meaning = await runFeatherlessMeaning();
     console.log('✔ Significado final:', meaning);
     console.groupEnd();
 
@@ -1865,12 +1965,19 @@ REGLAS:
       ok: true,
       meaning,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('💥 /api/card-meaning ERROR:', err);
     console.groupEnd();
-    return c.json({ ok: false, error: String(err) });
+    return c.json({
+      ok: false,
+      error: String(err?.message || err),
+    });
   }
 });
+
+
+
+
 
 
 
@@ -1902,248 +2009,407 @@ export async function resetMeaningCount(env: Env, uid: string) {
 // 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
 // ============================================================
 
-// Nota: Se asume que las funciones y constantes externas (Hono, verifyFirebaseIdToken,
-// isMasterUser, getDrucoinBalance, useDrucoins, insertReadingRecord, cardNamesEs, etc.)
-// están definidas en otras partes del Worker y que 'c' es el contexto de Hono.
+
+
+
 
 app.post('/api/interpret', async (c) => {
-  console.groupCollapsed('%c💫 /api/interpret', 'color:#ff5252;font-weight:bold;');
+  console.groupCollapsed(
+    '%c💫 /api/interpret (Featherless AI)',
+    'color:#4CAF50;font-weight:bold;'
+  );
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout
+  const controller = new AbortController();
+  const TIMEOUT_MS = 120000;
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  try {
-    const { context, cards, spreadId } = await c.req.json();
+  try {
+    const requestBody = await c.req.json();
+    const { context, cards, spreadId } = requestBody;
+    console.log('1. Petición recibida y cuerpo JSON parseado:', {
+      spreadId,
+      cardCount: cards.length,
+    });
 
-    // ===========================
-    //  AUTH & PERMISOS
-    // ===========================
-    const auth = c.req.header('Authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    // ===========================
+    //  AUTH & PERMISOS
+    // ===========================
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    console.log(
+      '2. Token de autorización extraído. Longitud:',
+      token.length
+    );
 
-    if (!token) return c.json({ ok: false, error: 'unauthorized' }, 401);
+    if (!token) {
+      console.error('2.1. Fallo de autenticación: Token no encontrado.');
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
 
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-    const v = await verifyFirebaseIdToken(token, apiKey);
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const v = await verifyFirebaseIdToken(token, apiKey);
 
-    const uid = v.uid;
-    const email = v.email;
-    const isMaster = isMasterUser(email);
+    const uid = v.uid;
+    const email = v.email;
+    const isMaster = isMasterUser(email);
+    console.log(
+      `3. Autenticación exitosa. UID: ${uid}, Master: ${isMaster}`
+    );
 
-    // ===========================
-    //  DRUCOINS (CHEQUEO PREVIO)
-    // ===========================
-    const plan = await ensureUserPlan(c.env, uid);
-    let remainingBalance = await getDrucoinBalance(c.env, uid);
+    // ===========================
+    //  DRUCOINS (CHEQUEO PREVIO)
+    // ===========================
+    const plan = await ensureUserPlan(c.env, uid);
+    let remainingBalance = await getDrucoinBalance(c.env, uid);
+    console.log(
+      `4. Balance DruCoins (PREVIO): ${remainingBalance}. Plan: ${plan}`
+    );
 
-    // Solo se verifica aquí; el descuento real se hace DESPUÉS de la interpretación
-    if (!isMaster && remainingBalance < 1) {
-      return c.json(
-        { ok: false, message: 'No tienes DruCoins', drucoins: remainingBalance },
-        402
-      );
-    }
+    if (!isMaster && remainingBalance < 1) {
+      console.warn('4.1. Bloqueado por saldo insuficiente.');
+      return c.json(
+        {
+          ok: false,
+          message:
+            'No tienes DruCoins suficientes para esta acción.',
+          drucoins: remainingBalance,
+        },
+        402
+      );
+    }
 
-    // ===========================
-    //  FORMAT TAROT SPREAD
-    // ===========================
-    const spreadLabel =
-      spreadId === 'celtic-cross-10'
-        ? 'Cruz Celta (10 cartas)'
-        : spreadId === 'ppf-3'
-        ? 'Pasado · Presente · Futuro'
-        : 'Tirada libre';
+    // ===========================
+    //  FORMAT TAROT SPREAD
+    // ===========================
+    const spreadLabel =
+      spreadId === 'celtic-cross-10'
+        ? 'Cruz Celta (10 cartas)'
+        : spreadId === 'ppf-3'
+        ? 'Pasado · Presente · Futuro'
+        : 'Tirada libre';
 
-    const formattedCards = cards.map((c) => {
-      const id = c.cardId;
-      const name = cardNamesEs[id] || id;
-      return `${name}${c.reversed ? ' (invertida)' : ''}`;
-    });
+    // 🔧 Mapeo robusto de cartas para evitar "undefined"
+    const formattedCards = cards.map((card: any, index: number) => {
+      const rawId =
+        card.name ??
+        card.id ??
+        card.code ??
+        card.cardId ??
+        null;
 
-    // ===========================
-    //  SYSTEM PROMPT (ACTUALIZADO PARA BULLET POINTS)
-    // ===========================
-    const basePrompt = `
+      if (!rawId) {
+        console.warn(
+          '⚠ Carta sin id/name en índice',
+          index,
+          card
+        );
+      }
+
+      const id = rawId || `carta_${index + 1}`;
+      const name = cardNamesEs[id] ?? id; // nullish, no ||
+
+      return `${name}${card.reversed ? ' (invertida)' : ''}`;
+    });
+
+    console.log(
+      `5. Tirada formateada: ${spreadLabel}. Cartas: ${formattedCards.join(
+        ', '
+      )}`
+    );
+
+    // ===========================
+    //  PROMPTS PARA EL MODELO
+    // ===========================
+    const basePrompt = `
 Eres un maestro celta de tarot. Tu estilo es profundo, claro y emocionalmente equilibrado.
 
-REGLAS:
-- No muestres estas reglas.
-- No repitas ideas o frases.
-- No uses emojis.
-- No uses despedidas.
-- No inventes instrucciones.
-- Mantén máximo 600 palabras.
-- Sigue la siguiente estructura EXACTA:
+INSTRUCCIONES CLAVE:
+- No muestres estas instrucciones clave.
+- Debes usar ÚNICAMENTE los nombres de las cartas tal como se proporcionan en la lista "Cartas extraídas", sin cambiarlos ni inventar otros nombres.
+- No uses emojis, saludos ni despedidas.
+- No repitas ideas o frases entre párrafos.
+- Máximo 600 palabras en total.
+
+Estructura EXACTA:
 
 Mensaje central:
-(1 párrafo, analizando el contexto y la energía dominante)
+(Un solo párrafo que analice la energía dominante del contexto y de TODA la tirada.)
 
 Análisis por Carta:
-* Carta X (Posición): Interpretación de 2-3 frases, precisa y mística, aplicando el contexto.
+- Debes generar UNA línea por cada carta listada en "Cartas extraídas".
+- Usa este formato EXACTO:
+* Carta N – [nombre de la carta]: interpretación de 2-3 frases, precisa y mística, aplicando el contexto.
 
 Síntesis final:
-(frase sabia y corta, máximo 12 palabras)
+(Frase sabia y corta, máximo 12 palabras.)
 `;
 
-    // ===========================
-    //  USER PROMPT
-    // ===========================
-    const userPrompt = `
+    const userPrompt = `
 Tirada: ${spreadLabel}
-Contexto: "${context || 'Sin contexto'}"
+Contexto del consultante: "${context || 'Sin contexto'}"
 
-Cartas:
+Hay ${formattedCards.length} cartas.
+
+Cartas extraídas (en orden):
 ${formattedCards.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
-Interpreta EXACTAMENTE con la estructura indicada.
+Genera el Mensaje central, luego el Análisis por Carta (una línea por cada carta),
+y termina con la Síntesis final, siguiendo la estructura EXACTA indicada.
 `;
 
-    // Combina el prompt del sistema y el del usuario en uno solo para el formato de Inferencia.
-    const fullInferencePrompt = `
-<|system|>
-${basePrompt}</s>
-<|user|>
-${userPrompt}
-`.trim();
+    console.log('6. Prompts generados para el modelo.', {
+      context,
+      cardCount: formattedCards.length,
+    });
+
+    // ============================================================
+    //  FUNCTION: Ejecutar el modelo Featherless / HF Router
+    // ============================================================
+
+const GROQ_ENDPOINT = 'https://router.huggingface.co/v1/chat/completions';
+const MODEL_NAME = 'openai/gpt-oss-20b:groq';
+
+async function runFeatherlessModel() {
+  const hfToken = c.env.HF_TOKEN;
+  if (!hfToken) throw new Error('Missing HF token');
+
+  const payloadBase = {
+    model: MODEL_NAME,
+    max_tokens: 2000,          // margen suficiente para todo el texto
+    temperature: 0.6,
+    top_p: 0.85,
+    frequency_penalty: 0.2,
+    stop: ['REGLAS:', '###', 'Instrucciones'],
+  };
+
+  let bestPartial = ''; // aquí vamos guardando la mejor respuesta aunque esté incompleta
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(
+        `7. Intento ${attempt} → Modelo: ${MODEL_NAME}. Haciendo fetch a HF router...`
+      );
+
+      const extraReminder =
+        attempt === 1
+          ? ''
+          : '\n\nATENCIÓN: La respuesta anterior quedó incompleta. Ahora debes generar la interpretación COMPLETA con todas las secciones y TODAS las cartas.';
+
+      const payload = {
+        ...payloadBase,
+        messages: [
+          { role: 'system', content: basePrompt },
+          { role: 'user', content: userPrompt + extraReminder },
+        ],
+      };
+
+      const response = await fetch(GROQ_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${hfToken}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify(payload),
+      });
+
+      console.log(`8. Respuesta HTTP recibida. Status: ${response.status}`);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HF Router (${response.status}): ${errText}`);
+      }
+
+      const result = await response.json();
+
+      let interpretation =
+        result?.choices?.[0]?.message?.content?.trim() || '';
+
+      console.log(
+        `9. Respuesta parseada. Longitud de texto: ${interpretation.length}`
+      );
+
+      // Limpieza ligera
+      interpretation = interpretation
+        .replace(/(\<\|eot\|\>)/g, '')
+        .replace(/(¡?Gracias[^]+$)/i, '')
+        .replace(/(\*{2,}.*Licencia.*$)/i, '')
+        .replace(/\*{3,}/g, '**')
+        .replace(/(_{2,})/g, '')
+        .replace(/[\*\_]{2,}\s*$/, '')
+        .trim();
+
+      // Guardamos la mejor respuesta parcial por si ninguna pasa el filtro “ideal”
+      if (interpretation.length > bestPartial.length) {
+        bestPartial = interpretation;
+      }
+
+      // ==============================
+      // 🔍 Validación de estructura
+      // ==============================
+      const hasCentral = interpretation.includes('Mensaje central');
+      const hasAnalysis = interpretation.includes('Análisis por Carta');
+      const hasCarta = /\* Carta/.test(interpretation);
+      const hasSynthesis = interpretation.includes('Síntesis final');
+
+      console.log(
+        `9.1. hasCentral=${hasCentral}, hasAnalysis=${hasAnalysis}, hasCarta=${hasCarta}, hasSynthesis=${hasSynthesis}`
+      );
+
+      // Criterio “bueno”: texto largo + estructura razonable
+      const estructuraOk =
+        interpretation.length > 350 &&
+        hasCentral &&
+        hasAnalysis &&
+        hasCarta;
+
+      if (estructuraOk) {
+        console.log('9.2. Interpretación con estructura completa aceptada.');
+        return interpretation;
+      }
+
+      console.warn(
+        `9.3. Interpretación incompleta o demasiado corta. longitud=${interpretation.length}, estructuraOk=${estructuraOk}. Reintentando...`
+      );
+    } catch (err: any) {
+      console.warn(
+        `7.1. Falló intento ${attempt} del modelo ${MODEL_NAME}:`,
+        err
+      );
+      if (attempt < 3) {
+        const delay = 3000 * Math.pow(2, attempt - 1);
+        console.log(`7.2. Esperando ${delay}ms antes del reintento...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        // si es error duro de red/HTTP, ahí sí lanzamos
+        throw new Error(`Featherless AI failed all attempts: ${err.message}`);
+      }
+    }
+  }
+
+  // Si llegamos aquí es que ninguna pasó el filtro “ideal”, pero puede que tengamos algo usable
+  if (bestPartial) {
+    console.warn(
+      '9.4. Devolviendo interpretación parcial tras varios intentos (mejor texto disponible).'
+    );
+    return bestPartial;
+  }
+
+  throw new Error(`Model ${MODEL_NAME} failed all attempts`);
+}
 
 
-    // ============================================================
-    //  FUNCTION: Ejecutar un modelo con retry automático (SOLO GEMMA)
-    // ============================================================
-    const HF_INFERENCE_ENDPOINT = 'https://api-inference.huggingface.co/models/';
+    // ============================================================
+    //  EJECUCIÓN DEL MODELO
+    // ============================================================
+    let interpretation = '';
 
-    async function runModel(modelName: string) {
-      const hfToken = c.env.HF_TOKEN;
-      if (!hfToken) throw new Error('Missing HF token');
+    try {
+      interpretation = await runFeatherlessModel();
+      console.log(
+        `10. Interpretación de ${MODEL_NAME} obtenida con éxito.`
+      );
+    } catch (e0: any) {
+      console.error(
+        `10.1. 💥 ERROR CRÍTICO: ${MODEL_NAME} falló.`,
+        e0
+      );
+      clearTimeout(timeout);
+      throw new Error(
+        `Critical interpretation error: ${e0.message}`
+      );
+    }
 
-      // Payload de Inferencia de Texto
-      const payload = {
-        inputs: fullInferencePrompt, // Enviamos el prompt completo
-        parameters: {
-          max_new_tokens: 600,
-          temperature: 0.55,
-          top_p: 0.9,
-          repetition_penalty: 1.13,
-          stop: ['REGLAS:', '###', 'Instrucciones', '</s>'],
-          return_full_text: false, // Queremos solo la respuesta del modelo, no el prompt completo.
-        },
-      };
+    clearTimeout(timeout);
+    console.log('11. Proceso de modelo finalizado.');
 
-      // Intento hasta 2 veces
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.log(`Intento ${attempt} → Modelo: ${modelName}`);
+    // ===========================
+    //  DESCONTAR DRUCOIN (NO MASTER)
+    // ===========================
+    if (!isMaster) {
+      console.log(
+        '12. Descontando 1 DruCoin (usuario NO master).'
+      );
+      const used = await useDrucoins(c.env, uid, 1);
+      if (!used) {
+        console.error(
+          '12.1. Fallo al descontar DruCoin. Esto no debería pasar después de la verificación.'
+        );
+        return c.json({
+          ok: false,
+          message:
+            'No se pudo descontar DruCoin. Inténtalo de nuevo.',
+          drucoins: await getDrucoinBalance(c.env, uid),
+        });
+      }
+      remainingBalance = await getDrucoinBalance(
+        c.env,
+        uid
+      );
+      console.log(
+        `12.2. Descuento exitoso. Nuevo saldo: ${remainingBalance}`
+      );
+    } else {
+      console.log(
+        '12. Usuario Master, no se descuenta DruCoin.'
+      );
+    }
 
-          const response = await fetch(
-            `${HF_INFERENCE_ENDPOINT}${modelName}`, // 🎯 Endpoint por modelo
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${hfToken}`,
-                'Content-Type': 'application/json',
-              },
-              signal: controller.signal,
-              body: JSON.stringify(payload),
-            }
-          );
+    // ===========================
+    //  GUARDAR EN DB
+    // ===========================
+    const readingId = await insertReadingRecord(c.env, {
+      uid,
+      email,
+      interpretation,
+      cards,
+      spreadId,
+      title: spreadLabel,
+      plan,
+    });
+    console.log(
+      `13. Registro de lectura insertado en DB. ID: ${readingId}`
+    );
 
-          if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`HF error (${response.status}): ${err}`);
-          }
-
-          const json = await response.json();
-          
-          let text = json?.[0]?.generated_text?.trim() || ''; 
-          
-          // Limpieza de tokens de chat
-          if (text.startsWith('<|assistant|>')) {
-            text = text.substring('<|assistant|>'.length).trim();
-          }
-
-          if (text.length >= 30) return text;
-        } catch (err) {
-          console.warn(`Falló intento ${attempt} del modelo ${modelName}:`, err);
-          // Espera 1 segundo en el primer fallo antes del reintento
-          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        }
-      }
-
-      throw new Error(`Model ${modelName} failed all attempts`);
-    }
-
-    // ============================================================
-    //  MODELOS EN ORDEN DE PRIORIDAD + FALLBACK (SOLO GEMMA)
-    // ============================================================
-    let interpretation = '';
-    let usedFallback = false;
-
-    try {
-      // 1) Único modelo: Gemma 2-9B-it 
-      interpretation = await runModel('google/gemma-2-9b-it');
-    } catch (e0) {
-      console.warn('Gemma 2-9B-it falló:', e0);
-
-      // Fallback final genérico (activado si Gemma falla)
-      usedFallback = true;
-      interpretation = `
-Mensaje central:
-Un ciclo emocional profundo se está reordenando. Hay una transición interior que pide calma y claridad, aunque la interpretación automática del oráculo ha fallado.
-
-Análisis por Carta:
-${formattedCards.map((n) => `* ${n}: energía en integración y profundo análisis en espera.`).join('\n')}
-
-Síntesis final:
-Confía en el movimiento interno.
-      `.trim();
-    }
-
-    clearTimeout(timeout);
-
-    // ===========================
-    // 🔥 DESCONTAR DRUCOIN SIEMPRE (SALVO MASTER)
-    // ===========================
-    if (!isMaster) {
-      // Se realiza el descuento de 1 DruCoin
-      const used = await useDrucoins(c.env, uid, 1);
-      if (!used) {
-        return c.json({
-          ok: false,
-          message: 'No se pudo descontar DruCoin',
-          drucoins: await getDrucoinBalance(c.env, uid),
-        });
-      }
-      remainingBalance = await getDrucoinBalance(c.env, uid);
-    }
-
-    if (usedFallback) {
-      console.log('⚠️ Interpretación con FALLBACK, pero igual se descontó DruCoin.');
-    }
-
-    // Guardar en DB
-    const readingId = await insertReadingRecord(c.env, {
-      uid,
-      email,
-      interpretation,
-      cards,
-      spreadId,
-      title: spreadLabel,
-      plan,
-    });
-
-    return c.json({
-      ok: true,
-      interpretation,
-      drucoins: remainingBalance,
-      readingId,
-    });
-  } catch (err) {
-    console.error('💥 /api/interpret error:', err);
-    return c.json({ ok: false, error: String(err) });
-  }
+    return c.json({
+      ok: true,
+      interpretation,
+      drucoins: remainingBalance,
+      readingId,
+    });
+  } catch (err: any) {
+    console.error('💥 14. ERROR GENERAL /api/interpret:', err);
+    clearTimeout(timeout);
+    const errorMessage = err.message || String(err);
+    if (errorMessage.includes('Featherless AI failed')) {
+      return c.json(
+        {
+          ok: false,
+          error:
+            'Fallo en el servicio de interpretación de AI. Intenta de nuevo más tarde.',
+          details: errorMessage,
+        },
+        500
+      );
+    }
+    return c.json(
+      {
+        ok: false,
+        error: 'Internal Server Error: ' + errorMessage,
+      },
+      500
+    );
+  } finally {
+    console.groupEnd();
+  }
 });
 
 
+
+// 2. Exportación de la función fetch (NECESARIO)
+
+
+// 2. Exportación de la función fetch (NECESARIO)
 
 
 

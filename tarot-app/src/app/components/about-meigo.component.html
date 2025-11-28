@@ -1,0 +1,126 @@
+<div
+  class="about-overlay"
+  *ngIf="open"
+  (click)="onOverlayClick($event)"
+>
+  <div class="about-card" (click)="$event.stopPropagation()">
+    <button class="about-close-btn" type="button" (click)="closeAll()">
+      ✕
+    </button>
+
+    <div class="about-layout">
+      <!-- Columna imagen / slider -->
+      <div class="about-image-col">
+        <div class="image-frame">
+          <img [src]="currentImage" alt="Meigo spirit" />
+          <div class="image-gradient"></div>
+
+          <div class="image-controls">
+            <button
+              type="button"
+              class="circle-btn"
+              (click)="prevImage()"
+              aria-label="Imagen anterior"
+            >
+              ‹
+            </button>
+
+            <div class="dots">
+              <button
+                type="button"
+                *ngFor="let img of images; let i = index"
+                class="dot"
+                [class.active]="i === currentImageIndex"
+                (click)="currentImageIndex = i"
+              ></button>
+            </div>
+
+            <button
+              type="button"
+              class="circle-btn"
+              (click)="nextImage()"
+              aria-label="Imagen siguiente"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Columna texto corto -->
+      <div class="about-text-col">
+        <h2 class="about-title">Quién soy yo en Meigo</h2>
+        <p class="about-subtitle">
+          Meigo nace de un cruce de raíces gallegas, canarias y venezolanas.
+          De un árbol familiar lleno de historias que se transforman en cartas,
+          lobos, lunas y caminos.
+        </p>
+
+        <p class="about-body">
+          Este espacio es un grimorio digital para explorar símbolos,
+          emociones y decisiones importantes de la vida, sin prometer futuro,
+          pero intentando alumbrar el presente con un poco más de claridad.
+        </p>
+
+        <button
+          type="button"
+          class="sheet-toggle-btn"
+          (click)="toggleStory()"
+        >
+          Leer mi historia completa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom sheet con la dedicatoria / texto largo -->
+  <div
+    class="story-sheet"
+    [ngClass]="{ open: storyOpen }"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="sheet-header">
+      <div class="drag-handle"></div>
+      <div class="sheet-header-main">
+        <h3>En honor a mis raíces</h3>
+        <button
+          type="button"
+          class="voice-btn"
+          (click)="playVoice()"
+        >
+          {{ isPlaying ? 'Detener voz' : 'Escuchar con mi voz' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="sheet-body">
+      <!-- Aquí va tu texto completo tipo maqueta Word -->
+      <p>
+        En honor a mis raíces gallegas/canarias y venezolanas, a los apellidos
+        que se entremezclan en un solo camino mágico:
+      </p>
+
+      <p class="names-block">
+        RODRÍGUEZ FERNÁNDEZ<br />
+        MALLON ARANGUREN<br />
+        MANTEIGA ESCUDERO <br />
+        PEREZ FIGUEROA <br />
+      </p>
+
+      <p>
+        Y todo mi árbol de la vida, el Crann Bethadh, los amores de mis
+        amores.
+      </p>
+
+      <p class="names-block">
+        A mis abuelas:<br />
+        DIGNA y JOSEFINA
+      </p>
+
+      <p>Esta app no es solo un proyecto tecnológico; es un diario de viaje, un homenaje a las personas y lugares que me trajeron hasta aquí y 
+        a todos aquellos que, como yo, buscan en el lenguaje 
+        simbólico una manera de comprender lo que llevan por dentro.
+      </p>
+    </div>
+  </div>
+</div>

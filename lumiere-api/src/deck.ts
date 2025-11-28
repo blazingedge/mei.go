@@ -6,7 +6,7 @@ export interface DeckCard {
 
 export const DECK: DeckCard[] = [
   // ==== ARCANOS MAYORES ====
-  { id: 'elmag0', suit: 'major', name: 'El Mago' },
+  { id: 'elmago', suit: 'major', name: 'El Mago' },
   { id: 'lagransacerdotisa', suit: 'major', name: 'La Gran Sacerdotisa' },
   { id: 'laemperatriz', suit: 'major', name: 'La Emperatriz' },
   { id: 'elemperador', suit: 'major', name: 'El Emperador' },
@@ -16,7 +16,7 @@ export const DECK: DeckCard[] = [
   { id: 'elermitaño', suit: 'major', name: 'El Ermitaño' },
   { id: 'lafuerza', suit: 'major', name: 'La Fuerza' },
   { id: 'elcolgado', suit: 'major', name: 'El Colgado' },
-  { id: 'eljusticia', suit: 'major', name: 'La Justicia' },
+  { id: 'lajusticia', suit: 'major', name: 'La Justicia' },
   { id: 'laemperatriz', suit: 'major', name: 'La Emperatriz' },
   { id: 'latemplanza', suit: 'major', name: 'La Templanza' },
   { id: 'eldiablo', suit: 'major', name: 'El Diablo' },

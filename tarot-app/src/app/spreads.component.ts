@@ -12,6 +12,7 @@
     NgZone,
     ChangeDetectorRef,
     DestroyRef,
+    HostListener,
   } from '@angular/core';
 
   import { CommonModule } from '@angular/common';
@@ -47,6 +48,13 @@
   // ==========================
   // TYPES
   // ==========================
+
+  interface SpreadTutorialStep {
+  id: string;
+  title: string;
+  text: string;
+  selector: string; // CSS selector del elemento a enfocar
+}
 
   type Placed = {
     position: number;
@@ -149,6 +157,47 @@
     deckReady = false;
 
     loading = false;
+    showTutorialChoice = false;
+
+
+    tutorialActive = false;
+    currentStepIndex = 0;
+
+  // Spotlight
+    spotX = 0;
+    spotY = 0;
+    spotR = 120;
+
+
+    //- TUTORIAL STEPS-//
+
+    tutorialSteps: SpreadTutorialStep[] = [
+    {
+      id: 'board',
+      title: 'Tablero de Tiradas',
+      text: 'Aquí eliges el tipo de tirada: amor, camino, trabajo… cada carta abre una historia diferente. Utiliza el desplegable en la barra superior izquierda para elegir una tirada rapida (Presente, Pasado, Futuro), o una tirada más compleja como la Cruz Celta.',
+      selector: '.board', // por ejemplo, un contenedor de las cards de tiradas
+    },
+    {
+      id: 'mazo',
+      title: 'Tirada de cartas',
+      text: 'Puedes hacer una tirada de cartas pulsando al mazo, o en su defecto en hacer tirada en el boton central',
+      selector: '.deck-pile',
+    },
+    {
+      id: 'menulateral',
+      title: 'Menu Lateral',
+      text: 'En el menu lateral puedes acceder al boton de barajar para darle tu energia a tu mazo, visualizar el historial de tiradas y volver a disponer de las cartas nuevamente como fueron en ese entonces, y las lecturas guardadas por la inteligencia artificial, en ese orden.',
+      selector: '.rail',
+    },
+    
+    {
+      id: 'Interpretacion',
+      title: 'Interpretación con IA',
+      text: 'Una vez tengas tus cartas en el tablero, puedes pedir a la inteligencia artificial que te interprete la tirada. Solo necesitas un contexto (¿sobre qué quieres que te hable la IA?) y una DruCoin para cada interpretación.',
+      selector: '.interpret-container',
+    }
+  ];
 
     // Imagen de loading místico
     loadingWizardMobile: string = `${environment.CDN_BASE}/cards/magoceltaloading.gif`;
@@ -218,7 +267,7 @@
     private activeModalContexts = new Set<string>();
 
 
-
+    
     get canDeal() {
       return this.deckReady && !this.dealing;
     }
@@ -284,82 +333,203 @@
     // CICLO DE VIDA
     // ============================================
 
-    async ngOnInit() {
+   async ngOnInit(): Promise<void> {
+  // ============================
+  // TUTORIAL: elección inicial
+  // ============================
+  const choice = localStorage.getItem('meigo.spreads.tutorial');
 
-    console.group('%c[SpreadsComponent INIT]', 'color:#66f');
+  if (!choice) {
+    // Nunca ha elegido nada → mostramos “Ver tutorial / Nah…”
+    this.showTutorialChoice = true;
+  } else if (choice === 'completed') {
+    // Ya hizo el tour una vez → no molestamos
+    this.showTutorialChoice = false;
+  } else if (choice === 'skipped') {
+    // Dijo que no → tampoco molestamos
+    this.showTutorialChoice = false;
+  }
 
-    this.authService.needsTerms$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((needs) => {
-        console.debug('→ needsTerms updated:', needs);
-        this.needsTerms = needs;
-        this.cdr.markForCheck();
-      });
+  // ============================
+  // INIT normal del componente
+  // ============================
+  console.group('%c[SpreadsComponent INIT]', 'color:#66f');
 
-    const sessionStatus = await this.sessionService.validate(true);
-    console.debug('→ Session validate result:', sessionStatus);
+  this.authService.needsTerms$
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((needs) => {
+      console.debug('→ needsTerms updated:', needs);
+      this.needsTerms = needs;
+      this.cdr.markForCheck();
+    });
 
-    // ⭐ FIX: sincronizar DruCoins REALES tras validate()
-    const snap = this.sessionService.snapshot;
-    console.debug('→ Synced drucoins from SessionService:', snap.drucoins);
+  const sessionStatus = await this.sessionService.validate(true);
+  console.debug('→ Session validate result:', sessionStatus);
 
-    this.drucoinBalance = snap.drucoins;
-    this.authService.updateDrucoinBalance(snap.drucoins);
-    let needsTerms = !!snap.needsTerms;
-    this.historyList = this.normalizeHistoryList(this.readHistory());
-    this.cdr.markForCheck();
+  // ⭐ FIX: sincronizar DruCoins REALES tras validate()
+  const snap = this.sessionService.snapshot;
+  console.debug('→ Synced drucoins from SessionService:', snap.drucoins);
 
-    if (sessionStatus === 'invalid') {
-      console.warn('⚠️ Sesión inválida. Redirigiendo a login.');
-      await this.router.navigate(['/login']);
-      console.groupEnd();
+  this.drucoinBalance = snap.drucoins;
+  this.authService.updateDrucoinBalance(snap.drucoins);
+
+  let needsTerms = !!snap.needsTerms;
+
+  // Historial local
+  this.historyList = this.normalizeHistoryList(this.readHistory());
+  this.cdr.markForCheck();
+
+  // Si la sesión es inválida, fuera
+  if (sessionStatus === 'invalid') {
+    console.warn('⚠️ Sesión inválida. Redirigiendo a login.');
+    await this.router.navigate(['/login']);
+    console.groupEnd();
+    return;
+  }
+
+  // Sincronizar estado de términos
+  if (sessionStatus === 'needs-terms') {
+    needsTerms = true;
+  } else if (!needsTerms) {
+    needsTerms = await this.authService.syncTermsStatus();
+  }
+
+  console.debug('→ needsTerms (sync):', needsTerms);
+
+  this.needsTerms = needsTerms;
+  if (needsTerms) {
+    this.authService.requireTermsAcceptance();
+  } else {
+    this.authService.markTermsAccepted();
+  }
+  this.cdr.markForCheck();
+
+  // Fondo / mazo / spreads
+  this.resolveBgInBackground();
+
+  await this.loadDeckFirst();
+  this.rebuildSlots();
+  this.loadSpreadsInBackground();
+
+  // Historial remoto (API)
+  const user = this.auth.currentUser;
+
+  if (user) {
+    const token = await user.getIdToken(true);
+    console.debug('→ Loading history from API...');
+
+    const res = await fetch(`${environment.API_BASE}/history/list`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    if (data?.ok && Array.isArray(data.history)) {
+      console.debug('→ Remote history loaded:', data.history);
+      const normalized = this.normalizeHistoryList(data.history);
+      this.historyList = normalized;
+      this.writeHistory(normalized);
+      this.cdr.markForCheck();
+    }
+  }
+
+  console.groupEnd();
+}
+
+
+// TUTORIAL CHOICE HANDLERS //
+
+// ==== Elección inicial ====
+
+  onClickSeeTutorial() {
+    this.showTutorialChoice = false;
+    this.startTutorial();
+  }
+
+  onClickSkipTutorial() {
+    this.showTutorialChoice = false;
+    this.tutorialActive = false;
+    localStorage.setItem('meigo.spreads.tutorial', 'skipped');
+  }
+
+  // ==== Flujo del tutorial ====
+
+  startTutorial() {
+    this.currentStepIndex = 0;
+    this.tutorialActive = true;
+
+    // Esperamos un frame para que el DOM esté listo
+    setTimeout(() => this.updateSpotlight(), 0);
+  }
+
+  finishTutorial() {
+    this.tutorialActive = false;
+    localStorage.setItem('meigo.spreads.tutorial', 'completed');
+  }
+
+  get currentStep(): SpreadTutorialStep {
+    return this.tutorialSteps[this.currentStepIndex];
+  }
+
+  nextStep() {
+    if (this.currentStepIndex < this.tutorialSteps.length - 1) {
+      this.currentStepIndex++;
+      this.updateSpotlight();
+    } else {
+      this.finishTutorial();
+    }
+  }
+
+  prevStep() {
+    if (this.currentStepIndex > 0) {
+      this.currentStepIndex--;
+      this.updateSpotlight();
+    }
+  }
+
+  skipTutorial() {
+    this.tutorialActive = false;
+    localStorage.setItem('meigo.spreads.tutorial', 'skipped');
+  }
+
+  // ==== Spotlight (círculo que enfoca cosas) ====
+
+  updateSpotlight() {
+    if (typeof window === 'undefined') return;
+
+    const step = this.currentStep;
+    const el = document.querySelector(step.selector) as HTMLElement | null;
+
+    if (!el) {
+      // Fallback: centro de la pantalla
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      this.spotX = vw / 2;
+      this.spotY = vh / 2.5;
+      this.spotR = 180;
       return;
     }
 
-    if (sessionStatus === 'needs-terms') {
-      needsTerms = true;
-    } else if (!needsTerms) {
-      needsTerms = await this.authService.syncTermsStatus();
-    }
+    const rect = el.getBoundingClientRect();
 
-    console.debug('→ needsTerms (sync):', needsTerms);
-
-    this.needsTerms = needsTerms;
-    if (needsTerms) {
-      this.authService.requireTermsAcceptance();
-    } else {
-      this.authService.markTermsAccepted();
-    }
-    this.cdr.markForCheck();
-
-    this.resolveBgInBackground();
-
-    await this.loadDeckFirst();
-    this.rebuildSlots();
-    this.loadSpreadsInBackground();
-
-    const user = this.auth.currentUser;
-
-    if (user) {
-      const token = await user.getIdToken(true);
-      console.debug('→ Loading history from API...');
-
-      const res = await fetch(`${environment.API_BASE}/history/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const data = await res.json();
-      if (data?.ok && Array.isArray(data.history)) {
-        console.debug('→ Remote history loaded:', data.history);
-        const normalized = this.normalizeHistoryList(data.history);
-        this.historyList = normalized;
-        this.writeHistory(normalized);
-        this.cdr.markForCheck();
-      }
-    }
-
-    console.groupEnd();
+    this.spotX = rect.left + rect.width / 2;
+    this.spotY = rect.top + rect.height / 2;
+    this.spotR = Math.max(rect.width, rect.height) / 2 + 24; // margen extra
   }
+
+  @HostListener('window:resize')
+  onResize() {
+    if (this.tutorialActive) {
+      this.updateSpotlight();
+    }
+  }
+
+  @HostListener('window:scroll')
+  onScroll() {
+    if (this.tutorialActive) {
+      this.updateSpotlight();
+    }
+  }
+  // ============================
 
 
     ngOnDestroy() {
@@ -370,6 +540,10 @@
       }
     }
 
+
+
+
+    
     // ============================================
   // DRUCOINS / TERMS / LECTURA — PARTE 2 / 4
   // ============================================

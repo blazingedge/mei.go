@@ -1560,3 +1560,156 @@
   line-height: 1.6;
 }
 
+
+/* ===== Elección inicial ===== */
+
+.tutorial-choice {
+  margin: 0.75rem auto 0.5rem;
+  padding: 0.75rem 1rem;
+  max-width: 720px;
+  border-radius: 16px;
+  background: #f6efe3;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.tutorial-choice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tutorial-choice button {
+  border-radius: 999px;
+  border: none;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tutorial-choice button:not(.secondary) {
+  background: #2f1b0c;
+  color: #f6efe3;
+}
+
+.tutorial-choice button.secondary {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  color: #2f1b0c;
+}
+
+/* ===== Overlay con spotlight ===== */
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-end;
+
+  /* Fondo con círculo transparente donde enfocamos */
+  background:
+    radial-gradient(
+      circle at var(--spot-x) var(--spot-y),
+      transparent 0,
+      transparent calc(var(--spot-r)),
+      rgba(0, 0, 0, 0.75) calc(var(--spot-r) + 2px)
+    );
+}
+
+/* Panel inferior */
+
+.tutorial-panel {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto 1rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 18px;
+  background: #f6efe3;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  font-size: 0.95rem;
+}
+
+.tutorial-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.tutorial-panel__step {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.tutorial-panel__skip {
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.tutorial-panel__title {
+  margin: 0.1rem 0 0.3rem;
+  font-size: 1.05rem;
+}
+
+.tutorial-panel__text {
+  margin: 0 0 0.6rem;
+  line-height: 1.45;
+}
+
+.tutorial-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.tutorial-panel__actions button {
+  border-radius: 999px;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tutorial-panel__actions button:not(.secondary) {
+  background: #2f1b0c;
+  color: #f6efe3;
+}
+
+.tutorial-panel__actions button.secondary {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  color: #2f1b0c;
+}
+
+.tutorial-panel__actions button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tutorial-panel__thanks {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+/* Responsivo */
+
+@media (max-width: 600px) {
+  .tutorial-panel {
+    margin-bottom: 0.75rem;
+    border-radius: 16px 16px 0 0;
+  }
+}
+

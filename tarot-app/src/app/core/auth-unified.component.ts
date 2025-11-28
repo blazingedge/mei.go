@@ -11,6 +11,7 @@ import { SessionService } from './services/session.service';
 import { TermsCoordinatorService } from './services/terms-coordinator.service';
 import { TermsModalComponent } from '../components/terms-modal.component';
 import { ForgotPasswordModalComponent } from '../components/forgot-password-modal.component';
+import { AboutMeigoComponent } from '../components/about-meigo.component';
 
 declare global {
   interface Window {
@@ -27,7 +28,8 @@ declare global {
     LogoComponent,
     IntroParticlesComponent,
     TermsModalComponent,
-    ForgotPasswordModalComponent
+    ForgotPasswordModalComponent,
+    AboutMeigoComponent 
   ],
   templateUrl: './auth-unified.component.html',
   styleUrls: [
@@ -44,6 +46,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   showForgotModal = false;
   introaudio!: HTMLAudioElement;
   audioUnlocked = false;
+  aboutOpen = false;
 
 
   loading = false;
@@ -115,6 +118,14 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   }
 }
 
+
+openAboutSection() {
+  this.aboutOpen = true;
+}
+
+onAboutClosed() {
+  this.aboutOpen = false;
+}
 
 
 

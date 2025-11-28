@@ -1,4 +1,79 @@
-﻿
+﻿<!-- Barra inicial: ¿Ver tutorial o pasar? -->
+@if (showTutorialChoice) {
+  <div class="tutorial-choice">
+    <p>
+      ¿Quieres un recorrido rápido por el menú de tiradas
+      o prefieres explorar a tu aire?
+    </p>
+
+    <div class="tutorial-choice__actions">
+      <button type="button" (click)="onClickSeeTutorial()">
+        Ver tutorial
+      </button>
+
+      <button type="button" class="secondary" (click)="onClickSkipTutorial()">
+        Nah, seguir intuitivamente
+      </button>
+    </div>
+  </div>
+}
+
+<!-- Overlay del tutorial con spotlight -->
+@if (tutorialActive) {
+  <div
+    class="tutorial-overlay"
+    [style.--spot-x.px]="spotX"
+    [style.--spot-y.px]="spotY"
+    [style.--spot-r.px]="spotR"
+  >
+    <!-- El fondo en sí es el radial-gradient en CSS -->
+
+    <!-- Panel de texto abajo -->
+    <div class="tutorial-panel">
+      <div class="tutorial-panel__header">
+        <span class="tutorial-panel__step">
+          Paso {{ currentStepIndex + 1 }} de {{ tutorialSteps.length }}
+        </span>
+        <button type="button" class="tutorial-panel__skip" (click)="skipTutorial()">
+          Saltar tutorial
+        </button>
+      </div>
+
+      <h3 class="tutorial-panel__title">
+        {{ currentStep.title }}
+      </h3>
+
+      <p class="tutorial-panel__text">
+        {{ currentStep.text }}
+      </p>
+
+      <div class="tutorial-panel__actions">
+        <button
+          type="button"
+          class="secondary"
+          (click)="prevStep()"
+          [disabled]="currentStepIndex === 0"
+        >
+          Anterior
+        </button>
+
+        <button
+          type="button"
+          (click)="nextStep()"
+        >
+          {{ currentStepIndex === tutorialSteps.length - 1 ? 'Terminar' : 'Siguiente' }}
+        </button>
+      </div>
+
+      @if (currentStepIndex === tutorialSteps.length - 1) {
+        <p class="tutorial-panel__thanks">
+          Gracias por completar el recorrido. 🦉 El Meigo ya sabe que dominas este menú.
+        </p>
+      }
+    </div>
+  </div>
+}
+
 
 <!-- ===========================================================
       LAYOUT GENERAL — Rail / Board / Panel
@@ -8,7 +83,7 @@
   <!-- ===========================================================
         RAIL IZQUIERDO (SIEMPRE VISIBLE)
        =========================================================== -->
-  <aside class="rail rail--beige">
+  <aside class="rail rail--beige" id ="menulateral">
 
     <!-- Estado del mazo -->
     <div class="rail-status-min" aria-live="polite">
@@ -216,7 +291,7 @@
   <!-- ===========================================================
         DESKTOP BOARD
        =========================================================== -->
-  <section class="board"
+  <section class="board" id= "board"
            [style.backgroundImage]="boardBgUrl">
 
     <div class="spread-select">
@@ -289,7 +364,7 @@
       </button>
     </div>
 
-    <div class="deck-pile"
+    <div class="deck-pile " id = "deck-pile"
          (click)="onDeckClick()"
          [class.shuffle]="deckShuffling || loadingDeck">
 
@@ -629,6 +704,7 @@
     </div>
   </div>
 }
+
 
 
 
