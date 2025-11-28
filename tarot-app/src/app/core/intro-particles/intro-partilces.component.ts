@@ -37,10 +37,15 @@ export class IntroParticlesComponent implements OnInit, OnDestroy {
   private maxTextOpacity = 0.9;
 
   private vortexStrength = 0;     // 0 = sin remolino, 1 = remolino completo
-private vortexX = 0;
-private vortexY = 0;
-private revealText = false;
-private textOpacity = 0;
+  private vortexX = 0;
+  private vortexY = 0;
+  private revealText = false;
+  private textOpacity = 0;
+
+  private audioCtx?: AudioContext;
+  private analyser?: AnalyserNode;
+  private dataArray?: Uint8Array;
+  private rafId?: number;
 
   ngOnInit(): void {
     const canvas = this.canvasRef.nativeElement;
@@ -64,7 +69,7 @@ private textOpacity = 0;
     cancelAnimationFrame(this.raf);
   }
   private playMeigoIntro() {
-  const audio = new Audio(`${environment.CDN_BASE}/audio/elmeigovoice.ogg`);
+  const audio = new Audio(`${environment.CDN_BASE}/audio/Lobo-de-Luna-y-Sal.ogg`);
   audio.volume = 0.75;
   audio.play().catch(err => {
     console.warn("No se pudo reproducir intro:", err);

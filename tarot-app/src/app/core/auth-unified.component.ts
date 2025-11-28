@@ -1,4 +1,4 @@
-﻿import { Component, AfterViewInit, OnInit, OnDestroy } from '@angular/core';
+﻿import { Component, AfterViewInit, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -47,7 +47,14 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   introaudio!: HTMLAudioElement;
   audioUnlocked = false;
   aboutOpen = false;
+  showWaves = false;
 
+  @ViewChild('waveCanvas') waveCanvas?: ElementRef<HTMLCanvasElement>;
+ 
+  private audioCtx?: AudioContext;
+  private analyser?: AnalyserNode;
+  private dataArray?: Uint8Array;
+  private rafId?: number;
 
   loading = false;
   loginError = '';
@@ -74,6 +81,7 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
   
 
   ngAfterViewInit() {
+    this.resizeCanvas();
     const intro = document.querySelector('.intro-overlay') as HTMLElement | null;
 
     if (intro) {
@@ -117,6 +125,84 @@ export class AuthUnifiedComponent implements AfterViewInit, OnInit, OnDestroy {
     alert('No se pudo enviar el correo de recuperación.');
   }
 }
+
+private setupVisualizer() {
+  if (this.audioCtx || !this.waveCanvas) return;
+
+  const audioCtx = new AudioContext();
+  const source = audioCtx.createMediaElementSource(this.introaudio);
+  const analyser = audioCtx.createAnalyser();
+
+  analyser.fftSize = 256;
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  // 🔹 Guardar en la instancia
+  this.audioCtx = audioCtx;
+  this.analyser = analyser;
+  this.dataArray = dataArray;
+
+  // asegúrate de que el canvas ya tiene tamaño
+  this.resizeCanvas();
+  this.animateWaves();
+}
+
+  private animateWaves() {
+    const canvas = this.waveCanvas?.nativeElement;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !this.analyser || !this.dataArray) return;
+
+    const draw = () => {
+      this.rafId = requestAnimationFrame(draw);
+
+      
+      const width = canvas.width / (window.devicePixelRatio || 1);
+      const height = canvas.height / (window.devicePixelRatio || 1);
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Fondo oscuro suave
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(0, 0, width, height);
+
+      // Nivel medio de energía del audio
+      const avg =
+        this.dataArray!.reduce((sum, v) => sum + v, 0) /
+        this.dataArray!.length;
+
+      const baseAmp = Math.max(avg / 255, 0.2); // 0–1
+      const centerY = height * 0.5;
+      const waves = 3;
+
+      for (let i = 0; i < waves; i++) {
+        const amplitude = baseAmp * height * (0.2 + i * 0.12);
+        const offsetY = centerY + (i - 1) * 10;
+        const freq = 2 + i; // nº de ondas en pantalla
+
+        const alpha = 0.9 - i * 0.25;
+        ctx.strokeStyle = `rgba(214, 180, 108, ${alpha})`;
+        ctx.lineWidth = 2 - i * 0.3;
+
+        ctx.beginPath();
+        const segments = 64;
+        for (let j = 0; j <= segments; j++) {
+          const t = j / segments;
+          const x = t * width;
+          const y =
+            offsetY +
+            Math.sin(t * Math.PI * 2 * freq) * amplitude;
+          if (j === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    };
+
+    draw();
+  }
 
 
 openAboutSection() {
@@ -163,7 +249,7 @@ onAboutClosed() {
   this.resumeGoogleRedirect();
 
   // cargar audio
-  this.introaudio! = new Audio(`${environment.CDN_BASE}/audio/elmeigovoice.ogg`);
+  this.introaudio! = new Audio(`${environment.CDN_BASE}/audio/Lobo-de-Luna-y-Sal.ogg`);
   this.introaudio!.volume = 0.8;
 
   this.auth.termsAccepted$
@@ -180,7 +266,15 @@ enableSound() {
   });
 
   this.audioUnlocked = true;
+  this.showWaves = true;
+
+  // pequeño delay para que el *ngIf monte el canvas
+  setTimeout(() => {
+    this.resizeCanvas();
+    this.setupVisualizer();
+  }, 0);
 }
+
 
 skipIntro() {
   this.showIntro = false;
@@ -208,6 +302,9 @@ skipIntro() {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.audioCtx?.close();
   }
   
 
@@ -242,6 +339,8 @@ skipIntro() {
     }
     
   }
+
+  
 
   private async afterAuth() {
     try {
@@ -344,6 +443,26 @@ skipIntro() {
       this.loading = false;
     }
   }
+
+  
+  private resizeCanvas() {
+    const canvas = this.waveCanvas?.nativeElement;
+    if (!canvas || typeof window === 'undefined') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    // tamaño físico en píxeles
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Escala para que todo lo que dibujemos esté en "px CSS"
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }
+
 
   async authGoogle() {
     this.auth.authFlowStarted = true;

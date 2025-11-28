@@ -87,3 +87,15 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+// Visualizador de ondas de audio
+
+.meigo-wave-visualizer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px; // ajusta a gusto
+  width: 100%;
+  pointer-events: none;
+  z-index: 4; // por encima del fondo y hojas, por debajo o al mismo nivel que los botones
+}

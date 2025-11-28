@@ -190,7 +190,7 @@
       text: 'En el menu lateral puedes acceder al boton de barajar para darle tu energia a tu mazo, visualizar el historial de tiradas y volver a disponer de las cartas nuevamente como fueron en ese entonces, y las lecturas guardadas por la inteligencia artificial, en ese orden.',
       selector: '.rail',
     },
-    
+
     {
       id: 'Interpretacion',
       title: 'Interpretación con IA',
@@ -221,7 +221,7 @@
     isInterpreting = false;
     interpretationText = '';
     showInterpretation = false;
-
+    showWaves = false;
 
     showHistory = false;
     historyList: HistoryEntry[] = [];
