@@ -218,6 +218,20 @@ await next();
 // CORS (global)
 // =====================
 
+// =====================
+// CORS (global)
+// =====================
+app.use(
+  '*',
+  cors({
+    origin: (origin, c) =>
+      getAllowedOrigin(origin, c.req.raw, c.env as Env),
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    maxAge: 86400,
+    credentials: true,
+  })
+);
 
 
 
