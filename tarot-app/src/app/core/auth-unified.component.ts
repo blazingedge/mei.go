@@ -1,4 +1,4 @@
-﻿import { Component, AfterViewInit, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+﻿import { Component, AfterViewInit, OnInit, OnDestroy, ViewChild, ElementRef, Injectable, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -12,10 +12,35 @@ import { TermsCoordinatorService } from './services/terms-coordinator.service';
 import { TermsModalComponent } from '../components/terms-modal.component';
 import { ForgotPasswordModalComponent } from '../components/forgot-password-modal.component';
 import { AboutMeigoComponent } from '../components/about-meigo.component';
+import { Auth } from '@angular/fire/auth';
 
 declare global {
   interface Window {
     turnstile?: any;
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class DebugService {
+  constructor(@Inject(Auth) private auth: Auth) {}
+
+  async debugSessionValidate() {
+    const user = this.auth.currentUser;
+    if (!user) {
+      console.warn('No hay currentUser en Firebase');
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+    console.log('[debug] token length:', token.length);
+
+    const res = await fetch(`${environment.API_BASE}/session/validate`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    console.log('[debug] status:', res.status);
+    console.log('[debug] ACAO:', res.headers.get('access-control-allow-origin'));
+    console.log('[debug] body:', await res.text());
   }
 }
 
@@ -220,14 +245,14 @@ onAboutClosed() {
 
 
 
-  private initTurnstile() {
+private initTurnstile() {
   const render = () => {
     if (window.turnstile && document.getElementById('cf-turnstile')) {
-      window.turnstile.render("#cf-turnstile", {
-        sitekey: "0x4AAAAAACAX4mmeQUvYpIQr",
-        theme: "auto",
+      window.turnstile.render('#cf-turnstile', {
+        sitekey: environment.TURNSTILE_SITE_KEY,
+        theme: 'auto',
         callback: (token: string) => {
-          console.log("Token recibido:", token);
+          console.log('Token recibido:', token);
           this.turnstileToken = token;
         }
       });
@@ -236,19 +261,15 @@ onAboutClosed() {
     return false;
   };
 
- 
-
-
   if (!render()) {
     let tries = 0;
     const timer = setInterval(() => {
       tries++;
-      if (render() || tries > 10) {
-        clearInterval(timer);
-      }
+      if (render() || tries > 10) clearInterval(timer);
     }, 300);
   }
 }
+
 
   ngOnInit() {
   this.resumeGoogleRedirect();
@@ -558,6 +579,10 @@ skipIntro() {
   this.showForgotModal = false;
 
   }
+
+  
+
+
 }
 
 

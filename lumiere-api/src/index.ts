@@ -1,9 +1,8 @@
 ﻿﻿// src/index.ts
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import bcrypt from 'bcryptjs';
+
 import { DECK } from './deck';
-import { verifyTurnstile } from './verifyturnstile';
 import { APIUserAbortError } from 'openai';
 
 
@@ -29,6 +28,7 @@ const LOCAL_ORIGINS = [
 
 const PROD_ORIGINS = [
 'https://mei-go.pages.dev',
+'https://meigo-app.web.app',
 ];
 
 const CDN_BASE =
@@ -43,10 +43,12 @@ TURNSTILE_SECRET: string;
 FIREBASE_API_KEY?: string;
 
 RESEND_API_KEY?: string;      // 🔹 para email de bienvenida
-RESEND_FROM_EMAIL?: string;   // ej: 'Meigo <no-reply@meigo.app>'
+RESEND_FROM_EMAIL?: string;
+TAROT_LIMITS: KVNamespace;
+// ej: 'Meigo <no-reply@meigo.app>'
 
 // 🔐 PayPal
-  PAYPAL_CLIENT_ID?: string;
+  PAY_PAL_CLIENT_ID?: string;
   PAYPAL_SECRET?: string;
   PAYPAL_API_BASE?: string; // opcional, por si cambias a sandbox
 };
@@ -213,10 +215,6 @@ console.error('⚠️ Error en logger global:', err);
 
 await next();
 });
-
-// =====================
-// CORS (global)
-// =====================
 
 // =====================
 // CORS (global)
