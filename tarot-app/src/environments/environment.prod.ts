@@ -2,6 +2,7 @@ export const environment = {
   production: true,
   API_BASE: 'https://lumiere-api.laife91.workers.dev/api',
   CDN_BASE: 'https://lumiere-api.laife91.workers.dev/cdn',
+  TURNSTILE_SITE_KEY: '0x4AAAAAACAX4mmeQUvYpIQr',
   CARD_BACK_URL: '',
   PAY_PAL_CLIENT_ID: 'ASsFTtjHp9oEj8w7nzfBRNe6TLqvbqdGNYCJVUZ0Y89xje8RPpO0Nk3pqrSWjTcMl-4lsUIAxhVpPNlB',
   firebase: {
