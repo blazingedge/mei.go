@@ -171,7 +171,7 @@
 
     //- TUTORIAL STEPS-//
 
-    tutorialSteps: SpreadTutorialStep[] = [
+    private readonly tutorialStepsDesktop: SpreadTutorialStep[] = [
     {
       id: 'board',
       title: 'Tablero de Tiradas',
@@ -198,6 +198,37 @@
       selector: '.interpret-container',
     }
   ];
+
+  private readonly tutorialStepsMobile: SpreadTutorialStep[] = [
+  {
+    id: 'mobile-spread-select',
+    title: 'Tablero de Tiradas',
+    text: 'En móvil, el tablero se adapta a la pantalla. Usa el selector de tiradas en la parte superior para cambiar entre tiradas rápidas o la Cruz Celta.',
+    selector: '.mobile-spread-select',
+  },
+  {
+    id: 'mazo',
+    title: 'Tirada de cartas',
+    text: 'Toca el mazo central o el botón de “Hacer tirada” para repartir las cartas. Después podrás deslizar o tocar cada carta para verla mejor.',
+    selector: '.deck-pile',
+  },
+  {
+    id: 'menulateral',
+    title: 'Acciones y menú',
+    text: 'Desde el menú lateral puedes barajar, ver tu historial y abrir tus lecturas guardadas. En móvil suele aparecer como panel deslizante o botón lateral.',
+    selector: '.rail',
+  },
+  {
+    id: 'Interpretacion',
+    title: 'Interpretación con IA',
+    text: 'En móvil se abrirá un cuadro para que escribas tu contexto. Cada interpretación consume 1 DruCoin y puedes leerla en un panel cómodo para la pantalla pequeña.',
+    selector: '.interpret-container',
+  },
+];
+
+tutorialSteps: SpreadTutorialStep[] = this.tutorialStepsDesktop;
+
+
 
     // Imagen de loading místico
     loadingWizardMobile: string = `${environment.CDN_BASE}/cards/magoceltaloading.gif`;
@@ -253,7 +284,7 @@
     readonly hangingMenuItems = [
       { label: 'Mi cuenta', action: 'account' },
       { label: 'Configuración', action: 'settings' },
-      { label: 'Premium / Drucoins', action: 'premium' },
+      { label: 'Drucoins', action: 'premium' },
       { label: 'Cerrar sesión', action: 'logout' },
     ];
 
@@ -337,7 +368,8 @@
   // ============================
   // TUTORIAL: elección inicial
   // ============================
-  const choice = localStorage.getItem('meigo.spreads.tutorial');
+  const choice = localStorage.getItem(this.getTutorialStorageKey());
+  
 
   if (!choice) {
     // Nunca ha elegido nada → mostramos “Ver tutorial / Nah…”
@@ -448,27 +480,40 @@
   onClickSkipTutorial() {
     this.showTutorialChoice = false;
     this.tutorialActive = false;
-    localStorage.setItem('meigo.spreads.tutorial', 'skipped');
+    localStorage.setItem(this.getTutorialStorageKey(), 'skipped');
   }
 
   // ==== Flujo del tutorial ====
 
   startTutorial() {
-    this.currentStepIndex = 0;
-    this.tutorialActive = true;
+  // seleccionar pasos según viewport
+  this.tutorialSteps = this.isMobile
+    ? this.tutorialStepsMobile
+    : this.tutorialStepsDesktop;
 
-    // Esperamos un frame para que el DOM esté listo
-    setTimeout(() => this.updateSpotlight(), 0);
-  }
+  this.currentStepIndex = 0;
+  this.tutorialActive = true;
+
+  // Esperamos un frame para que el DOM esté listo
+  setTimeout(() => this.updateSpotlight(), 0);
+}
+
 
   finishTutorial() {
     this.tutorialActive = false;
-    localStorage.setItem('meigo.spreads.tutorial', 'completed');
+    localStorage.setItem(this.getTutorialStorageKey(), 'completed');
   }
 
   get currentStep(): SpreadTutorialStep {
     return this.tutorialSteps[this.currentStepIndex];
   }
+
+  private getTutorialStorageKey(): string {
+  return this.isMobile
+    ? 'meigo.spreads.tutorial.mobile'
+    : 'meigo.spreads.tutorial.desktop';
+}
+
 
   nextStep() {
     if (this.currentStepIndex < this.tutorialSteps.length - 1) {
@@ -488,7 +533,7 @@
 
   skipTutorial() {
     this.tutorialActive = false;
-    localStorage.setItem('meigo.spreads.tutorial', 'skipped');
+    localStorage.setItem(this.getTutorialStorageKey(), 'skipped');
   }
 
   // ==== Spotlight (círculo que enfoca cosas) ====

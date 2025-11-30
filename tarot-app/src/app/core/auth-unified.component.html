@@ -137,6 +137,12 @@
           @if (regError) {
             <p class="error">{{ regError }}</p>
           }
+           <!-- Botón de términos -->
+          <button type="button"
+                  class="terms-btn"
+                  (click)="openTerms()">
+            Ver Términos y Condiciones
+          </button>
 
           <!-- CAPTCHA CORREGIDO -->
           <div id="cf-turnstile"></div>
@@ -148,12 +154,7 @@
             Crear cuenta
           </button>
 
-          <!-- Botón de términos -->
-          <button type="button"
-                  class="terms-btn"
-                  (click)="openTerms()">
-            Ver Términos y Condiciones
-          </button>
+         
 
            <div>
 
@@ -163,6 +164,8 @@
     (click)="openAboutSection()">
     Acerca de Meigo
   </button>
+
+  
    </div>
 
 

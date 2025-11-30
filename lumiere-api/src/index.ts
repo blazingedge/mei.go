@@ -44,7 +44,7 @@ FIREBASE_API_KEY?: string;
 
 RESEND_API_KEY?: string;      // 🔹 para email de bienvenida
 RESEND_FROM_EMAIL?: string;
-TAROT_LIMITS: KVNamespace;
+TAROT_LIMIT: KVNamespace;
 // ej: 'Meigo <no-reply@meigo.app>'
 
 // 🔐 PayPal
@@ -1957,7 +1957,7 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
 // Devuelve { ok: false } si llegó al límite.
 export async function incrementMeaningCount(env: Env, uid: string) {
   const key = `meaning:${uid}`;
-  const raw = await env.TAROT_LIMITS.get(key);
+  const raw = await env.TAROT_LIMIT.get(key);
   let count = raw ? parseInt(raw, 10) : 0;
 
   count++;
@@ -1966,14 +1966,14 @@ export async function incrementMeaningCount(env: Env, uid: string) {
     return { ok: false, count };
   }
 
-  await env.TAROT_LIMITS.put(key, count.toString(), { expirationTtl: 7200 }); // 2 horas
+  await env.TAROT_LIMIT.put(key, count.toString(), { expirationTtl: 7200 }); // 2 horas
   return { ok: true, count };
 }
 
 
 export async function resetMeaningCount(env: Env, uid: string) {
   const key = `meaning:${uid}`;
-  await env.TAROT_LIMITS.delete(key);
+  await env.TAROT_LIMIT.delete(key);
 }
 
 // ============================================================
