@@ -9,6 +9,11 @@ jobs:
     name: Deploy Worker
     runs-on: ubuntu-latest
 
+    # Para no estar haciendo "cd" a mano
+    defaults:
+      run:
+        working-directory: lumiere-api
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -18,16 +23,12 @@ jobs:
         with:
           node-version: 20
 
-      # ⚠️ IMPORTANTE: Movernos a la carpeta del Worker
-      - name: Change to worker directory
-        run: cd lumiere-api && pwd
+      - name: Install dependencies
+        run: npm ci          # o "npm install" si no usas package-lock
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
-
-      - name: Deploy Worker
+      - name: Deploy Worker with Wrangler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          cd lumiere-api
-          wrangler deploy
+        run: npx wrangler deploy
+        # si prefieres seguir con global: "wrangler deploy"
+
