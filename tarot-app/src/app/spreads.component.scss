@@ -141,6 +141,13 @@
     .ghost--shuffle  { background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/barajar-icon.webp'); }
     .ghost--history  { background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/historial.webp'); }
     .ghost--saved    { background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/intepretaciones-icon.webp'); }
+    .ghost--donate { background-image: url('https://pub-dd5dcc9095b64f479cded9e2d85818d9.r2.dev/assets/v1/cards/paypaldonation.webp'); 
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  /* si quieres que se note especial */
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
   }
 
   /* === Controles principales === */
@@ -1713,3 +1720,4 @@
   }
 }
 
+ 

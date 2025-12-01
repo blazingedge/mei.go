@@ -5,9 +5,8 @@ export const environment = {
   API_BASE: 'https://api-qy727ynu3q-ew.a.run.app',
   TURNSTILE_SITE_KEY: '0x4AAAAAACAX4mmeQUvYpIQr',
   CARD_BACK_URL: '',
-  PAY_PAL_CLIENT_ID: 'AdoB3_ZCYFDvLxRPXuEyzx311rF0SQzoY9Y1eLd51sAy2GuqZh8L6pP80y08sHGmBuTj_bZCDUEoxZxc',
-  firebase: {
-    apiKey: "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ",
+  PAY_PAL_CLIENT_ID: "AX582HnaICAorVmiGKbJ5BICLYLjfZU82oqKzYDBtEzx2vIxV2ubORN62GYNuCUUEHhBQqzTMuQp0Rbh´", 
+ firebase: {
     authDomain: "meigo-app.firebaseapp.com",
     projectId: "meigo-app",
     storageBucket: "meigo-app.firebasestorage.app",
