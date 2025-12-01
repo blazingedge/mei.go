@@ -24,10 +24,10 @@ ENV = "production"
 CORS_ORIGINS = "http://localhost:4200,http://127.0.0.1:4200,https://mei-go.pages.dev,https://*.mei-go.pages.dev"
 
 # Firebase API key (esta puede ser pública, igual que en Angular)
-FIREBASE_API_KEY = "AIzaSyBhkbAf3nYulGJHThwNnH1_wIDICE3yPCQ"
+FIREBASE_API_KEY = "AIzaSyCU72zI56thDxuktjz0S1e8ugkWsKJOkEo"
 
 # Base de la API de PayPal (OJO: api-m.sandbox, no sandbox.paypal.com)
-PAYPAL_API_BASE  = "https://api-m.sandbox.paypal.com"
+PAYPAL_API_BASE  = "https://api-m.paypal.com"
 
 
 # =============================

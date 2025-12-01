@@ -6,6 +6,7 @@ import { DECK } from './deck';
 
 
 
+
 // ============================================================
 // 🃏 CARD NAME MAP — Crear mapa ES/EN basado en DECK
 // ============================================================
@@ -56,6 +57,7 @@ TAROT_LIMIT: KVNamespace;
 
 
 type Env = Bindings;
+let paymentsTableReady = false;
 
 // Respuesta típica de Firebase Auth (signUp / signInWithPassword)
 type FirebaseAuthResponse = {
@@ -65,6 +67,16 @@ email?: string;
 error?: { message?: string };
 };
 
+type TurnstileResponse = {
+  success: boolean;
+  "error-codes"?: string[];
+  challenge_ts?: string;
+  hostname?: string;
+  action?: string;
+  cdata?: string;
+};
+
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 // =====================
@@ -72,6 +84,8 @@ const app = new Hono<{ Bindings: Bindings }>();
 // =====================
 type PlanId = 'luz' | 'sabiduria' | 'quantico';
 let readingsTableReady = false;
+let drucoinTableReady = false;
+
 
 /**
 * OJO:
@@ -94,6 +108,36 @@ function getNextResetDate(): string {
 const now = new Date();
 const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 return next.toISOString().slice(0, 10);
+}
+
+
+
+
+export async function verifyTurnstile(
+  token: string,
+  env: Env
+): Promise<TurnstileResponse> {
+  // Usa SIEMPRE el FormData global del runtime de Cloudflare
+  const formData = new FormData();
+  formData.append('secret', env.TURNSTILE_SECRET);
+  formData.append('response', token);
+
+  const resp = await fetch(
+    'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    {
+      method: 'POST',
+      body: formData,
+    }
+  );
+
+  if (!resp.ok) {
+    console.error('❌ /siteverify status:', resp.status);
+    throw new Error(`turnstile_http_${resp.status}`);
+  }
+
+  const json = (await resp.json()) as TurnstileResponse;
+  console.log('Turnstile JSON:', json);
+  return json;
 }
 
 // =====================
@@ -225,6 +269,233 @@ app.use(
   })
 );
 
+// ===================== CAPTCHA PROCESSING
+
+// ============================================================
+// ✅ CAPTCHA / TURNSTILE VERIFY
+// ============================================================
+app.post('/api/captcha/verify', async (c) => {
+  try {
+    devLog(c.env as Env, '🔐 /api/captcha/verify llamado');
+
+    const body = await c.req.json().catch(() => ({} as any));
+    const token = body?.token || body?.response || '';
+
+    if (!token) {
+      devLog(c.env as Env, '⚠️ Falta token de Turnstile en el cuerpo');
+      return c.json({ ok: false, error: 'missing_token' }, 400);
+    }
+
+    const secret = c.env.TURNSTILE_SECRET;
+    if (!secret) {
+      console.error('❌ TURNSTILE_SECRET no está configurado en el Worker');
+      return c.json({ ok: false, error: 'missing_server_secret' }, 500);
+    }
+
+    // 💡 OPCIÓN A: usar tu helper verifyTurnstile
+    const result = await verifyTurnstile(token, c.env as Env);
+
+    devLog(c.env as Env, '🔍 Turnstile respuesta:', result);
+
+    if (!result.success) {
+      const codes = result['error-codes'] || [];
+      console.warn('⚠️ Turnstile verification FAILED', codes);
+      return c.json({
+        ok: false,
+        success: false,
+        errorCodes: codes,
+      });
+    }
+
+    return c.json({ ok: true, success: true });
+  } catch (err: any) {
+    console.error('💥 /api/captcha/verify ERROR:', err);
+    return c.json(
+      { ok: false, error: String(err?.message || err) },
+      500
+    );
+  }
+});
+
+
+///AUTHENTICATION FIREBASE ////
+
+
+// ============================================================
+// AUTH — REGISTRO (Firebase Email + Password)
+// ============================================================
+app.post('/api/auth/register', async (c) => {
+  console.groupCollapsed('%c📝 /api/auth/register', 'color:#00e676;font-weight:bold;');
+
+  try {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body || !body.email || !body.password) {
+      console.warn('❌ Falta email o password');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_fields' }, 400);
+    }
+
+    const email = String(body.email).trim().toLowerCase();
+    const password = String(body.password).trim();
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+
+    // ======================================================
+    // 🔐 FIREBASE SIGNUP
+    // ======================================================
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data: any = await resp.json().catch(() => ({}));
+    console.log('Firebase signup response:', data);
+
+    // ======================================================
+    // ❌ ERROR DE FIREBASE (bloque único, sin duplicados)
+    // ======================================================
+    if (!resp.ok || !data.idToken) {
+      console.warn('❌ Error Firebase:', data);
+
+      const fbError =
+        data?.error?.message ||
+        data?.error?.errors?.[0]?.message ||
+        'firebase_error';
+
+      // Mapeo humano
+      let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
+
+      switch (fbError) {
+        case 'EMAIL_EXISTS':
+          userMessage =
+            'Este correo ya está registrado. Prueba iniciando sesión.';
+          break;
+        case 'INVALID_EMAIL':
+          userMessage = 'El correo no tiene un formato válido.';
+          break;
+        case 'MISSING_PASSWORD':
+          userMessage = 'Debes indicar una contraseña.';
+          break;
+        default:
+          if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
+            userMessage =
+              'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
+          } else if (typeof fbError === 'string') {
+            userMessage = `Error al registrar: ${fbError}`;
+          }
+          break;
+      }
+
+      console.groupEnd();
+      return c.json(
+        {
+          ok: false,
+          error: fbError,
+          message: userMessage,
+        },
+        400
+      );
+    }
+
+    // ======================================================
+    // ✔️ REGISTRO EXITOSO
+    // ======================================================
+
+    const uid = data.localId;
+
+    // Enviar verificación de email
+    await sendFirebaseEmailVerification(apiKey, data.idToken);
+
+    // Guardar usuario en DB
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
+       VALUES (?, ?, 'luz', ?, ?)`
+    )
+      .bind(uid, email, Date.now(), Date.now())
+      .run();
+
+    // Crear o asegurar billetera de DruCoins
+    await ensureDrucoinWallet(c.env, uid);
+
+    console.groupEnd();
+    return c.json({ ok: true });
+  } catch (err: any) {
+    console.error('💥 /api/auth/register error:', err?.message || err);
+    console.groupEnd();
+    return c.json(
+      {
+        ok: false,
+        error: 'internal_server_error',
+      },
+      500
+    );
+  }
+});
+
+// ============================================================
+// AUTH — LOGIN (Firebase Email + Password)
+// ============================================================
+app.post('/api/auth/login', async (c) => {
+  console.groupCollapsed(
+    '%c🔐 /api/auth/login',
+    'color:#2979ff;font-weight:bold;'
+  );
+
+  try {
+    const { email, password } = await c.req.json();
+    console.log('Email recibido:', email);
+
+    if (!email || !password) {
+      console.warn('❌ Falta email o password');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_fields' }, 400);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data = (await resp.json()) as FirebaseAuthResponse;
+    console.log('Firebase login response:', data);
+
+    if (!resp.ok || !data.idToken) {
+      console.warn('❌ Error Firebase:', data);
+      console.groupEnd();
+      return c.json(
+        { ok: false, error: data?.error?.message || 'firebase_error' },
+        400
+      );
+    }
+
+    const token = data.idToken!;
+    console.groupEnd();
+    return c.json({ ok: true, token });
+  } catch (err) {
+    console.error('💥 /api/auth/login error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
 
 
 // =====================
@@ -281,7 +552,51 @@ devLog(env, 'Estado virtual de quota basado en DruCoins:', state);
 return state;
 }
 
-//--TAROT DECK--//
+//--DRAW--//
+
+//-------- HACER TIRADA-----------------//
+app.post('/api/draw', async (c) => {
+  try {
+    // Body
+    const body = await c.req.json();
+    const spreadId = body.spreadId ?? 'celtic-cross-10';
+    const allowsReversed = body.allowsReversed ?? true;
+
+    // Semilla
+    const seedInput = body.seed ?? Date.now().toString();
+    const seedNum = hashSeed(seedInput);
+    const rnd = rng32(seedNum);
+
+    // Count
+    const count =
+      spreadId === 'ppf-3'
+        ? 3
+        : spreadId === 'free'
+        ? 9
+        : 10;
+
+    // Shuffle
+    const ids = [...DECK.map((d) => d.id)];
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+
+    const selected = ids.slice(0, count);
+
+    const cards = selected.map((id, index) => ({
+      position: index + 1,
+      cardId: id,
+      reversed: allowsReversed ? rnd() < 0.4 : false,
+    }));
+
+    return c.json({ ok: true, spreadId, seed: seedInput, cards });
+  } catch (err) {
+    console.error('/api/draw ERROR', err);
+    return c.json({ ok: false }, 500);
+  }
+});
+
 
 //--TAROT DECK--//
 
@@ -1249,7 +1564,7 @@ app.post('/api/paypal/create-order', async (c) => {
 
     // --- Token PayPal ---
     const accessToken = await getPayPalAccessToken(c.env);
-    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+    const apiBase = c.env.PAYPAL_API_BASE;
 
     // Por ahora pack fijo de 2 DruCoins a 0.70 €
     const amountValue = '0.70';
@@ -1367,7 +1682,6 @@ function rng32(seedNum: number): () => number {
 
 
 // URL de la API de PayPal (Sandbox por defecto si no se proporciona en Env)
-const PAYPAL_API_BASE_DEFAULT = 'https://api-m.sandbox.paypal.com';
 
 // ============================================================
 // 1. HELPERS Y AUTENTICACIÓN
@@ -1388,7 +1702,7 @@ async function getPayPalAccessToken(env: Env): Promise<string> {
     throw new Error('paypal_missing_config');
   }
 
-  const apiBase = env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+  const apiBase = env.PAYPAL_API_BASE;
 
   // KEY: Usar Basic Auth (Base64)
   const authHeader = 'Basic ' + btoa(`${clientId}:${secret}`);
@@ -1451,7 +1765,7 @@ async function handlePaypalCreateOrder(c: any) {
     // 2. AUTENTICACIÓN: Obtener el Access Token (Bearer)
     const accessToken = await getPayPalAccessToken(c.env);
 
-    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+    const apiBase = c.env.PAYPAL_API_BASE;
 
     // 3. CREAR ORDEN en PayPal
     const paypalRes = await fetch(`${apiBase}/v2/checkout/orders`, {
@@ -1530,7 +1844,7 @@ async function handlePaypalCaptureOrder(c: any) {
 
     // 2. AUTENTICACIÓN: Obtener Access Token para la captura
     const accessToken = await getPayPalAccessToken(c.env);
-    const apiBase = c.env.PAYPAL_API_BASE || PAYPAL_API_BASE_DEFAULT;
+    const apiBase = c.env.PAYPAL_API_BASE;
 
     // 3. CAPTURAR PAGO en PayPal
     const res = await fetch(`${apiBase}/v2/checkout/orders/${orderID}/capture`, {
@@ -1578,11 +1892,307 @@ async function handlePaypalCaptureOrder(c: any) {
   }
 }
 
+app.post('/api/paypal/capture-order', async (c) => {
+  console.groupCollapsed(
+    '%c💳 /api/paypal/capture-order',
+    'color:#ffca28;font-weight:bold;'
+  );
+
+  try {
+    // 1) Usuario Firebase
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : '';
+
+    if (!token) {
+      console.warn('❌ Sin token');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+    const email = user.email;
+
+    // 2) Leer orderID desde el body
+    const { orderID } = await c.req.json().catch(() => ({ orderID: '' }));
+    if (!orderID) {
+      console.warn('❌ missing_order_id');
+      console.groupEnd();
+      return c.json({ ok: false, error: 'missing_order_id' }, 400);
+    }
+
+    // 3) Access token PayPal
+    const accessToken = await getPayPalAccessToken(c.env as Env);
+    const apiBase = c.env.PAYPAL_API_BASE;
+
+    // 4) Capturar la orden en PayPal
+    const res = await fetch(
+      `${apiBase}/v2/checkout/orders/${orderID}/capture`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('[PayPal] Error capture:', res.status, txt);
+      console.groupEnd();
+      return c.json({ ok: false, error: 'capture_failed' }, 500);
+    }
+
+    const data: any = await res.json();
+    const status = data.status || 'UNKNOWN';
+
+    if (status !== 'COMPLETED') {
+      console.warn('⚠️ Capture status no COMPLETED:', status);
+      console.groupEnd();
+      return c.json({ ok: false, error: 'not_completed', status }, 400);
+    }
+
+    // 5) Extraer datos útiles (purchase_unit y captura)
+    const pu = data.purchase_units?.[0];
+    const capture =
+      pu?.payments?.captures?.[0] ||
+      (data.purchase_units?.[0]?.payments?.captures?.[0] ?? null);
+
+    const amountValue = capture?.amount?.value || '0.00';
+    const currency = capture?.amount?.currency_code || 'EUR';
+    const paypalCaptureId = capture?.id || null;
+
+    // custom_id → "uid|coins"
+    const custom = String(pu?.custom_id || '');
+    const [uidFromOrder, coinsStr] = custom.split('|');
+    const coinsToGive = Number(coinsStr || '0') || 0;
+
+    // 6) Seguridad: UID y precio esperados
+    if (!uidFromOrder || uidFromOrder !== uid) {
+      console.warn('[PayPal] UID mismatch:', { uidFromOrder, uid });
+      console.groupEnd();
+      return c.json({ ok: false, error: 'uid_mismatch' }, 403);
+    }
+
+    // Aquí validas que REALMENTE sea tu importe de 0.70 EUR
+    if (amountValue !== '0.70' || currency !== 'EUR') {
+      console.warn('[PayPal] Importe inesperado:', {
+        amountValue,
+        currency,
+      });
+      console.groupEnd();
+      return c.json({ ok: false, error: 'invalid_amount' }, 400);
+    }
+
+    // 7) Registrar pago en D1
+    const paymentId = await insertPaymentRecord(c.env as Env, {
+      uid,
+      email,
+      paypalOrderId: orderID,
+      paypalCaptureId,
+      amountValue,
+      currency,
+      coins: coinsToGive,
+      status,
+      raw: data,
+    });
+
+    // 8) Sumar DruCoins al usuario
+    const newBalance = await addDrucoins(c.env as Env, uid, coinsToGive);
+
+    // 9) Email bonito con Resend (si está configurado)
+    try {
+      const resendApiKey = (c.env as any).RESEND_API_KEY;
+      const resendFrom = (c.env as any).RESEND_FROM_EMAIL || 'Meigo <no-reply@meigo.app>';
+
+      if (resendApiKey && email) {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: resendFrom,
+            to: [email],
+            subject: '✨ Gracias por apoyar a Meigo',
+            html: `
+              <!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Gracias por tu aporte a Meigo</title>
+    <style>
+      /* Ojo: muchos clientes de correo ignoran CSS avanzado.
+         Mantengo solo propiedades bastante básicas. */
+      body {
+        margin: 0;
+        padding: 24px 16px; /* 👈 margen lateral */
+        background-color: #f4e7d0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+      }
+
+      .wrapper {
+        max-width: 520px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background: linear-gradient(180deg, #ffe8b5 0%, #fbe2aa 40%, #fdf4dd 100%);
+        border-radius: 24px;
+        box-shadow: 0 14px 30px rgba(116, 72, 22, 0.25);
+        overflow: hidden;
+        border: 1px solid rgba(170, 120, 60, 0.35);
+      }
+
+      .header {
+        padding: 32px 32px 16px 32px;
+        text-align: center;
+      }
+
+      .seal {
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 20%, #fff7e4 0, #f1d79e 55%, #d8aa63 100%);
+        margin: 0 auto 16px auto;
+        border: 2px solid rgba(154, 105, 52, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: #7b4c1e;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 20px;
+        color: #5c3a13;
+        font-weight: 700;
+      }
+
+      .body {
+        padding: 0 32px 24px 32px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #5a3a19;
+      }
+
+      .body p {
+        margin: 0 0 12px 0;
+      }
+
+      .cta-wrapper {
+        text-align: center;
+        padding: 8px 32px 28px 32px;
+      }
+
+      .cta-button {
+        display: inline-block;
+        padding: 10px 32px;
+        border-radius: 999px;
+        background-color: #0b7a55;
+        color: #ffffff !important;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .cta-button:hover {
+        background-color: #0d8c63;
+      }
+
+      .footer {
+        border-top: 1px solid rgba(203, 164, 104, 0.5);
+        padding: 14px 24px 18px 24px;
+        text-align: center;
+        font-size: 11px;
+        color: #92714a;
+        background: #f9e9c4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="card">
+        <div class="header">
+          <div class="seal">
+            <span>Buhí<br />Meigo</span>
+          </div>
+          <h1 class="title">¡Gracias por sostener la magia de Meigo!</h1>
+        </div>
+
+        <div class="body">
+          <p>Hola, alma viajera.</p>
+          <p>
+            Tu aportación ayuda a que este grimorio digital siga creciendo, carta a carta,
+            para que más personas puedan leer su historia a través de símbolos, mitos y
+            pequeños búhos insomnes como este que te escribe.
+          </p>
+        </div>
+
+        <div class="cta-wrapper">
+          <a href="https://meigo.io" class="cta-button" target="_blank">
+            Abrir Meigo
+          </a>
+        </div>
+
+        <div class="footer">
+          <p style="margin: 0 0 4px 0;">
+            Este mensaje fue enviado por Meigo.
+          </p>
+          <p style="margin: 0;">
+            Si no reconoces esta acción, puedes ignorar este correo.
+          </p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
+            `,
+          }),
+        });
+      }
+    } catch (mailErr) {
+      console.warn('⚠️ Error enviando email con Resend:', mailErr);
+    }
+
+    console.log('✅ Pago registrado y DruCoins actualizados:', {
+      uid,
+      paymentId,
+      newBalance,
+    });
+    console.groupEnd();
+
+    // 10) Respuesta al FRONT
+    return c.json({
+      ok: true,
+      drucoins: newBalance,
+      coins: coinsToGive,
+      orderStatus: status,
+      paymentId,
+    });
+  } catch (err) {
+    console.error('💥 /api/paypal/capture-order error:', err);
+    console.groupEnd();
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+
+
 // =====================
 // 💰 DRUCOINS
 // =====================
 
-let drucoinTableReady = false;
 
 async function ensureDrucoinTable(env: Env) {
   if (drucoinTableReady) return;
@@ -1897,6 +2507,79 @@ async function insertReadingRecord(env: Env, data: ReadingInsert): Promise<numbe
   const id = (res.meta as any).last_row_id as number;
   return id;
 }
+
+//-- ASEGURAMOS DE QUE LOS PAGOS ESTEN LISTOS Y FUNCIONEN --//
+
+async function ensurePaymentsTable(env: Env) {
+  if (paymentsTableReady) return;
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      uid TEXT,
+      email TEXT,
+      paypal_order_id TEXT,
+      paypal_capture_id TEXT,
+      amount_cents INTEGER,
+      currency TEXT,
+      coins INTEGER,
+      status TEXT,
+      raw_json TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    )
+  `).run();
+
+  paymentsTableReady = true;
+}
+
+async function insertPaymentRecord(
+  env: Env,
+  payload: {
+    uid: string;
+    email?: string | null;
+    paypalOrderId: string;
+    paypalCaptureId?: string | null;
+    amountValue: string;         // "0.70"
+    currency: string;            // "EUR"
+    coins: number;               // 2
+    status: string;              // "COMPLETED"
+    raw: any;                    // respuesta completa de PayPal
+  }
+): Promise<string> {
+  await ensurePaymentsTable(env);
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const amountNumber = Number(payload.amountValue || '0');
+  const amountCents = Math.round(amountNumber * 100);
+
+  await env.DB.prepare(
+    `INSERT INTO payments
+      (id, uid, email, paypal_order_id, paypal_capture_id,
+       amount_cents, currency, coins, status, raw_json,
+       created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      id,
+      payload.uid,
+      payload.email ?? null,
+      payload.paypalOrderId,
+      payload.paypalCaptureId ?? null,
+      amountCents,
+      payload.currency,
+      payload.coins,
+      payload.status,
+      JSON.stringify(payload.raw),
+      now,
+      now
+    )
+    .run();
+
+  return id;
+}
+
 
 
 // ============================================================

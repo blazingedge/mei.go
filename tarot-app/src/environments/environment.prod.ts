@@ -7,6 +7,7 @@ export const environment = {
   CARD_BACK_URL: '',
   PAY_PAL_CLIENT_ID: "AX582HnaICAorVmiGKbJ5BICLYLjfZU82oqKzYDBtEzx2vIxV2ubORN62GYNuCUUEHhBQqzTMuQp0Rbh´", 
  firebase: {
+    apiKey: "AIzaSyCU72zI56thDxuktjz0S1e8ugkWsKJOkEo",
     authDomain: "meigo-app.firebaseapp.com",
     projectId: "meigo-app",
     storageBucket: "meigo-app.firebasestorage.app",
