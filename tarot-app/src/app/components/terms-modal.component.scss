@@ -161,6 +161,165 @@ footer {
   }
 }
 
+// Contenedor del checkbox
+.checkbox {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 248, 235, 0.9);
+  border: 1px solid rgba(180, 150, 110, 0.4);
+
+  display: flex;
+  align-items: flex-start;
+
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #4e3a2a;
+
+  label {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    cursor: pointer;
+  }
+
+  input[type="checkbox"] {
+    /* Reset */
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 0.35rem;
+
+    border: 1px solid rgba(140, 110, 75, 0.9);
+    background: rgba(255, 252, 245, 0.9);
+
+    display: inline-block;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    transition:
+      background 0.18s ease-out,
+      border-color 0.18s ease-out,
+      box-shadow 0.18s ease-out,
+      transform 0.1s ease-out;
+
+    &:hover {
+      box-shadow: 0 0 0 3px rgba(210, 180, 130, 0.25);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+
+    &:checked {
+      background: radial-gradient(circle at 30% 20%, #ffeccc 0, #e4b870 55%, #c18a40 100%);
+      border-color: #c18a40;
+      box-shadow: 0 0 0 2px rgba(193, 138, 64, 0.25);
+    }
+
+    &:checked::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+
+      width: 0.55rem;
+      height: 0.35rem;
+      border-left: 2px solid #2e1a10;
+      border-bottom: 2px solid #2e1a10;
+      transform: translate(0.22rem, 0.15rem) rotate(-45deg);
+    }
+
+    &:focus-visible {
+      outline: 2px solid #c18a40;
+      outline-offset: 3px;
+    }
+  }
+}
+
+// Botonera
+.actions {
+  margin-top: 1rem;
+
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+
+  .button {
+    min-width: 6rem;
+    padding: 0.55rem 1.25rem;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 90, 60, 0.8);
+
+    background: radial-gradient(circle at 30% 15%, #fff4df 0, #e2c39a 45%, #c69a64 100%);
+    color: #3b281a;
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+
+    cursor: pointer;
+
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.12),
+      0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+    transition:
+      transform 0.12s ease-out,
+      box-shadow 0.12s ease-out,
+      background 0.18s ease-out,
+      opacity 0.12s ease-out;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow:
+        0 4px 10px rgba(0, 0, 0, 0.18),
+        0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(1px) scale(0.98);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+  }
+
+  // Variante para el botón "Cancelar"
+  .button:first-child {
+    background: rgba(250, 243, 232, 0.95);
+    border-color: rgba(150, 120, 90, 0.8);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+    &:hover:not(:disabled) {
+      background: #f5ebdd;
+    }
+  }
+}
+
+// Pequeño ajuste en móviles
+@media (max-width: 600px) {
+  .checkbox {
+    font-size: 0.85rem;
+  }
+
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+
+    .button {
+      width: 100%;
+      text-align: center;
+    }
+  }
+}
+
+
 /* =========================================================
    📱 RESPONSIVE
    ========================================================= */

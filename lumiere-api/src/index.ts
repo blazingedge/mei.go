@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 import { DECK } from './deck';
-import { APIUserAbortError } from 'openai';
+
 
 
 // ============================================================
@@ -29,6 +29,7 @@ const LOCAL_ORIGINS = [
 const PROD_ORIGINS = [
 'https://mei-go.pages.dev',
 'https://meigo-app.web.app',
+'https://meigo.io',
 ];
 
 const CDN_BASE =
@@ -70,6 +71,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 // Planes (solo para UI / subs)
 // =====================
 type PlanId = 'luz' | 'sabiduria' | 'quantico';
+let readingsTableReady = false;
 
 /**
 * OJO:
@@ -107,6 +109,16 @@ req.url.includes('localhost')
 );
 }
 
+function isProdEnv(env: Env) {
+  return env.ENV === 'production';
+}
+
+function devLog(env: Env, ...args: any[]) {
+  if (!isProdEnv(env)) {
+    console.log(...args);
+  }
+}
+
 // (Actualmente no se usa en CORS, pero lo dejamos por si se reutiliza)
 function getAllowedOrigin(origin: string | null, req: Request, env: Env) {
 if (!origin) return '*';
@@ -127,7 +139,6 @@ return allowed[0] ?? '*';
 // =====================
 
 async function sendFirebaseEmailVerification(apiKey: string, idToken: string) {
-console.groupCollapsed('%c📧 sendFirebaseEmailVerification', 'color:#ffb300;font-weight:bold;');
 try {
 const resp = await fetch(
 `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
@@ -141,19 +152,15 @@ idToken,
 }
 );
 
-const data = await resp.json().catch(() => ({}));
-console.log('Firebase sendOobCode VERIFY_EMAIL:', resp.status, data);
-
+await resp.json().catch(() => ({}));
 } catch (err) {
 console.error('💥 Error en sendFirebaseEmailVerification:', err);
 }
-console.groupEnd();
 }
 
 ///------RESET PASWORD VIA EMAIL-----//
 
 async function sendFirebasePasswordReset(apiKey: string, email: string) {
-console.groupCollapsed('%c🔁 sendFirebasePasswordReset', 'color:#ffb300;font-weight:bold;');
 try {
 const resp = await fetch(
 `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
@@ -167,14 +174,12 @@ email,
 }
 );
 
-const data = await resp.json().catch(() => ({}));
-console.log('Firebase sendOobCode PASSWORD_RESET:', resp.status, data);
-
+await resp.json().catch(() => ({}));
 } catch (err) {
 console.error('💥 Error en sendFirebasePasswordReset:', err);
 }
-console.groupEnd();
 }
+
 
 // =====================
 // Roles de usuario
@@ -197,20 +202,9 @@ return 'freemium';
 app.use('*', async (c, next) => {
 try {
 const req = c.req.raw;
-console.groupCollapsed(
-'%c🚀 REQUEST IN',
-'color:#00e5ff;font-weight:bold;'
-);
-console.log('Method:', req.method);
-console.log('URL:', req.url);
-
-const headersObj: Record<string, string> = {};
-req.headers.forEach((v, k) => (headersObj[k] = v));
-console.log('Headers:', headersObj);
-console.log('ENV.ENV:', (c.env as any)?.ENV || 'undefined');
-console.groupEnd();
+devLog(c.env as Env, 'REQUEST', req.method, req.url);
 } catch (err) {
-console.error('⚠️ Error en logger global:', err);
+console.error('?? Error en logger global:', err);
 }
 
 await next();
@@ -238,19 +232,14 @@ app.use(
 // =====================
 
 async function ensureUserPlan(env: Env, uid: string): Promise<PlanId> {
-console.groupCollapsed(
-'%c👤 ensureUserPlan()',
-'color:#4caf50;font-weight:bold;'
-);
-console.log('UID:', uid);
+devLog(env, 'ensureUserPlan UID:', uid);
 
 const row = await env.DB.prepare('SELECT plan FROM users WHERE uid=?')
 .bind(uid)
 .first<{ plan: string }>();
 
 if (row?.plan) {
-console.log('Plan existente:', row.plan);
-console.groupEnd();
+devLog(env, 'Plan existente:', row.plan);
 return row.plan as PlanId;
 }
 
@@ -260,8 +249,7 @@ await env.DB.prepare(
 .bind(uid, null, 'luz', Date.now(), Date.now())
 .run();
 
-console.log('Plan inicial asignado: luz');
-console.groupEnd();
+devLog(env, 'Plan inicial asignado: luz');
 return 'luz';
 }
 
@@ -272,11 +260,7 @@ return 'luz';
 * siga recibiendo un objeto quota sin romperse.
 */
 async function getUserQuotaState(env: Env, uid: string) {
-console.groupCollapsed(
-'%c📊 getUserQuotaState() [VIRTUAL]',
-'color:#03a9f4;font-weight:bold;'
-);
-console.log('UID:', uid);
+devLog(env, 'getUserQuotaState UID:', uid);
 
 const plan = await ensureUserPlan(env, uid);
 const drucoins = await getDrucoinBalance(env, uid);
@@ -293,1419 +277,35 @@ remaining,
 nextResetDate: getNextResetDate(),
 };
 
-console.log('Estado virtual de quota basado en DruCoins:', state);
-console.groupEnd();
+devLog(env, 'Estado virtual de quota basado en DruCoins:', state);
 return state;
 }
 
 //--TAROT DECK--//
 
-app.get('/api/decks', async (c) => {
-  console.groupCollapsed('%c🃏 /api/decks', 'color:#ffcc80;font-weight:bold;');
+//--TAROT DECK--//
 
-  try {
-    const cards = DECK.map(card => ({
-      id: card.id,
-      name: card.name,
-      suit: card.suit,
-      number: (card as any).number ?? null, // si tienes number en DECK
-    }));
+app.get('/api/decks', (c) => {
+  const cards = DECK.map(card => ({
+    id: card.id,
+    name: card.name,
+    suit: card.suit,
+    number: (card as any).number ?? null, // si tienes number en DECK
+  }));
 
-    console.log('Cartas enviadas (DECK):', cards.length);
-    console.groupEnd();
-    return c.json(cards);        // 👈👈 OJO: devolvemos UN ARRAY, no { ok, cards }
-  } catch (err) {
-    console.error('💥 /api/decks error:', err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'internal_error' }, 500);
-  }
+  devLog(c.env as Env, 'DECK enviado. Cartas:', cards.length);
+  return c.json(cards); // 👈 devolvemos SOLO el array, como antes
 });
-
-
-
-app.get('/api/spreads', (c) => {
-  console.groupCollapsed(
-    '%c🎴 /api/spreads',
-    'color:#ab47bc; font-weight:bold;'
-  );
-
-  const spreads = [
-    {
-      id: 'celtic-cross-10',
-      name: 'Cruz Celta (10)',
-      positions: Array.from({ length: 10 }, (_, i) => ({
-        index: i + 1,
-        label: `Pos ${i + 1}`,
-        allowsReversed: true,
-      })),
-    },
-    {
-      id: 'ppf-3',
-      name: 'Pasado · Presente · Futuro',
-      positions: [1, 2, 3].map((i) => ({
-        index: i,
-        label: `${i}`,
-        allowsReversed: true,
-      })),
-    },
-    {
-      id: 'free',
-      name: 'Libre (9)',
-      positions: Array.from({ length: 9 }, (_, i) => ({
-        index: i + 1,
-        label: `${i + 1}`,
-        allowsReversed: true,
-      })),
-    },
-  ];
-
-  console.log('Spreads enviados:', spreads);
-  console.groupEnd();
-
-  return c.json(spreads);
-});
-
-
-
-// =====================
-// 🚫 SISTEMA DE QUOTAS: AHORA SOLO “STUBS”
-// =====================
-
-/**
-* Antes consumía quota real de la tabla `quotas`.
-* Ahora SIEMPRE devuelve true (no limita nada).
-* La lógica real de límite depende SOLO de los DruCoins.
-*/
-async function checkAndConsumeQuota(_env: Env, uid: string): Promise<boolean> {
-console.groupCollapsed(
-'%c🧮 checkAndConsumeQuota() [STUB]',
-'color:#9e9e9e;font-weight:bold;'
-);
-console.log('UID:', uid, '→ siempre true (solo DruCoins mandan ahora)');
-console.groupEnd();
-return true;
-}
-
-/**
-* Antes descontaba “used” en quotas.
-* Ahora se ignora: dejamos el stub para no romper código viejo.
-*/
-async function addQuotaCredits(_env: Env, uid: string, amount: number) {
-console.groupCollapsed(
-'%c➕ addQuotaCredits() [STUB]',
-'color:#9e9e9e;font-weight:bold;'
-);
-console.log('UID:', uid, 'amount:', amount, '→ ignorado (cuota deprecated)');
-console.groupEnd();
-}
-
-/**
-* Antes reseteaba la quota según el plan.
-* Ahora es un NO-OP, se deja para subs y compatibilidad.
-*/
-async function resetQuotaForPlan(_env: Env, uid: string, plan: PlanId) {
-console.groupCollapsed(
-'%c🔁 resetQuotaForPlan() [STUB]',
-'color:#9e9e9e;font-weight:bold;'
-);
-console.log('UID:', uid, 'plan:', plan, '→ no se toca ninguna tabla de quota');
-console.groupEnd();
-}
-
-// =====================
-// 💰 DRUCOINS
-// =====================
-
-let drucoinTableReady = false;
-
-async function ensureDrucoinTable(env: Env) {
-if (drucoinTableReady) return;
-console.groupCollapsed(
-'%c🏗 ensureDrucoinTable()',
-'color:#ffb300;font-weight:bold;'
-);
-await env.DB.prepare(`
-   CREATE TABLE IF NOT EXISTS drucoins (
-     uid TEXT PRIMARY KEY,
-     balance INTEGER NOT NULL DEFAULT 0,
-     updated_at INTEGER,
-     last_daily TEXT
-   )
- `).run();
-
-try {
-const info = await env.DB.prepare(
-`SELECT 1 AS ok FROM pragma_table_info('drucoins') WHERE name='last_daily' LIMIT 1`
-)
-.first<{ ok: number }>();
-
-if (!info?.ok) {
-await env.DB.prepare(`ALTER TABLE drucoins ADD COLUMN last_daily TEXT`).run();
-}
-} catch (err) {
-console.warn('⚠️ No se pudo asegurar columna last_daily:', err);
-}
-
-drucoinTableReady = true;
-console.log('Tabla drucoins asegurada.');
-console.groupEnd();
-}
-
-async function ensureDrucoinWallet(env: Env, uid: string) {
-console.groupCollapsed(
-'%c👛 ensureDrucoinWallet()',
-'color:#ffa000;font-weight:bold;'
-);
-console.log('UID:', uid);
-
-await ensureDrucoinTable(env);
-
-// ✅ Solo crea si no existe, con saldo inicial 2
-await env.DB.prepare(
-'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at, last_daily) VALUES(?, 2, ?, NULL)'
-)
-.bind(uid, Date.now())
-.run();
-
-console.groupEnd();
-}
-
-
-export async function applyDailyDrucoin(env: Env, uid: string): Promise<number> {
-console.groupCollapsed(
-'%c🌙 applyDailyDrucoin()',
-'color:#4fc3f7;font-weight:bold;'
-);
-
-await ensureDrucoinWallet(env, uid);
-
-const row = await env.DB.prepare(
-`SELECT balance, last_daily FROM drucoins WHERE uid=?`
-)
-.bind(uid)
-.first<{ balance: number; last_daily: string | null }>();
-
-if (!row) {
-console.warn('⚠️ Wallet no disponible tras ensureDrucoinWallet');
-console.groupEnd();
-return 0;
-}
-
-const todayKey = new Date().toISOString().slice(0, 10);
-let balance = row.balance ?? 0;
-
-if (!row.last_daily || row.last_daily !== todayKey) {
-console.log('→ Aplicando bono diario de +1');
-await env.DB.prepare(
-`UPDATE drucoins
-        SET balance = balance + 1,
-            updated_at = ?,
-            last_daily = ?
-      WHERE uid = ?`
-)
-.bind(Date.now(), todayKey, uid)
-.run();
-
-balance += 1;
-} else {
-console.log('→ Bono diario ya aplicado hoy.');
-}
-
-console.groupEnd();
-return balance;
-}
-
-
-
-
-
-async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
-console.groupCollapsed(
-'%c📟 getDrucoinBalance()',
-'color:#ff9800;font-weight:bold;'
-);
-console.log('UID:', uid);
-await ensureDrucoinWallet(env, uid);
-const row = await env.DB.prepare('SELECT balance FROM drucoins WHERE uid=?')
-.bind(uid)
-.first<{ balance: number }>();
-const balance = row?.balance ?? 0;
-console.log('Balance actual:', balance);
-console.groupEnd();
-return balance;
-}
-
-async function addDrucoins(env: Env, uid: string, amount: number): Promise<number> {
-console.groupCollapsed(
-'%c💎 addDrucoins()',
-'color:#ff7043;font-weight:bold;'
-);
-console.log('UID:', uid, 'amount:', amount);
-if (amount <= 0) {
-console.log('amount <= 0 → no se modifica balance.');
-const current = await getDrucoinBalance(env, uid);
-console.groupEnd();
-return current;
-}
-await ensureDrucoinWallet(env, uid);
-await env.DB.prepare(
-'UPDATE drucoins SET balance = balance + ?, updated_at=? WHERE uid=?'
-)
-.bind(amount, Date.now(), uid)
-.run();
-const balance = await getDrucoinBalance(env, uid);
-console.log('Balance después de sumar:', balance);
-console.groupEnd();
-return balance;
-}
-
-async function useDrucoins(env: Env, uid: string, amount = 1): Promise<boolean> {
-console.groupCollapsed(
-'%c💸 useDrucoins()',
-'color:#ff5722;font-weight:bold;'
-);
-console.log('UID:', uid, 'amount:', amount);
-
-if (amount <= 0) {
-console.log('amount <= 0 → no se descuenta nada, devolvemos true.');
-console.groupEnd();
-return true;
-}
-
-await ensureDrucoinWallet(env, uid);
-const row = await env.DB.prepare('SELECT balance FROM drucoins WHERE uid=?')
-.bind(uid)
-.first<{ balance: number }>();
-
-const balance = row?.balance ?? 0;
-console.log('Balance BEFORE:', balance);
-
-if (balance < amount) {
-console.warn('❌ Balance insuficiente para descontar DruCoins.');
-console.groupEnd();
-return false;
-}
-
-await env.DB.prepare(
-'UPDATE drucoins SET balance = balance - ?, updated_at=? WHERE uid=?'
-)
-.bind(amount, Date.now(), uid)
-.run();
-const newBalance = await getDrucoinBalance(env, uid);
-console.log('Balance AFTER:', newBalance);
-console.groupEnd();
-return true;
-}
-
-type ReadingInsertPayload = {
-uid: string;
-email?: string | null;
-interpretation: string;
-cards?: any[];
-spreadId?: string | null;
-title?: string | null;
-plan?: PlanId;
-};
-
-
-
-async function insertReadingRecord(env: Env, payload: ReadingInsertPayload): Promise<string> {
-const plan = payload.plan ?? (await ensureUserPlan(env, payload.uid));
-const title =
-(payload.title?.trim() || 'Lectura guardada').slice(0, 140);
-const cardsJson = JSON.stringify(payload.cards ?? []);
-const id = crypto.randomUUID();
-
-await env.DB.prepare(
-`INSERT INTO readings(id, uid, email, title, interpretation, cards_json, spreadId, created_at)
-    VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`
-)
-.bind(
-id,
-payload.uid,
-payload.email ?? null,
-title,
-payload.interpretation,
-cardsJson,
-payload.spreadId ?? null
-)
-.run();
-
-await enforceReadingLimit(env, payload.uid, plan);
-return id;
-}
-
-async function pruneUserItems(
-env: Env,
-table: 'history' | 'readings',
-uid: string,
-limit: number,
-orderClause: string
-) {
-if (limit <= 0) return;
-
-const query = `SELECT id FROM ${table} WHERE uid=? ${orderClause}`;
-const rows = await env.DB.prepare(query).bind(uid).all<{ id: string }>();
-const items = rows.results ?? [];
-const extra = items.length - limit;
-if (extra <= 0) return;
-
-for (let i = 0; i < extra; i++) {
-const target = items[i];
-if (!target?.id) continue;
-await env.DB.prepare(`DELETE FROM ${table} WHERE id=?`)
-.bind(target.id)
-.run();
-}
-}
-
-async function enforceHistoryLimit(env: Env, uid: string, plan: PlanId) {
-if (plan !== 'luz') return;
-await pruneUserItems(env, 'history', uid, 3, 'ORDER BY ts ASC');
-}
-
-async function enforceReadingLimit(env: Env, uid: string, plan: PlanId) {
-if (plan !== 'luz') return;
-await pruneUserItems(
-env,
-'readings',
-uid,
-2,
-'ORDER BY datetime(created_at) ASC'
-);
-}
-
-// =====================
-// 🔐 Verificación de token Firebase (se usa en varias rutas)
-// =====================
-async function verifyFirebaseIdToken(idToken: string, apiKey: string) {
-console.groupCollapsed(
-'%c🔑 verifyFirebaseIdToken()',
-'color:#26a69a;font-weight:bold;'
-);
-console.log('idToken.length:', idToken?.length || 0);
-
-const resp = await fetch(
-`https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${apiKey}`,
-{
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ idToken }),
-}
-);
-
-if (!resp.ok) {
-const text = await resp.text();
-console.error('❌ Firebase getAccountInfo error:', resp.status, text);
-console.groupEnd();
-throw new Error('invalid_token');
-}
-
-const data = await resp.json();
-const user = data?.users?.[0];
-if (!user) {
-console.error('❌ Firebase getAccountInfo sin usuario.');
-console.groupEnd();
-throw new Error('invalid_token');
-}
-
-const out = {
-uid: user.localId,
-email: (user.email || '').toLowerCase(),
-};
-
-console.log('Usuario verificado:', out);
-console.groupEnd();
-return out;
-}
-
-// =====================
-// 🚦 Lógica de permiso para lectura (solo DruCoins)
-// =====================
-
-type ReadingBlockReason = 'drucoins';
-
-async function canDoReading(
-env: Env,
-uid: string,
-opts?: { isMaster?: boolean }
-): Promise<{ allowed: boolean; reason?: ReadingBlockReason }> {
-console.groupCollapsed(
-'%c🧙 canDoReading()',
-'color:#ab47bc;font-weight:bold;'
-);
-console.log('UID:', uid, 'opts:', opts);
-
-// Master user siempre permitido
-if (opts?.isMaster) {
-console.log('Rol: MASTER → permitido sin límites.');
-console.groupEnd();
-return { allowed: true };
-}
-
-// Invitado/guest: de momento permitido sin límite real
-if (!uid || uid === 'guest') {
-console.log('UID guest → permitido (sin control de DruCoins).');
-console.groupEnd();
-return { allowed: true };
-}
-
-const balance = await getDrucoinBalance(env, uid);
-console.log('DruCoins actuales:', balance);
-
-if (balance <= 0) {
-console.warn('⛔ Bloqueado por falta de DruCoins.');
-console.groupEnd();
-return { allowed: false, reason: 'drucoins' };
-}
-
-console.log('✅ Puede hacer lectura (tiene DruCoins).');
-console.groupEnd();
-return { allowed: true };
-}
-
-// =====================
-// /api/quota (virtual, basado en DruCoins)
-// =====================
-app.get('/api/quota', async (c) => {
-console.groupCollapsed(
-'%c📡 /api/quota',
-'color:#42a5f5;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-console.log('Auth header presente:', !!token);
-
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const quota = await getUserQuotaState(c.env, uid);
-
-console.log('Quota virtual enviada al cliente:', quota);
-console.groupEnd();
-return c.json({ ok: true, quota });
-} catch (err: any) {
-console.error('💥 /api/quota error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) }, 500);
-}
-});
-
-// =====================
-// Subscriptions + DruCoins
-// =====================
-
-app.post('/api/subscriptions/check', async (c) => {
-console.groupCollapsed(
-'%c🧾 /api/subscriptions/check',
-'color:#7e57c2;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-console.log('Auth header presente:', !!token);
-
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const quota = await getUserQuotaState(c.env, uid);
-const drucoins = await getDrucoinBalance(c.env, uid);
-
-const payload = {
-ok: true,
-plan: quota.plan,
-isLuz: quota.plan === 'luz',
-isSabiduria: quota.plan === 'sabiduria',
-isQuantico: quota.plan === 'quantico',
-hasDonations: drucoins > 0,
-drucoins,
-quota,
-};
-
-console.log('Respuesta /subscriptions/check:', payload);
-console.groupEnd();
-return c.json(payload);
-} catch (err: any) {
-console.error('💥 /api/subscriptions/check error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-async function setUserPlan(env: Env, uid: string, plan: PlanId) {
-console.groupCollapsed(
-'%c📌 setUserPlan()',
-'color:#5c6bc0;font-weight:bold;'
-);
-console.log('UID:', uid, 'plan:', plan);
-await ensureUserPlan(env, uid);
-const sql = await env.DB.prepare(
-'UPDATE users SET plan = ?, updated_at=? WHERE uid=?'
-)
-.bind(plan, Date.now(), uid)
-.run();
-console.log('UPDATE users resultado:', sql);
-console.groupEnd();
-}
-
-app.post('/api/subscriptions/sabiduria/activate', async (c) => {
-console.groupCollapsed(
-'%c🌙 /api/subscriptions/sabiduria/activate',
-'color:#ffca28;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-await setUserPlan(c.env, uid, 'sabiduria');
-// resetQuotaForPlan es ahora un STUB (no toca nada real)
-await resetQuotaForPlan(c.env, uid, 'sabiduria');
-
-const balance = await addDrucoins(c.env, uid, 30);
-
-const resp = { ok: true, plan: 'sabiduria' as const, balance };
-console.log('Respuesta sabiduria/activate:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/subscriptions/sabiduria error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-app.post('/api/subscriptions/premium/activate', async (c) => {
-console.groupCollapsed(
-'%c🌌 /api/subscriptions/premium/activate',
-'color:#ff7043;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-await setUserPlan(c.env, uid, 'quantico');
-await resetQuotaForPlan(c.env, uid, 'quantico');
-
-const balance = await addDrucoins(c.env, uid, 60);
-
-const resp = {
-ok: true,
-message: 'Pronto daremos más información en nuestro vlog.',
-plan: 'quantico' as const,
-balance,
-};
-console.log('Respuesta premium/activate:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/subscriptions/premium error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-// =====================
-// Endpoints DruCoins
-// =====================
-
-app.post('/api/drucoins/add', async (c) => {
-console.groupCollapsed(
-'%c🪙 /api/drucoins/add',
-'color:#8bc34a;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const { amount = 0 } = await c.req
-.json<{ amount?: number }>()
-.catch(() => ({ amount: 0 }));
-
-console.log('Payload amount:', amount);
-
-if (!amount || amount <= 0) {
-console.warn('amount inválido:', amount);
-console.groupEnd();
-return c.json({ ok: false, error: 'invalid_amount' }, 400);
-}
-
-// Antes: también se daban créditos de quota → ahora se ignora
-await addQuotaCredits(c.env, uid, 2);
-
-const donationCoins = 2;
-const balance = await addDrucoins(c.env, uid, donationCoins);
-
-const resp = { ok: true, balance, granted: donationCoins };
-console.log('Respuesta drucoins/add:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/drucoins/add error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-app.post('/api/drucoins/purchase', async (c) => {
-console.groupCollapsed(
-'%c💳 /api/drucoins/purchase',
-'color:#cddc39;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const { amount = 0 } = await c.req
-.json<{ amount?: number }>()
-.catch(() => ({ amount: 0 }));
-
-console.log('Payload amount:', amount);
-
-const packs: Record<number, number> = { 1: 2, 2: 5, 5: 15 };
-const granted = packs[amount] ?? 0;
-if (!granted) {
-console.warn('amount no válido para pack:', amount);
-console.groupEnd();
-return c.json({ ok: false, error: 'invalid_amount' }, 400);
-}
-
-const balance = await addDrucoins(c.env, uid, granted);
-const resp = { ok: true, balance, granted };
-
-console.log('Respuesta drucoins/purchase:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/drucoins/purchase error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-app.post('/api/drucoins/use', async (c) => {
-console.groupCollapsed(
-'%c⚖️ /api/drucoins/use',
-'color:#ff9800;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const { amount = 1 } = await c.req
-.json<{ amount?: number }>()
-.catch(() => ({ amount: 1 }));
-
-console.log('Solicitud de uso amount:', amount);
-
-const okUse = await useDrucoins(c.env, uid, amount || 1);
-if (!okUse) {
-const balance = await getDrucoinBalance(c.env, uid);
-const resp402 = {
-ok: false,
-error: 'sin_drucoins',
-message: 'Sin drucoins suficientes.',
-balance,
-};
-console.warn('Respuesta 402 /drucoins/use:', resp402);
-console.groupEnd();
-return c.json(resp402, 402);
-}
-
-const balance = await getDrucoinBalance(c.env, uid);
-const resp = { ok: true, balance };
-console.log('Respuesta ok /drucoins/use:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/drucoins/use error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-app.get('/api/drucoins/balance', async (c) => {
-console.groupCollapsed(
-'%c📈 /api/drucoins/balance',
-'color:#00bcd4;font-weight:bold;'
-);
-try {
-const authHeader = c.req.header('Authorization') || '';
-const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-if (!token) {
-console.warn('❌ Sin token → 401');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const verified = await verifyFirebaseIdToken(token, apiKey);
-const uid = verified.uid;
-
-const balance = await getDrucoinBalance(c.env, uid);
-const resp = { ok: true, balance };
-console.log('Respuesta /drucoins/balance:', resp);
-console.groupEnd();
-return c.json(resp);
-} catch (err: any) {
-console.error('💥 /api/drucoins/balance error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: err?.message || 'internal_error' }, 500);
-}
-});
-
-// ============= AQUÍ TERMINA LA PARTE 1/4 =============
-// En la siguiente parte metemos:
-// - debug/version, auth demo, captcha
-// - Términos & sesión (/session/validate, /terms/*)
-// - + más endpoints
-
-// ============================================================
-// VERSION
-// ============================================================
-app.get('/api/version', (c) => {
-console.groupCollapsed(
-'%c🧭 /api/version',
-'color:#4dd0e1;font-weight:bold;'
-);
-const payload = {
-ok: true,
-version: '1.0.0-meigo',
-env: c.env.ENV || 'undefined',
-};
-console.log('payload:', payload);
-console.groupEnd();
-return c.json(payload);
-});
-
-// ============================================================
-// AUTH DEMO (para modo prueba sin 
-// Firebase)
-// ============================================================
-app.post('/api/auth/demo', async (c) => {
-console.groupCollapsed(
-'%c🎭 /api/auth/demo',
-'color:#7e57c2;font-weight:bold;'
-);
-
-const user = {
-uid: 'demo-user',
-email: 'demo@meigo.app',
-};
-
-const resp = { ok: true, user };
-console.log('Demo user devuelto:', resp);
-
-console.groupEnd();
-return c.json(resp);
-});
-
-// ============================================================
-// AUTH — REGISTRO (Firebase Email + Password)
-// ============================================================
-app.post('/api/auth/register', async (c) => {
-  console.groupCollapsed('%c📝 /api/auth/register', 'color:#00e676;font-weight:bold;');
-
-  try {
-    const body = await c.req.json().catch(() => null);
-
-    if (!body || !body.email || !body.password) {
-      console.warn('❌ Falta email o password');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_fields' }, 400);
-    }
-
-    const email = String(body.email).trim().toLowerCase();
-    const password = String(body.password).trim();
-
-    const apiKey = c.env.FIREBASE_API_KEY || '';
-
-    // ======================================================
-    // 🔐 FIREBASE SIGNUP
-    // ======================================================
-    const resp = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          returnSecureToken: true,
-        }),
-      }
-    );
-
-    const data: any = await resp.json().catch(() => ({}));
-    console.log('Firebase signup response:', data);
-
-    // ======================================================
-    // ❌ ERROR DE FIREBASE (bloque único, sin duplicados)
-    // ======================================================
-    if (!resp.ok || !data.idToken) {
-      console.warn('❌ Error Firebase:', data);
-
-      const fbError =
-        data?.error?.message ||
-        data?.error?.errors?.[0]?.message ||
-        'firebase_error';
-
-      // Mapeo humano
-      let userMessage = 'No se pudo crear tu cuenta. Intenta de nuevo.';
-
-      switch (fbError) {
-        case 'EMAIL_EXISTS':
-          userMessage = 'Este correo ya está registrado. Prueba iniciando sesión.';
-          break;
-
-        case 'INVALID_EMAIL':
-          userMessage = 'El correo no tiene un formato válido.';
-          break;
-
-        case 'MISSING_PASSWORD':
-          userMessage = 'Debes indicar una contraseña.';
-          break;
-
-        default:
-          if (typeof fbError === 'string' && fbError.includes('WEAK_PASSWORD')) {
-            userMessage =
-              'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
-          } else if (typeof fbError === 'string') {
-            userMessage = `Error al registrar: ${fbError}`;
-          }
-          break;
-      }
-
-      console.groupEnd();
-      return c.json(
-        {
-          ok: false,
-          error: fbError,
-          message: userMessage,
-        },
-        400
-      );
-    }
-
-    // ======================================================
-    // ✔️ REGISTRO EXITOSO
-    // ======================================================
-    const uid = data.localId;
-
-    // Enviar verificación de email
-    await sendFirebaseEmailVerification(apiKey, data.idToken);
-
-    // Guardar usuario en DB
-    await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO users(uid, email, plan, created_at, updated_at)
-       VALUES (?, ?, 'luz', ?, ?)`
-    )
-      .bind(uid, email, Date.now(), Date.now())
-      .run();
-
-    // Crear o asegurar billetera de DruCoins
-    await ensureDrucoinWallet(c.env, uid);
-
-    console.groupEnd();
-    return c.json({ ok: true });
-
-  } catch (err: any) {
-    console.error('💥 /api/auth/register error:', err?.message || err);
-    console.groupEnd();
-    return c.json(
-      { ok: false, error: 'internal_server_error' },
-      500
-    );
-  }
-});
-
-//-------- HACER TIRADA-----------------//
-
-app.post('/api/draw', async (c) => {
-  try {
-    // Body
-    const body = await c.req.json();
-    const spreadId = body.spreadId ?? 'celtic-cross-10';
-    const allowsReversed = body.allowsReversed ?? true;
-
-    // Semilla
-    const seedInput = body.seed ?? Date.now().toString();
-    const seedNum = hashSeed(seedInput);
-    const rnd = rng32(seedNum);
-
-    // Count
-    const count = 
-      spreadId === 'ppf-3' ? 3 :
-      spreadId === 'free' ? 9 : 10;
-
-    // Shuflle
-    const ids = [...DECK.map(d => d.id)];
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
-
-    const selected = ids.slice(0, count);
-
-    const cards = selected.map((id, index) => ({
-      position: index + 1,
-      cardId: id,
-      reversed: allowsReversed ? rnd() < 0.4 : false
-    }));
-
-    return c.json({
-      ok: true,
-      spreadId,
-      seed: seedInput,
-      cards
-    });
-
-  } catch (err) {
-    console.error('/api/draw ERROR', err);
-    return c.json({ ok: false }, 500);
-  }
-});
-
-// ============================================================
-// AUTH — LOGIN (Firebase Email + Password)
-// ============================================================
-app.post('/api/auth/login', async (c) => {
-console.groupCollapsed(
-'%c🔐 /api/auth/login',
-'color:#2979ff;font-weight:bold;'
-);
-
-try {
-const { email, password } = await c.req.json();
-console.log('Email recibido:', email);
-
-if (!email || !password) {
-console.warn('❌ Falta email o password');
-console.groupEnd();
-return c.json({ ok: false, error: 'missing_fields' }, 400);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-
-const resp = await fetch(
-`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-{
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({
-email,
-password,
-returnSecureToken: true,
-}),
-}
-);
-
-const data = (await resp.json()) as FirebaseAuthResponse;
-console.log('Firebase login response:', data);
-
-if (!resp.ok || !data.idToken) {
-console.warn('❌ Error Firebase:', data);
-console.groupEnd();
-return c.json({ ok: false, error: data?.error?.message }, 400);
-}
-
-const token = data.idToken!;
-
-console.groupEnd();
-return c.json({ ok: true, token });
-} catch (err) {
-console.error('💥 /api/auth/login error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: 'internal_error' }, 500);
-}
-});
-
-// ============================================================
-// TURNSTILE CAPTCHA
-// ============================================================
-
-
-app.post('/api/captcha/verify', async (c) => {
-  console.groupCollapsed(
-    '%c🛡 /api/captcha/verify',
-    'color:#4caf50;font-weight:bold;'
-  );
-
-  try {
-    const { token } = await c.req.json<{ token: string }>().catch(() => ({ token: '' }));
-    console.log('token recibido:', token);
-
-    if (!token) {
-      console.warn('❌ token vacío');
-      console.groupEnd();
-      return c.json({ ok: false, error: 'missing_token' }, 400);
-    }
-
-    console.log('¿TURNSTILE_SECRET definido?', !!(c.env as any).TURNSTILE_SECRET);
-
-    const data = await verifyTurnstile(token, c.env);
-    const ok = !!data.success;
-
-    console.log('Respuesta Turnstile:', data);
-    console.log('Resultado final:', ok ? '✓ válido' : '✗ inválido');
-
-    console.groupEnd();
-    return c.json({ ok, data });
-
-  } catch (err: any) {
-    console.error('💥 Error en /api/captcha/verify:', err?.message || err);
-    console.groupEnd();
-    return c.json({ ok: false, error: 'server_error' }, 500);
-  }
-});
-
-
-
-
-export async function verifyTurnstile(token: string, env: Env): Promise<TurnstileResponse> {
-  // Usa SIEMPRE el FormData global del runtime de Cloudflare
-  const formData = new FormData();
-  formData.append('secret', env.TURNSTILE_SECRET);
-  formData.append('response', token);
-
-  const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!resp.ok) {
-    console.error('❌ /siteverify status:', resp.status);
-    throw new Error(`turnstile_http_${resp.status}`);
-  }
-
-  const json = (await resp.json()) as TurnstileResponse;
-  console.log('Turnstile JSON:', json);
-  return json;
-}
-
-// ============================================================
-// TERMS & CONDITIONS
-// ============================================================
-
-// ¿Necesita aceptar términos?
-app.get('/api/terms/needs', async (c) => {
-console.groupCollapsed(
-'%c📜 /api/terms/needs',
-'color:#ffb74d;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ needs: true }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-console.log('UID:', uid);
-
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-console.log('Row DB:', row);
-
-const needs = !row;
-console.log('needsTerms:', needs);
-
-console.groupEnd();
-return c.json({ needs });
-} catch (err) {
-console.error('💥 /terms/needs error:', err);
-console.groupEnd();
-return c.json({ needs: true }, 401);
-}
-});
-
-// Check terms (GET corregido)
-app.get('/api/terms/check', async (c) => {
-console.groupCollapsed(
-'%c📜 /api/terms/check',
-'color:#ff9800;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ accepted: false }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-console.log('Row:', row);
-
-const accepted = !!row;
-console.log('accepted:', accepted);
-
-console.groupEnd();
-return c.json({ accepted });
-} catch (err) {
-console.error('💥 /terms/check error:', err);
-console.groupEnd();
-return c.json({ accepted: false }, 401);
-}
-});
-
-// Aceptar términos (graba la fecha y REGALA 1 DRUCOIN)
-app.post('/api/terms/accept', async (c) => {
-console.groupCollapsed(
-'%c📝 /api/terms/accept',
-'color:#ff7043;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-
-console.log('Aceptando términos para UID:', uid);
-
-const now = Date.now();
-await c.env.DB.prepare(
-'INSERT OR REPLACE INTO terms_acceptance(uid, accepted_at) VALUES(?,?)'
-)
-.bind(uid, now)
-.run();
-
-console.log('Términos guardados.');
-
-// ⭐ RECOMPENSA: 1 DruCoin
-const balance = await addDrucoins(c.env, uid, 1);
-console.log('Balance después del bonus:', balance);
-
-const resp = { ok: true, balance };
-console.log('Respuesta final:', resp);
-
-console.groupEnd();
-return c.json(resp);
-} catch (err) {
-console.error('💥 /terms/accept error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: 'internal_error' }, 500);
-}
-});
-
-// ============================================================
-// SESSION VALIDATE
-// ============================================================
-
-app.get('/api/session/validate', async (c) => {
-console.log("Authorization header:", c.req.header("Authorization"));
-
-console.groupCollapsed(
-'%c🔐 /api/session/validate',
-'color:#29b6f6;font-weight:bold;'
-);
-
-try {
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-// Firebase
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const user = await verifyFirebaseIdToken(token, apiKey);
-const uid = user.uid;
-const email = user.email;
-
-console.log('Usuario:', user);
-
-// Plan (solo UI)
-const plan = await ensureUserPlan(c.env, uid);
-console.log('Plan del usuario:', plan);
-// ✅ DAILY BONUS PRIMERO
-
-await ensureDrucoinWallet(c.env, uid);
-const drucoins = await applyDailyDrucoin(c.env, uid);
-
-console.log('DruCoins (post-daily):', drucoins);
-// Quota virtual basada en DruCoins
-const quota = await getUserQuotaState(c.env, uid);
-
-// ¿Ha aceptado términos?
-const row = await c.env.DB.prepare(
-'SELECT accepted_at FROM terms_acceptance WHERE uid=?'
-)
-.bind(uid)
-.first<{ accepted_at: number }>();
-
-const needsTerms = !row;
-console.log('needsTerms:', needsTerms);
-
-const resp = {
-ok: true,
-uid,
-email,
-plan,
-drucoins,
-quota,
-needsTerms,
-};
-
-console.log('Respuesta /session/validate:', resp);
-
-console.groupEnd();
-return c.json(resp);
-} catch (err) {
-console.error('💥 /session/validate error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) }, 500);
-}
-});
-
-
-// ============= AQUÍ TERMINA LA PARTE 2/4 =============
-
-app.delete('/api/history/:id', async (c) => {
-console.groupCollapsed(
-'%c🗑 /api/history/:id',
-'color:#ef9a9a;font-weight:bold;'
-);
-
-try {
-const historyId = c.req.param('id');
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-
-if (!token) {
-console.warn('❌ sin token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
-
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const v = await verifyFirebaseIdToken(token, apiKey);
-const uid = v.uid;
-
-await c.env.DB.prepare('DELETE FROM history WHERE id=? AND uid=?')
-.bind(historyId, uid)
-.run();
-
-console.log('Historial eliminado:', historyId);
-console.groupEnd();
-return c.json({ ok: true });
-} catch (err) {
-console.error('💥 /history/:id delete error:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) }, 500);
-}
-});
-
-// ============= AQUÍ TERMINA LA PARTE 3/4 =============
-type HFCompletionResponse = {
-choices?: {
-text?: string;
-}[];
-error?: any;
-};
 
 // ============================================================
 // CARD MEANING — SIGNIFICADO INDIVIDUAL DE UNA CARTA
 // ============================================================
 app.post('/api/card-meaning', async (c) => {
-  console.groupCollapsed('%c🔎 /api/card-meaning', 'color:#ba68c8;font-weight:bold;');
+  devLog(c.env as Env, '🔎 /api/card-meaning');
 
   try {
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({} as any));
 
-    // ============================
-    //  RESOLVER ID DE CARTA
-    // ============================
     const rawId =
       body.name ??
       body.cardId ??
@@ -1715,31 +315,38 @@ app.post('/api/card-meaning', async (c) => {
 
     const reversed = !!body.reversed;
 
-    console.log('Payload recibido en /card-meaning:', body);
+    // Contexto opcional
+    const context: string =
+      typeof body.context === 'string'
+        ? body.context
+        : typeof body.question === 'string'
+        ? body.question
+        : '';
+
+    devLog(c.env as Env, 'Payload /card-meaning:', {
+      rawId,
+      reversed,
+      hasContext: !!context,
+    });
 
     if (!rawId) {
-      console.warn('⚠ /card-meaning sin id de carta válido:', body);
+      devLog(c.env as Env, '⚠ /card-meaning sin id de carta válido');
       return c.json({ ok: false, error: 'missing_card_id' }, 400);
     }
 
-    // Mapeo a nombre bonito en español
+    // Nombre en bonito en español
     const displayName = cardNamesEs[rawId] ?? rawId;
-    console.log(
-      'Carta solicitada:',
-      displayName,
-      `(id: ${rawId})`,
-      'Reversed:',
-      reversed
-    );
 
     // ============================
-    //  AUTH (COHERENTE CON /interpret)
+    //  AUTH (igual que /interpret)
     // ============================
     const auth = c.req.header('Authorization') || '';
-    const tokenHeader = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    const tokenHeader = auth.startsWith('Bearer ')
+      ? auth.slice(7)
+      : '';
 
     if (!tokenHeader) {
-      console.warn('❌ No auth en /card-meaning');
+      devLog(c.env as Env, '❌ No auth en /card-meaning');
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
@@ -1750,14 +357,11 @@ app.post('/api/card-meaning', async (c) => {
     const email = userData.email;
     const isMaster = isMasterUser(email);
 
-    // =============================================================
-    //  LIMITAR SIGNIFICADOS POR TIRADA (NO MASTER)
-    // =============================================================
+    // Límite de significados por sesión (no master)
     if (!isMaster) {
-      const used = await incrementMeaningCount(c.env, uid);
+      const used = await incrementMeaningCount(c.env as Env, uid);
       if (!used.ok) {
-        console.warn('❌ Límite de significados alcanzado');
-        console.groupEnd();
+        devLog(c.env as Env, '❌ Límite de significados alcanzado');
         return c.json({
           ok: false,
           limit: true,
@@ -1766,7 +370,6 @@ app.post('/api/card-meaning', async (c) => {
         });
       }
     }
-    console.log('✅ Significados usados dentro del límite.');
 
     // ============================
     //  HUGGING FACE TOKEN
@@ -1774,37 +377,64 @@ app.post('/api/card-meaning', async (c) => {
     const hfToken = c.env.HF_TOKEN;
     if (!hfToken) {
       console.warn('❌ No HF_TOKEN configurado');
-      console.groupEnd();
       return c.json({ ok: false, error: 'missing_hf_token' }, 500);
     }
 
     // ============================
-    //  PROMPTS TIPO /interpret
+    //  PROMPTS
     // ============================
     const cardDescriptor = `${displayName}${reversed ? ' (invertida)' : ''}`;
 
     const basePrompt = `
-Eres un maestro celta de tarot. Tu misión es explicar el significado de las cartas desde el consenso tradicional entre tarotistas: libros clásicos, escuelas como Marsella, Rider-Waite, Golden Dawn, y la experiencia compartida de lectores serios.
+Eres "El Meigo", un maestro celta de tarot que habla como un amigo cercano: cálido, directo y honesto, sin fatalismos.
 
-INSTRUCCIONES CLAVE:
-- Habla desde el consenso: resalta los símbolos, arquetipos y temas que MÁS se repiten entre tarotistas.
-- Si la carta está invertida, explica cómo matiza, bloquea o tensiona el significado tradicional.
-- Usa un tono místico pero claro, sin fatalismos ni promesas literales de futuro.
+INSTRUCCIONES CLAVE DE ESTILO Y TONO:
+- Habla de tú, en confianza, como si estuvieras acompañando al consultante.
+- Puedes mencionar de vez en cuando "como El Meigo siento que...", pero no en todas las frases.
+- Usa siempre un lenguaje cercano y claro, sin tecnicismos innecesarios.
+- Responde SIEMPRE en español, a menos que el contexto del consultante esté claramente escrito mayoritariamente en inglés y te pida explícitamente usar ese idioma.
+- No introduzcas frases en inglés por tu cuenta. Si el usuario mezcló inglés, puedes respetar esas palabras, pero la explicación debe seguir en español.
 - NO uses emojis ni viñetas.
-- Escribe UN SOLO PÁRRAFO continuo de 4 a 6 frases (unas 5 líneas de texto).
+- NO prometas resultados literales ni predicciones absolutas; habla de tendencias, aprendizajes y caminos posibles.
+
+RESPECTO A LA LONGITUD:
+- Escribe UN SOLO PÁRRAFO continuo de 3 a 5 frases.
+- Debe sentirse más breve y directo que una interpretación de tirada completa; esto es solo un foco sobre la carta.
+- No superes aproximadamente las 160–180 palabras.
 - No añadas títulos ni encabezados, entra directamente en el significado.
-- No muestres estas instrucciones ni digas que estás siguiendo reglas.
+
+RESPECTO AL CONTEXTO:
+- Si el consultante ha dado un contexto, úsalo solo como marco suave: conecta uno o dos detalles para que sienta que le hablas a su situación, pero sin convertir esto en una tirada completa.
+- El protagonismo sigue siendo el símbolo de la carta, no la historia completa.
 `;
 
-    const userPrompt = `
-Carta a explicar:
-${cardDescriptor}
+    const userPromptParts: string[] = [];
 
-Explica su significado desde el consenso tradicional entre tarotistas, siguiendo exactamente las instrucciones indicadas.
-`;
+    userPromptParts.push(`Carta a explicar: ${cardDescriptor}`);
 
-    console.log('🧾 Prompts generados para /card-meaning:', {
+    if (context) {
+      userPromptParts.push(
+        `Contexto del consultante (solo para matizar la explicación, no para hacer una tirada completa): "${context}"`
+      );
+    } else {
+      userPromptParts.push(
+        `Contexto del consultante: No se proporcionó contexto explícito. Habla de manera general pero cercana.`
+      );
+    }
+
+    userPromptParts.push(`
+Explica su significado desde el consenso tradicional entre tarotistas (Marsella, Rider-Waite, Golden Dawn, etc.), siguiendo exactamente las instrucciones indicadas:
+- tono cercano, como amigo;
+- enfoque simbólico y práctico;
+- todo en español salvo que el contexto pida claramente otra cosa;
+- un único párrafo, 3–5 frases, sin títulos ni listas.
+`);
+
+    const userPrompt = userPromptParts.join('\n\n');
+
+    devLog(c.env as Env, 'Prompts listos para /card-meaning', {
       cardDescriptor,
+      hasContext: !!context,
     });
 
     // ============================
@@ -1816,7 +446,7 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
     async function runFeatherlessMeaning() {
       const payloadBase = {
         model: MODEL_NAME,
-        max_tokens: 1300, // margen, aunque usará menos
+        max_tokens: 1300, // margen, aunque usará bastante menos
         temperature: 0.65,
         top_p: 0.9,
         frequency_penalty: 0.2,
@@ -1827,14 +457,12 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
 
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          console.log(
-            `7.[meaning] Intento ${attempt} → Modelo: ${MODEL_NAME}.`
-          );
+          devLog(c.env as Env, `7.[meaning] Intento ${attempt} → Modelo: ${MODEL_NAME}.`);
 
           const extraReminder =
             attempt === 1
               ? ''
-              : '\n\nATENCIÓN: La respuesta anterior quedó incompleta o muy corta. Ahora debes ofrecer un párrafo completo siguiendo todas las instrucciones.';
+              : '\n\nATENCIÓN: La respuesta anterior quedó incompleta o muy corta. Ahora debes ofrecer un párrafo completo siguiendo todas las instrucciones, manteniendo el tono cercano de El Meigo y respondiendo en español.';
 
           const payload = {
             ...payloadBase,
@@ -1853,24 +481,18 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
             body: JSON.stringify(payload),
           });
 
-          console.log(
-            `8.[meaning] Respuesta HTTP recibida. Status: ${response.status}`
-          );
+          devLog(c.env as Env, `8.[meaning] Status: ${response.status}`);
 
           if (!response.ok) {
             const txt = await response.text();
-            throw new Error(
-              `HF Router (${response.status}): ${txt}`
-            );
+            throw new Error(`HF Router (${response.status}): ${txt}`);
           }
 
           const result = await response.json();
           let meaning =
             result?.choices?.[0]?.message?.content?.trim() || '';
 
-          console.log(
-            `9.[meaning] Texto bruto, longitud: ${meaning.length}`
-          );
+          devLog(c.env as Env, `9.[meaning] Longitud bruta: ${meaning.length}`);
 
           // Limpieza básica
           meaning = meaning
@@ -1878,18 +500,17 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
             .replace(/(<\/?[^>]+>)/g, '')
             .replace(/REGLAS:.*/gi, '')
             .replace(/Instrucciones:.*/gi, '')
+            .replace(/Thank you[^]+$/i, '')
             .trim();
 
           if (meaning.length > bestPartial.length) {
             bestPartial = meaning;
           }
 
-          console.log(
-            `9.1.[meaning] Texto limpio, longitud: ${meaning.length}`
-          );
+          devLog(c.env as Env, `9.1.[meaning] Longitud limpia: ${meaning.length}`);
 
-          // Criterio sencillo: que haya texto razonable
-          if (meaning.length >= 120) {
+          // Criterio sencillo: que haya texto razonable pero más breve que una tirada
+          if (meaning.length >= 80) {
             return meaning;
           }
 
@@ -1903,9 +524,7 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
           );
           if (attempt < 2) {
             const delay = 2000 * attempt;
-            console.log(
-              `7.2.[meaning] Esperando ${delay}ms antes del reintento...`
-            );
+            devLog(c.env as Env, `7.2.[meaning] Esperando ${delay}ms antes del reintento...`);
             await new Promise((r) => setTimeout(r, delay));
           } else {
             throw new Error(
@@ -1929,8 +548,7 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
     //  EJECUTAR MODELO
     // ============================
     const meaning = await runFeatherlessMeaning();
-    console.log('✔ Significado final:', meaning);
-    console.groupEnd();
+    devLog(c.env as Env, '✔ Significado final generado (longitud):', meaning.length);
 
     return c.json({
       ok: true,
@@ -1938,7 +556,6 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
     });
   } catch (err: any) {
     console.error('💥 /api/card-meaning ERROR:', err);
-    console.groupEnd();
     return c.json({
       ok: false,
       error: String(err?.message || err),
@@ -1948,11 +565,6 @@ Explica su significado desde el consenso tradicional entre tarotistas, siguiendo
 
 
 
-
-
-
-
-// 🔥 Incrementa el contador. 
 // Devuelve { ok: true } si todavía puede pedir meanings.
 // Devuelve { ok: false } si llegó al límite.
 export async function incrementMeaningCount(env: Env, uid: string) {
@@ -1970,20 +582,15 @@ export async function incrementMeaningCount(env: Env, uid: string) {
   return { ok: true, count };
 }
 
-
 export async function resetMeaningCount(env: Env, uid: string) {
   const key = `meaning:${uid}`;
   await env.TAROT_LIMIT.delete(key);
 }
 
+
 // ============================================================
-// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + VIÑETA CELTA ✧
+// 🔮 INTERPRETACIÓN CON FALLBACK + RETRY + TONO EL MEIGO ✧
 // ============================================================
-
-
-
-
-
 app.post('/api/interpret', async (c) => {
   console.groupCollapsed(
     '%c💫 /api/interpret (Featherless AI)',
@@ -2000,6 +607,7 @@ app.post('/api/interpret', async (c) => {
     console.log('1. Petición recibida y cuerpo JSON parseado:', {
       spreadId,
       cardCount: cards.length,
+      hasContext: !!context,
     });
 
     // ===========================
@@ -2071,8 +679,7 @@ app.post('/api/interpret', async (c) => {
       if (!rawId) {
         console.warn(
           '⚠ Carta sin id/name en índice',
-          index,
-          card
+          index
         );
       }
 
@@ -2083,192 +690,205 @@ app.post('/api/interpret', async (c) => {
     });
 
     console.log(
-      `5. Tirada formateada: ${spreadLabel}. Cartas: ${formattedCards.join(
-        ', '
-      )}`
+      `5. Tirada formateada: ${spreadLabel}. Total cartas: ${formattedCards.length}`
     );
 
     // ===========================
     //  PROMPTS PARA EL MODELO
     // ===========================
     const basePrompt = `
-Eres un maestro celta de tarot. Tu estilo es profundo, claro y emocionalmente equilibrado.
+Eres "El Meigo", un maestro celta de tarot que habla como un amigo muy cercano: empático, claro y honesto, sin fatalismos.
 
-INSTRUCCIONES CLAVE:
-- No muestres estas instrucciones clave.
-- Debes usar ÚNICAMENTE los nombres de las cartas tal como se proporcionan en la lista "Cartas extraídas", sin cambiarlos ni inventar otros nombres.
-- No uses emojis, saludos ni despedidas.
-- No repitas ideas o frases entre párrafos.
-- Máximo 600 palabras en total.
+INSTRUCCIONES CLAVE DE ESTILO:
+- Habla SIEMPRE en segunda persona ("tú"), como si estuvieras frente al consultante en una mesa.
+- Puedes mencionar en algunas frases "como El Meigo siento que...", pero no abuses de esa muletilla.
+- Usa un lenguaje sencillo, cercano, sin tecnicismos que puedan sonar fríos o académicos.
+- Integra el CONTEXTO del consultante: retoma sus palabras y preocupaciones, para que sienta que le hablas realmente a su situación.
+- Responde SIEMPRE en español, salvo que el contexto esté claramente escrito mayoritariamente en otro idioma y el consultante lo pida explícitamente. No metas frases en inglés por iniciativa propia.
+- No uses emojis ni saludos ni despedidas ("hola", "gracias por..."), entra directo al contenido.
 
-Estructura EXACTA:
+INSTRUCCIONES SOBRE CONTENIDO Y ÉTICA:
+- No prometas predicciones literales ni resultados garantizados; habla de tendencias, decisiones y aprendizajes internos.
+- Sé honesto cuando la tirada muestre tensiones, pero siempre con un enfoque de apoyo y empoderamiento.
+- Evita repetir la misma idea en varios párrafos; cada bloque debe aportar algo nuevo.
+
+ESTRUCTURA EXACTA DE LA RESPUESTA:
 
 Mensaje central:
-(Un solo párrafo que analice la energía dominante del contexto y de TODA la tirada.)
+(Un solo párrafo que analice la energía dominante del contexto y de TODA la tirada, hablando de tú y, si sirve, mencionando brevemente lo que comentaste en el contexto.)
 
 Análisis por Carta:
 - Debes generar UNA línea por cada carta listada en "Cartas extraídas".
 - Usa este formato EXACTO:
-* Carta N – [nombre de la carta]: interpretación de 2-3 frases, precisa y mística, aplicando el contexto.
+* Carta N – [nombre de la carta]: interpretación de 2-3 frases, precisa, mística y cercana al contexto, sin repetir lo mismo que ya dijiste en el Mensaje central.
 
 Síntesis final:
-(Frase sabia y corta, máximo 12 palabras.)
+(Frase sabia y corta, máximo 12 palabras, como un consejo que El Meigo te susurra al oído.)
+
+LÍMITE DE LONGITUD:
+- Máximo ~700 palabras en total.
+- Si puedes transmitir todo con menos palabras sin perder profundidad, mejor.
 `;
 
     const userPrompt = `
 Tirada: ${spreadLabel}
-Contexto del consultante: "${context || 'Sin contexto'}"
+Contexto del consultante (en sus propias palabras, si lo dio):
+"${context || 'Sin contexto explícito. Habla de forma general, pero con un tono cálido y cercano.'}"
 
 Hay ${formattedCards.length} cartas.
 
 Cartas extraídas (en orden):
 ${formattedCards.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
-Genera el Mensaje central, luego el Análisis por Carta (una línea por cada carta),
-y termina con la Síntesis final, siguiendo la estructura EXACTA indicada.
+Genera el Mensaje central, luego el Análisis por Carta (UNA línea por carta siguiendo el formato indicado),
+y termina con la Síntesis final, siguiendo la estructura EXACTA y las instrucciones de estilo:
+- tono de amigo cercano (El Meigo),
+- todo en español salvo que el contexto pida claramente otra cosa,
+- sin saludos ni despedidas,
+- sin promesas literales de futuro.
 `;
 
-    console.log('6. Prompts generados para el modelo.', {
-      context,
+    console.log('6. Prompts generados para el modelo (sin mostrar texto completo).', {
+      hasContext: !!context,
       cardCount: formattedCards.length,
     });
 
     // ============================================================
     //  FUNCTION: Ejecutar el modelo Featherless / HF Router
     // ============================================================
+    const GROQ_ENDPOINT = 'https://router.huggingface.co/v1/chat/completions';
+    const MODEL_NAME = 'openai/gpt-oss-20b:groq';
 
-const GROQ_ENDPOINT = 'https://router.huggingface.co/v1/chat/completions';
-const MODEL_NAME = 'openai/gpt-oss-20b:groq';
+    async function runFeatherlessModel() {
+      const hfToken = c.env.HF_TOKEN;
+      if (!hfToken) throw new Error('Missing HF token');
 
-async function runFeatherlessModel() {
-  const hfToken = c.env.HF_TOKEN;
-  if (!hfToken) throw new Error('Missing HF token');
-
-  const payloadBase = {
-    model: MODEL_NAME,
-    max_tokens: 2000,          // margen suficiente para todo el texto
-    temperature: 0.6,
-    top_p: 0.85,
-    frequency_penalty: 0.2,
-    stop: ['REGLAS:', '###', 'Instrucciones'],
-  };
-
-  let bestPartial = ''; // aquí vamos guardando la mejor respuesta aunque esté incompleta
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      console.log(
-        `7. Intento ${attempt} → Modelo: ${MODEL_NAME}. Haciendo fetch a HF router...`
-      );
-
-      const extraReminder =
-        attempt === 1
-          ? ''
-          : '\n\nATENCIÓN: La respuesta anterior quedó incompleta. Ahora debes generar la interpretación COMPLETA con todas las secciones y TODAS las cartas.';
-
-      const payload = {
-        ...payloadBase,
-        messages: [
-          { role: 'system', content: basePrompt },
-          { role: 'user', content: userPrompt + extraReminder },
-        ],
+      const payloadBase = {
+        model: MODEL_NAME,
+        max_tokens: 2600,          // ⬆️ Aumentado para permitir más desarrollo de la tirada
+        temperature: 0.6,
+        top_p: 0.85,
+        frequency_penalty: 0.2,
+        stop: ['REGLAS:', '###', 'Instrucciones'],
       };
 
-      const response = await fetch(GROQ_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${hfToken}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify(payload),
-      });
+      let bestPartial = ''; // aquí vamos guardando la mejor respuesta aunque esté incompleta
 
-      console.log(`8. Respuesta HTTP recibida. Status: ${response.status}`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(
+            `7. Intento ${attempt} → Modelo: ${MODEL_NAME}. Haciendo fetch a HF router...`
+          );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`HF Router (${response.status}): ${errText}`);
+          const extraReminder =
+            attempt === 1
+              ? ''
+              : '\n\nATENCIÓN: La respuesta anterior quedó incompleta o con estructura parcial. Ahora debes generar la interpretación COMPLETA con todas las secciones y TODAS las cartas, manteniendo el tono cercano de El Meigo y respondiendo en español.';
+
+          const payload = {
+            ...payloadBase,
+            messages: [
+              { role: 'system', content: basePrompt },
+              { role: 'user', content: userPrompt + extraReminder },
+            ],
+          };
+
+          const response = await fetch(GROQ_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${hfToken}`,
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+            body: JSON.stringify(payload),
+          });
+
+          console.log(`8. Respuesta HTTP recibida. Status: ${response.status}`);
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`HF Router (${response.status}): ${errText}`);
+          }
+
+          const result = await response.json();
+
+          let interpretation =
+            result?.choices?.[0]?.message?.content?.trim() || '';
+
+          console.log(
+            `9. Respuesta parseada. Longitud de texto: ${interpretation.length}`
+          );
+
+          // Limpieza ligera
+          interpretation = interpretation
+            .replace(/(\<\|eot\|\>)/g, '')
+            .replace(/(¡?Gracias[^]+$)/i, '')
+            .replace(/Thank you[^]+$/i, '')
+            .replace(/(\*{2,}.*Licencia.*$)/i, '')
+            .replace(/\*{3,}/g, '**')
+            .replace(/(_{2,})/g, '')
+            .replace(/[\*\_]{2,}\s*$/, '')
+            .trim();
+
+          // Guardamos la mejor respuesta parcial por si ninguna pasa el filtro “ideal”
+          if (interpretation.length > bestPartial.length) {
+            bestPartial = interpretation;
+          }
+
+          // ==============================
+          // 🔍 Validación de estructura
+          // ==============================
+          const hasCentral = interpretation.includes('Mensaje central');
+          const hasAnalysis = interpretation.includes('Análisis por Carta');
+          const hasCarta = /\* Carta\s+\d+\s+–/.test(interpretation);
+          const hasSynthesis = interpretation.includes('Síntesis final');
+
+          console.log(
+            `9.1. hasCentral=${hasCentral}, hasAnalysis=${hasAnalysis}, hasCarta=${hasCarta}, hasSynthesis=${hasSynthesis}`
+          );
+
+          // Criterio “bueno”: texto largo + estructura razonable
+          const estructuraOk =
+            interpretation.length > 400 &&
+            hasCentral &&
+            hasAnalysis &&
+            hasCarta &&
+            hasSynthesis;
+
+          if (estructuraOk) {
+            console.log('9.2. Interpretación con estructura completa aceptada.');
+            return interpretation;
+          }
+
+          console.warn(
+            `9.3. Interpretación incompleta o demasiado corta. longitud=${interpretation.length}, estructuraOk=${estructuraOk}. Reintentando...`
+          );
+        } catch (err: any) {
+          console.warn(
+            `7.1. Falló intento ${attempt} del modelo ${MODEL_NAME}:`,
+            err
+          );
+          if (attempt < 3) {
+            const delay = 3000 * Math.pow(2, attempt - 1);
+            console.log(`7.2. Esperando ${delay}ms antes del reintento...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          } else {
+            // si es error duro de red/HTTP, ahí sí lanzamos
+            throw new Error(`Featherless AI failed all attempts: ${err.message}`);
+          }
+        }
       }
 
-      const result = await response.json();
-
-      let interpretation =
-        result?.choices?.[0]?.message?.content?.trim() || '';
-
-      console.log(
-        `9. Respuesta parseada. Longitud de texto: ${interpretation.length}`
-      );
-
-      // Limpieza ligera
-      interpretation = interpretation
-        .replace(/(\<\|eot\|\>)/g, '')
-        .replace(/(¡?Gracias[^]+$)/i, '')
-        .replace(/(\*{2,}.*Licencia.*$)/i, '')
-        .replace(/\*{3,}/g, '**')
-        .replace(/(_{2,})/g, '')
-        .replace(/[\*\_]{2,}\s*$/, '')
-        .trim();
-
-      // Guardamos la mejor respuesta parcial por si ninguna pasa el filtro “ideal”
-      if (interpretation.length > bestPartial.length) {
-        bestPartial = interpretation;
+      // Si llegamos aquí es que ninguna pasó el filtro “ideal”, pero puede que tengamos algo usable
+      if (bestPartial) {
+        console.warn(
+          '9.4. Devolviendo interpretación parcial tras varios intentos (mejor texto disponible).'
+        );
+        return bestPartial;
       }
 
-      // ==============================
-      // 🔍 Validación de estructura
-      // ==============================
-      const hasCentral = interpretation.includes('Mensaje central');
-      const hasAnalysis = interpretation.includes('Análisis por Carta');
-      const hasCarta = /\* Carta/.test(interpretation);
-      const hasSynthesis = interpretation.includes('Síntesis final');
-
-      console.log(
-        `9.1. hasCentral=${hasCentral}, hasAnalysis=${hasAnalysis}, hasCarta=${hasCarta}, hasSynthesis=${hasSynthesis}`
-      );
-
-      // Criterio “bueno”: texto largo + estructura razonable
-      const estructuraOk =
-        interpretation.length > 350 &&
-        hasCentral &&
-        hasAnalysis &&
-        hasCarta;
-
-      if (estructuraOk) {
-        console.log('9.2. Interpretación con estructura completa aceptada.');
-        return interpretation;
-      }
-
-      console.warn(
-        `9.3. Interpretación incompleta o demasiado corta. longitud=${interpretation.length}, estructuraOk=${estructuraOk}. Reintentando...`
-      );
-    } catch (err: any) {
-      console.warn(
-        `7.1. Falló intento ${attempt} del modelo ${MODEL_NAME}:`,
-        err
-      );
-      if (attempt < 3) {
-        const delay = 3000 * Math.pow(2, attempt - 1);
-        console.log(`7.2. Esperando ${delay}ms antes del reintento...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        // si es error duro de red/HTTP, ahí sí lanzamos
-        throw new Error(`Featherless AI failed all attempts: ${err.message}`);
-      }
+      throw new Error(`Model ${MODEL_NAME} failed all attempts`);
     }
-  }
-
-  // Si llegamos aquí es que ninguna pasó el filtro “ideal”, pero puede que tengamos algo usable
-  if (bestPartial) {
-    console.warn(
-      '9.4. Devolviendo interpretación parcial tras varios intentos (mejor texto disponible).'
-    );
-    return bestPartial;
-  }
-
-  throw new Error(`Model ${MODEL_NAME} failed all attempts`);
-}
-
 
     // ============================================================
     //  EJECUCIÓN DEL MODELO
@@ -2278,7 +898,7 @@ async function runFeatherlessModel() {
     try {
       interpretation = await runFeatherlessModel();
       console.log(
-        `10. Interpretación de ${MODEL_NAME} obtenida con éxito.`
+        `10. Interpretación de ${MODEL_NAME} obtenida con éxito (no se muestra aquí por longitud).`
       );
     } catch (e0: any) {
       console.error(
@@ -2376,39 +996,87 @@ async function runFeatherlessModel() {
 });
 
 
+// ============================================================
+// SESSION — VALIDATE
+// ============================================================
+app.get('/api/session/validate', async (c) => {
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
-// 2. Exportación de la función fetch (NECESARIO)
+    if (!token) {
+      console.warn('❌ /session/validate sin token');
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+
+    const uid = user.uid;
+    const email = user.email;
+    const role = getUserRole(email);
+
+    // Plan + drucoins + cuota “virtual”
+    const plan = await ensureUserPlan(c.env as Env, uid);
+    const drucoins = await applyDailyDrucoin(c.env as Env, uid); // aplica bono diario si toca
+    const quota = await getUserQuotaState(c.env as Env, uid);
+
+    // Por ahora: no obligamos términos desde backend
+    const currentTermsVersion = 1;
+    const needsTerms = false;
+
+    devLog(c.env as Env, '/session/validate OK', {
+      uid,
+      email,
+      role,
+      plan,
+      drucoins,
+    });
+
+    return c.json({
+      ok: true,
+      uid,
+      email,
+      role,
+      plan,
+      drucoins,
+      quota,
+      needsTerms,
+      termsVersion: currentTermsVersion,
+    });
+  } catch (err) {
+    console.error('💥 /api/session/validate ERROR:', err);
+    return c.json(
+      { ok: false, error: 'internal_error' },
+      500
+    );
+  }
+});
 
 
-// 2. Exportación de la función fetch (NECESARIO)
+
+
 
 
 
 app.post('/api/auth/reset-password', async (c) => {
-console.groupCollapsed(
-'%c🔁 /api/auth/reset-password',
-'color:#ffb74d;font-weight:bold;'
-);
 
 try {
 const { email } = await c.req.json<{ email?: string }>().catch(() => ({ email: '' }));
-console.log('Email recibido para reset:', email);
+devLog(c.env as Env, 'Solicitud de reset recibida');
 
 if (!email) {
 console.warn('❌ Falta email');
-console.groupEnd();
 return c.json({ ok: false, error: 'missing_email' }, 400);
 }
 
 const apiKey = c.env.FIREBASE_API_KEY || '';
 await sendFirebasePasswordReset(apiKey, email);
 
-console.groupEnd();
 return c.json({ ok: true });
 
 } catch (err) {
 console.error('💥 /api/auth/reset-password error:', err);
-console.groupEnd();
 return c.json({ ok: false, error: 'internal_error' }, 500);
 }
 });
@@ -2418,67 +1086,54 @@ return c.json({ ok: false, error: 'internal_error' }, 500);
 // READINGS — SAVE
 // ============================================================
 app.post('/api/readings/save', async (c) => {
-console.groupCollapsed(
-'%c📝 /api/readings/save',
-'color:#64b5f6;font-weight:bold;'
-);
+  try {
+    const { title, interpretation, cards, spreadId } = await c.req.json();
+    devLog(c.env as Env, 'Lectura save payload recibido');
 
-try {
-const { title, interpretation, cards, spreadId } = await c.req.json();
-console.log('Body:', { title, spreadId });
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ No token');
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
 
-const auth = c.req.header('Authorization') || '';
-const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-if (!token) {
-console.warn('❌ No token');
-console.groupEnd();
-return c.json({ ok: false, error: 'unauthorized' }, 401);
-}
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const v = await verifyFirebaseIdToken(token, apiKey);
+    const uid = v.uid;
+    const email = v.email;
 
-const apiKey = c.env.FIREBASE_API_KEY || '';
-const v = await verifyFirebaseIdToken(token, apiKey);
-const uid = v.uid;
-const email = v.email;
+    devLog(c.env as Env, 'Usuario verificado en readings/save');
+    const plan = await ensureUserPlan(c.env as Env, uid);
 
-console.log('Usuario:', uid, email);
-const plan = await ensureUserPlan(c.env, uid);
+    const id = await insertReadingRecord(c.env as Env, {
+      uid,
+      email,
+      interpretation,
+      cards,
+      spreadId,
+      title,
+      plan,
+    });
 
-const id = await insertReadingRecord(c.env, {
-uid,
-email,
-interpretation,
-cards,
-spreadId,
-title,
-plan,
-});
+    devLog(c.env as Env, 'Lectura guardada', id);
 
-console.log('Lectura guardada:', id);
-
-console.groupEnd();
-return c.json({ ok: true, id });
-} catch (err) {
-console.error('💥 /readings/save ERROR:', err);
-console.groupEnd();
-return c.json({ ok: false, error: String(err) });
-}
+    return c.json({ ok: true, id });
+  } catch (err) {
+    console.error('💥 /readings/save ERROR:', err);
+    return c.json({ ok: false, error: String(err) });
+  }
 });
 
 // ============================================================
 // READINGS — LIST
 // ============================================================
 app.get('/api/readings/list', async (c) => {
-console.groupCollapsed(
-'%c📚 /api/readings/list',
-'color:#4dd0e1;font-weight:bold;'
-);
 
 try {
 const auth = c.req.header('Authorization') || '';
 const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 if (!token) {
 console.warn('❌ No token');
-console.groupEnd();
 return c.json({ ok: false, error: 'unauthorized' }, 401);
 }
 
@@ -2486,7 +1141,7 @@ const apiKey = c.env.FIREBASE_API_KEY || '';
 const v = await verifyFirebaseIdToken(token, apiKey);
 const uid = v.uid;
 
-console.log('UID:', uid);
+devLog(c.env as Env, '/readings/:id');
 
 const rows = await c.env.DB.prepare(
 `SELECT id, title, strftime('%s', created_at) AS created_at
@@ -2504,13 +1159,11 @@ title: r.title,
 createdAt: Number(r.created_at) * 1000,
 })) ?? [];
 
-console.log('Lecturas encontradas:', items);
+devLog(c.env as Env, 'Lecturas listadas');
 
-console.groupEnd();
 return c.json({ ok: true, items });
 } catch (err) {
 console.error('💥 /readings/list ERROR:', err);
-console.groupEnd();
 return c.json({ ok: false, error: String(err) });
 }
 });
@@ -2519,20 +1172,15 @@ return c.json({ ok: false, error: String(err) });
 // READINGS — GET BY ID
 // ============================================================
 app.get('/api/readings/:id', async (c) => {
-console.groupCollapsed(
-'%c📘 /api/readings/:id',
-'color:#4fc3f7;font-weight:bold;'
-);
 
 try {
 const id = c.req.param('id');
-console.log('Reading ID solicitado:', id);
+devLog(c.env as Env, 'Lectura solicitada');
 
 const auth = c.req.header('Authorization') || '';
 const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 if (!token) {
 console.warn('❌ No token');
-console.groupEnd();
 return c.json({ ok: false, error: 'unauthorized' }, 401);
 }
 
@@ -2540,7 +1188,7 @@ const apiKey = c.env.FIREBASE_API_KEY || '';
 const v = await verifyFirebaseIdToken(token, apiKey);
 const uid = v.uid;
 
-console.log('UID:', uid);
+devLog(c.env as Env, '/readings/:id');
 
 const row = await c.env.DB.prepare(
 `SELECT id,title,interpretation,cards_json,spreadId,
@@ -2553,7 +1201,6 @@ const row = await c.env.DB.prepare(
 
 if (!row) {
 console.warn('❌ lectura no encontrada');
-console.groupEnd();
 return c.json({ ok: false, error: 'not_found' }, 404);
 }
 
@@ -2572,13 +1219,11 @@ spreadId: row.spreadId,
 createdAt: Number(row.created_at) * 1000,
 };
 
-console.log('Lectura devuelta:', result);
+devLog(c.env as Env, 'Lectura devuelta');
 
-console.groupEnd();
 return c.json(result);
 } catch (err) {
 console.error('💥 /readings/:id ERROR:', err);
-console.groupEnd();
 return c.json({ ok: false, error: String(err) });
 }
 });
@@ -2587,7 +1232,6 @@ return c.json({ ok: false, error: String(err) });
 // PAYPAL - CREAR ORDEN (Pack 2 DruCoins)
 // ============================================================
 app.post('/api/paypal/create-order', async (c) => {
-  console.groupCollapsed('%c💳 /api/paypal/create-order', 'color:#cddc39;font-weight:bold;');
 
   try {
     // --- Auth Firebase (igual que en otros endpoints) ---
@@ -2596,7 +1240,6 @@ app.post('/api/paypal/create-order', async (c) => {
 
     if (!token) {
       console.warn('❌ Sin token');
-      console.groupEnd();
       return c.json({ ok: false, error: 'unauthorized' }, 401);
     }
 
@@ -2638,18 +1281,15 @@ app.post('/api/paypal/create-order', async (c) => {
     if (!res.ok) {
       const errText = await res.text();
       console.error('[PayPal] Error create order:', res.status, errText);
-      console.groupEnd();
       return c.json({ ok: false }, 500);
     }
 
     const data: any = await res.json();
     console.log('PayPal order creada:', data.id);
 
-    console.groupEnd();
     return c.json({ ok: true, orderID: data.id });
   } catch (err) {
     console.error('💥 /api/paypal/create-order error:', err);
-    console.groupEnd();
     return c.json({ ok: false, error: 'internal_error' }, 500);
   }
 });
@@ -2659,16 +1299,11 @@ app.post('/api/paypal/create-order', async (c) => {
 // CDN PROXY — /cdn/*
 // ============================================================
 app.get('/cdn/*', async (c) => {
-console.groupCollapsed(
-'%c🖼 /cdn/*',
-'color:#90caf9;font-weight:bold;'
-);
 
 const key = c.req.path.replace(/^\/cdn\//, '');
 const url = `${CDN_BASE}/${encodeURI(key)}`;
 
-console.log('Solicitado:', key);
-console.log('URL real:', url);
+devLog(c.env as Env, '/cdn request');
 
 try {
 const res = await fetch(url, {
@@ -2680,13 +1315,11 @@ cacheEverything: true,
 
 if (!res.ok) {
 console.warn('❌ CDN 404/ERR:', res.status);
-console.groupEnd();
 return c.text('not found', 404);
 }
 
-console.log('✓ CDN OK');
+devLog(c.env as Env, 'CDN OK');
 
-console.groupEnd();
 return new Response(res.body, {
 status: 200,
 headers: {
@@ -2697,7 +1330,6 @@ headers: {
 });
 } catch (err) {
 console.error('💥 CDN ERROR:', err);
-console.groupEnd();
 return c.text('cdn error', 502);
 }
 });
@@ -2705,11 +1337,6 @@ return c.text('cdn error', 502);
 // ============================================================
 // EXPORT DEFAULT
 // ============================================================
-console.log(
-'%c🚀 Worker inicializado correctamente',
-'color:#00e676;font-weight:bold; font-size:16px;'
-);
-
 export default app;
 
 function hashSeed(seedInput: any): number {
@@ -2776,7 +1403,7 @@ async function getPayPalAccessToken(env: Env): Promise<string> {
   });
 
   const raw = await res.text();
-  console.log('[PayPal] OAuth status:', res.status);
+  devLog(env, '[PayPal] OAuth status:', res.status);
 
   if (!res.ok) {
     console.error('[PayPal] Error obteniendo token:', res.status, raw);
@@ -2809,7 +1436,7 @@ async function getPayPalAccessToken(env: Env): Promise<string> {
  * Crea una orden de PayPal. Implementa control de precios y custom_id (seguridad).
  */
 async function handlePaypalCreateOrder(c: any) {
-  console.log('[Worker] /paypal/create-order');
+  devLog(c.env as Env, '[Worker] /paypal/create-order');
 
   try {
     // 1. SEGURIDAD: Obtener y validar el UID del usuario (DEBE SER IMPLEMENTADO)
@@ -2949,6 +1576,326 @@ async function handlePaypalCaptureOrder(c: any) {
     console.error('💥 /api/paypal/capture-order error:', err);
     return c.json({ ok: false, error: 'internal_error' }, 500);
   }
+}
+
+// =====================
+// 💰 DRUCOINS
+// =====================
+
+let drucoinTableReady = false;
+
+async function ensureDrucoinTable(env: Env) {
+  if (drucoinTableReady) return;
+
+  devLog(env, '🏗 ensureDrucoinTable()');
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS drucoins (
+      uid TEXT PRIMARY KEY,
+      balance INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER,
+      last_daily TEXT
+    )
+  `).run();
+
+  try {
+    const info = await env.DB.prepare(
+      `SELECT 1 AS ok FROM pragma_table_info('drucoins') WHERE name='last_daily' LIMIT 1`
+    ).first<{ ok: number }>();
+
+    if (!info?.ok) {
+      await env.DB.prepare(`ALTER TABLE drucoins ADD COLUMN last_daily TEXT`).run();
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo asegurar columna last_daily:', err);
+  }
+
+  drucoinTableReady = true;
+  devLog(env, 'Tabla drucoins asegurada.');
+}
+
+async function ensureDrucoinWallet(env: Env, uid: string) {
+  devLog(env, '👛 ensureDrucoinWallet()', uid);
+
+  await ensureDrucoinTable(env);
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+
+  // saldo inicial 2 y marcamos que el daily de HOY ya está “consumido”
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO drucoins(uid, balance, updated_at, last_daily) VALUES(?, 2, ?, ?)'
+  )
+    .bind(uid, Date.now(), todayKey)
+    .run();
+}
+
+export async function applyDailyDrucoin(env: Env, uid: string): Promise<number> {
+  devLog(env, '🌙 applyDailyDrucoin()', uid);
+
+  await ensureDrucoinWallet(env, uid);
+
+  const row = await env.DB.prepare(
+    `SELECT balance, last_daily FROM drucoins WHERE uid=?`
+  )
+    .bind(uid)
+    .first<{ balance: number; last_daily: string | null }>();
+
+  if (!row) {
+    console.warn('⚠️ Wallet no disponible tras ensureDrucoinWallet');
+    return 0;
+  }
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  let balance = row.balance ?? 0;
+
+  if (!row.last_daily || row.last_daily !== todayKey) {
+    devLog(env, '→ Aplicando bono diario de +1');
+    await env.DB.prepare(
+      `UPDATE drucoins
+         SET balance = balance + 1,
+             updated_at = ?,
+             last_daily = ?
+       WHERE uid = ?`
+    )
+      .bind(Date.now(), todayKey, uid)
+      .run();
+
+    balance += 1;
+  } else {
+    devLog(env, '→ Bono diario ya aplicado hoy.');
+  }
+
+  return balance;
+}
+
+async function getDrucoinBalance(env: Env, uid: string): Promise<number> {
+  devLog(env, '📟 getDrucoinBalance()', uid);
+
+  await ensureDrucoinWallet(env, uid);
+  const row = await env.DB.prepare(
+    'SELECT balance FROM drucoins WHERE uid=?'
+  )
+    .bind(uid)
+    .first<{ balance: number }>();
+
+  const balance = row?.balance ?? 0;
+  devLog(env, 'Balance actual:', balance);
+  return balance;
+}
+
+async function addDrucoins(env: Env, uid: string, amount: number): Promise<number> {
+  devLog(env, '💎 addDrucoins()', uid, amount);
+
+  if (amount <= 0) {
+    const current = await getDrucoinBalance(env, uid);
+    return current;
+  }
+
+  await ensureDrucoinWallet(env, uid);
+  await env.DB.prepare(
+    'UPDATE drucoins SET balance = balance + ?, updated_at=? WHERE uid=?'
+  )
+    .bind(amount, Date.now(), uid)
+    .run();
+
+  const balance = await getDrucoinBalance(env, uid);
+  devLog(env, 'Balance después de sumar:', balance);
+  return balance;
+}
+
+async function useDrucoins(env: Env, uid: string, amount = 1): Promise<boolean> {
+  devLog(env, '💸 useDrucoins()', uid, amount);
+
+  if (amount <= 0) return true;
+
+  await ensureDrucoinWallet(env, uid);
+  const row = await env.DB.prepare(
+    'SELECT balance FROM drucoins WHERE uid=?'
+  )
+    .bind(uid)
+    .first<{ balance: number }>();
+
+  const balance = row?.balance ?? 0;
+  devLog(env, 'Balance BEFORE:', balance);
+
+  if (balance < amount) {
+    console.warn('❌ Balance insuficiente para descontar DruCoins.');
+    return false;
+  }
+
+  await env.DB.prepare(
+    'UPDATE drucoins SET balance = balance - ?, updated_at=? WHERE uid=?'
+  )
+    .bind(amount, Date.now(), uid)
+    .run();
+
+  const newBalance = await getDrucoinBalance(env, uid);
+  devLog(env, 'Balance AFTER:', newBalance);
+  return true;
+}
+
+
+// =====================
+// 🔐 Verificación de token Firebase (se usa en varias rutas)
+// =====================
+async function verifyFirebaseIdToken(idToken: string, apiKey: string) {
+  devLog({ ENV: 'local' } as Env, 'verifyFirebaseIdToken called'); // opcional, puedes borrar esta línea si no quieres log
+
+  const resp = await fetch(
+    `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    }
+  );
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error('❌ Firebase getAccountInfo error:', resp.status, text);
+    throw new Error('invalid_token');
+  }
+
+  const data = await resp.json();
+  const user = data?.users?.[0];
+  if (!user) {
+    console.error('❌ Firebase getAccountInfo sin usuario.');
+    throw new Error('invalid_token');
+  }
+
+  return {
+    uid: user.localId as string,
+    email: (user.email || '').toLowerCase() as string,
+  };
+}
+
+// ============================================================
+// TERMS — NEEDS & ACCEPT
+// ============================================================
+app.get('/api/terms/needs', async (c) => {
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ /terms/needs sin token');
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    devLog(c.env as Env, '/terms/needs', { uid });
+
+    // Por ahora siempre devolvemos que NO necesita aceptar términos.
+    // Si luego quieres guardar versión en D1, lo cambiamos.
+    const currentTermsVersion = 1;
+
+    return c.json({
+      ok: true,
+      needsTerms: false,
+      currentVersion: currentTermsVersion,
+    });
+  } catch (err) {
+    console.error('💥 /api/terms/needs ERROR:', err);
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+app.post('/api/terms/accept', async (c) => {
+  try {
+    const auth = c.req.header('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token) {
+      console.warn('❌ /terms/accept sin token');
+      return c.json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    const apiKey = c.env.FIREBASE_API_KEY || '';
+    const user = await verifyFirebaseIdToken(token, apiKey);
+    const uid = user.uid;
+
+    const body = await c.req.json().catch(() => ({} as any));
+    const version = body.version ?? 1;
+
+    devLog(c.env as Env, '/terms/accept', { uid, version });
+
+    // Aquí podrías guardar en D1 algo como terms_acceptance.
+    // De momento solo respondemos OK.
+
+    return c.json({
+      ok: true,
+      needsTerms: false,
+      currentVersion: version,
+    });
+  } catch (err) {
+    console.error('💥 /api/terms/accept ERROR:', err);
+    return c.json({ ok: false, error: 'internal_error' }, 500);
+  }
+});
+
+// ============================================================
+// READINGS — HELPERS (tabla + insert)
+// ============================================================
+
+
+async function ensureReadingsTable(env: Env) {
+  if (readingsTableReady) return;
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT,
+      email TEXT,
+      title TEXT,
+      interpretation TEXT,
+      cards_json TEXT,
+      spreadId TEXT,
+      plan TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    )
+  `).run();
+
+  readingsTableReady = true;
+}
+
+type ReadingInsert = {
+  uid: string;
+  email?: string | null;
+  interpretation: string;
+  cards: any[];
+  spreadId?: string | null;
+  title?: string | null;
+  plan: PlanId;
+};
+
+async function insertReadingRecord(env: Env, data: ReadingInsert): Promise<number> {
+  await ensureReadingsTable(env);
+
+  const nowIso = new Date().toISOString();
+  const cardsJson = JSON.stringify(data.cards ?? []);
+
+  const res = await env.DB.prepare(
+    `INSERT INTO readings
+       (uid, email, title, interpretation, cards_json, spreadId, plan, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      data.uid,
+      data.email ?? null,
+      data.title ?? null,
+      data.interpretation,
+      cardsJson,
+      data.spreadId ?? null,
+      data.plan,
+      nowIso,
+      nowIso
+    )
+    .run();
+
+  const id = (res.meta as any).last_row_id as number;
+  return id;
 }
 
 

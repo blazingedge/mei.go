@@ -106,21 +106,29 @@
     </div>
 
     <!-- Acciones rápidas -->
-    <div class="rail-ghosts">
-      <button class="ghost-btn ghost--shuffle"
-              (click)="toggleShuffle()"
-              [disabled]="!deckReady"
-              title="Barajar"></button>
+    <!-- Acciones rápidas -->
+<div class="rail-ghosts">
+  <button class="ghost-btn ghost--shuffle"
+          (click)="toggleShuffle()"
+          [disabled]="!deckReady"
+          title="Barajar"></button>
 
-      <button class="ghost-btn ghost--history"
-              (click)="openHistory()"
-              title="Historial"></button>
+  <button class="ghost-btn ghost--history"
+          (click)="openHistory()"
+          title="Historial"></button>
 
-      <button class="ghost-btn ghost--saved"
-              type="button"
-              (click)="openSavedReadings()"
-              title="Interpretaciones guardadas"></button>
-    </div>
+  <button class="ghost-btn ghost--saved"
+          type="button"
+          (click)="openSavedReadings()"
+          title="Interpretaciones guardadas"></button>
+
+  <!-- NUEVO: botón de donación PayPal/DruCoins -->
+  <button class="ghost-btn ghost--donate"
+          type="button"
+          (click)="showDrucoinModal"
+          title="Apoyar al Meigo"></button>
+  </div>
+
 
     <!-- Controles -->
     <div class="rail-controls">
@@ -175,7 +183,7 @@
         <span class="count">{{ drucoinBalance }}</span>
       </div>
 
-      <div class="mobile-spread-select">
+      <div class="mobile-spread-select" id ="mobile-spread-select">
         <label>Tipo de tirada</label>
         <div class="select-wrap">
           <select [(ngModel)]="spreadId"
@@ -273,7 +281,7 @@
 
   <!-- Menú inferior móvil -->
   <div class="bottom-menu--icons">
-    <button class="ghost-btn ghost--shuffle"
+    <button class="ghost-btn ghost--shuffle" id = "shuffle-btn-mobile"
             (click)="toggleShuffle()"
             title="Barajar"></button>
     <button class="ghost-btn ghost--history"
