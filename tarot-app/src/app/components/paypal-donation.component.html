@@ -1,13 +1,23 @@
-<div class="donation-box">
-  <p class="donation-text">
-    Si quieres apoyar el proyecto y obtener DruCoins, puedes hacerlo con una donación a través de PayPal.
-  </p>
+<div class="donation-modal">
+  <button class="close-btn" (click)="onCloseClick()">✕</button>
 
-  <!-- Aquí PayPal incrusta sus botones -->
-  <div #paypalButtons class="paypal-buttons-container"></div>
+  <h2>Recargar DruCoins</h2>
+  <p>Te llevaré a una página segura de Stripe para completar el pago.</p>
+
+  <button
+    class="stripe-btn"
+    (click)="onStripeCheckoutClick()"
+    [disabled]="loading"
+  >
+    @if (!loading) {
+      <span>Pagar con tarjeta (Stripe)</span>
+    } @else {
+      <span>Conectando con Stripe...</span>
+    }
+  </button>
 
   @if (error) {
-    <p class="error-text">
+    <p class="error">
       {{ error }}
     </p>
   }

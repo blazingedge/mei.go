@@ -4,7 +4,10 @@ export const environment = {
   CDN_BASE: 'https://lumiere-api.laife91.workers.dev/cdn',
   TURNSTILE_SITE_KEY: '0x4AAAAAACAX4mmeQUvYpIQr',
   CARD_BACK_URL: '',
-  PAY_PAL_CLIENT_ID: "AdoB3_ZCYFDvLxRPXuEyzx311rF0SQzoY9Y1eLd51sAy2GuqZh8L6pP80y08sHGmBuTj_bZCDUEoxZxc",
+  PAY_PAL_CLIENT_ID: "AX582HnaICAorVmiGKbJ5BICLYLjfZU82oqKzYDBtEzx2vIxV2ubORN62GYNuCUUEHhBQqzTMuQp0Rbh",
+  
+  STRIPE_PUBLIC_KEY: 'pk_live_51SZuweQvLnbTvVYb8ksFxrG2LhIVvbEmYhbe472eTHCOObHKVp63KgwAtdyMouOlYY1EUMOba2Wmnzp0zzMThDfW00EpboCWgZ',
+
   firebase: {
     apiKey: "AIzaSyCU72zI56thDxuktjz0S1e8ugkWsKJOkEo" ,
     authDomain: "meigo-app.firebaseapp.com",

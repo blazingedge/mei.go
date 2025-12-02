@@ -1,248 +1,119 @@
 import { AuthService } from '../core/auth/auth.service';
 import { SessionService } from '../core/services/session.service';
-import { Component, ElementRef, EventEmitter, inject, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  inject,
+  OnDestroy,
+  OnInit,
+  Output,
+} from '@angular/core';
 import { environment } from '../../environments/environment';
 
-declare global {
-  interface Window {
-    paypal?: any;
-  }
-}
-
 @Component({
-  selector: 'app-paypal-donation',
+  selector: 'app-paypal-donation', // dejamos el mismo selector para no romper nada
   standalone: true,
   templateUrl: './paypal-donation.component.html',
   styleUrls: ['./paypal-donation.component.scss'],
 })
 export class PaypalDonationComponent implements OnInit, OnDestroy {
   @Output() close = new EventEmitter<void>();
-  @ViewChild('paypalButtons', { static: true })
-  paypalButtonsRef!: ElementRef<HTMLDivElement>;
 
   private authService = inject(AuthService);
-  private sessionService = inject(SessionService);
+  private sessionService = inject(SessionService); // por si luego quieres usarlo
 
   loading = false;
   error: string | null = null;
 
   ngOnInit() {
-    console.groupCollapsed('%c[PayPalCmp] ngOnInit', 'color:#0ff');
-    console.log('[PayPalCmp] Iniciando componente PayPalDonationComponent');
-    console.log('[PayPalCmp] API_BASE:', environment.API_BASE);
-    console.log('[PayPalCmp] window.paypal presente al iniciar?', !!window.paypal);
+    console.groupCollapsed('%c[StripeCmp] ngOnInit', 'color:#0ff');
+    console.log('[StripeCmp] Iniciando componente (Stripe en lugar de PayPal)');
+    console.log('[StripeCmp] API_BASE:', environment.API_BASE);
     console.groupEnd();
-
-    this.loadPaypalSdk();
   }
 
   ngOnDestroy() {
-    console.log('[PayPalCmp] ngOnDestroy → componente destruido, botones se limpian solos');
+    console.log('[StripeCmp] ngOnDestroy → componente destruido');
   }
 
   onCloseClick() {
-    console.log('[PayPalCmp] onCloseClick → emitiendo close');
+    console.log('[StripeCmp] onCloseClick → emitiendo close');
     this.close.emit();
   }
 
   // ============================
-  //   SDK DE PAYPAL
+  //   LANZAR STRIPE CHECKOUT
   // ============================
- // paypal-donation.component.ts
+  async onStripeCheckoutClick() {
+    console.groupCollapsed('%c[StripeCmp] onStripeCheckoutClick', 'color:#6af');
+    this.error = null;
+    this.loading = true;
 
-private loadPaypalSdk() {
-  console.log('[PayPalCmp] loadPaypalSdk()');
-  console.log('[PayPalCmp] CLIENT_ID desde env:', environment.PAY_PAL_CLIENT_ID);
+    try {
+      const token = await this.authService.getIdToken();
+      console.log('[StripeCmp] Firebase token?', token ? 'OK' : 'NULL');
 
-  if (window.paypal) {
-    console.log('[PayPalCmp] window.paypal ya existe, renderButtons()');
-    this.renderButtons();
-    return;
-  }
+      if (!token) {
+        this.error = 'Debes iniciar sesión para comprar DruCoins.';
+        console.warn('[StripeCmp] Sin token de Firebase');
+        this.loading = false;
+        console.groupEnd();
+        return;
+      }
 
-  this.loading = true;
+      const url = `${environment.API_BASE}/stripe/create-checkout-session`;
+      console.log('[StripeCmp] Llamando a', url);
 
-  const script = document.createElement('script');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}), // por ahora pack fijo en el backend
+      });
 
-  const src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(
-    environment.PAY_PAL_CLIENT_ID
-  )}&currency=EUR&components=buttons`;
+      const raw = await res.text();
+      console.log('[StripeCmp] /stripe/create-checkout-session RAW:', res.status, raw);
 
-  console.log('[PayPalCmp] src SDK:', src);
+      if (!res.ok) {
+        this.error = 'No se pudo iniciar el pago con Stripe.';
+        console.error('[StripeCmp] Respuesta no OK al crear sesión Stripe');
+        this.loading = false;
+        console.groupEnd();
+        return;
+      }
 
-  script.src = src;
-  script.async = true;
+      let data: any;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        console.error('[StripeCmp] JSON.parse falló en create-checkout-session', e);
+        this.error = 'Respuesta inesperada del servidor de pagos.';
+        this.loading = false;
+        console.groupEnd();
+        return;
+      }
 
-  script.onload = () => {
-    console.log('[PayPalCmp] script.onload → SDK cargado');
-    this.loading = false;
-    this.renderButtons();
-  };
+      console.log('[StripeCmp] /stripe/create-checkout-session JSON:', data);
 
-  script.onerror = (err) => {
-    console.error('[PayPalCmp] script.onerror → fallo al cargar PayPal', err);
-    this.loading = false;
-    this.error = 'No se pudo cargar PayPal. Intenta más tarde.';
-  };
+      if (!data.ok || !data.url) {
+        console.error('[StripeCmp] Payload inválido en create-checkout-session:', data);
+        this.error = 'No se pudo iniciar el pago con Stripe.';
+        this.loading = false;
+        console.groupEnd();
+        return;
+      }
 
-  document.body.appendChild(script);
-}
-
-
-
-  // ============================
-  //   BOTONES PAYPAL
-  // ============================
-  private renderButtons() {
-    console.groupCollapsed('%c[PayPalCmp] renderButtons', 'color:#fc0');
-    console.log('[PayPalCmp] Intentando renderizar botones...');
-    console.log('[PayPalCmp] window.paypal?', !!window.paypal);
-    console.log('[PayPalCmp] paypalButtonsRef?', !!this.paypalButtonsRef);
-    console.log('[PayPalCmp] paypalButtonsRef.nativeElement?', this.paypalButtonsRef?.nativeElement);
-
-    if (!window.paypal || !this.paypalButtonsRef || !this.paypalButtonsRef.nativeElement) {
-      this.error = 'PayPal no está disponible en este momento.';
-      console.error('[PayPalCmp] No hay window.paypal o no existe paypalButtonsRef/nativeElement');
+      console.log('[StripeCmp] Sesión Stripe OK, redirigiendo a', data.url);
+      // 🔸 Redirigimos a la página de pago de Stripe
+      window.location.href = data.url;
       console.groupEnd();
-      return;
+    } catch (err) {
+      console.error('[StripeCmp] Error al iniciar Stripe Checkout', err);
+      this.error = 'Ocurrió un error al iniciar el pago con Stripe.';
+      this.loading = false;
+      console.groupEnd();
     }
-
-    try {
-      window.paypal
-        .Buttons({
-          style: {
-            layout: 'horizontal',
-            color: 'gold',
-            shape: 'pill',
-            label: 'pay',
-          },
-
-          // 1) Tu front pide al Worker que cree la orden
-          createOrder: async () => {
-  console.log('[PayPalCmp] createOrder');
-
-  try {
-    const token = await this.authService.getIdToken();
-    console.log('[PayPalCmp] Firebase token?', token ? 'OK' : 'NULL');
-
-    if (!token) {
-      this.error = 'Debes iniciar sesión para comprar DruCoins.';
-      throw new Error('no_auth');
-    }
-
-    const res = await fetch(`${environment.API_BASE}/paypal/create-order`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const raw = await res.text();
-    console.log('[PayPalCmp] /paypal/create-order RAW:', res.status, raw);
-
-    if (!res.ok) {
-      this.error = 'No se pudo iniciar el pago.';
-      throw new Error(`create_order_failed_status_${res.status}`);
-    }
-
-    let data: any;
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      console.error('[PayPalCmp] JSON.parse fallo en create-order', e);
-      this.error = 'Respuesta inesperada del servidor de pagos.';
-      throw e;
-    }
-
-    console.log('[PayPalCmp] /paypal/create-order JSON:', data);
-
-    if (!data.ok || !data.orderID) {
-      console.error('[PayPalCmp] Payload inválido en create-order:', data);
-      this.error = 'No se pudo iniciar el pago.';
-      throw new Error('create_order_invalid_payload');
-    }
-
-    console.log('[PayPalCmp] create-order OK, orderID =', data.orderID);
-    return data.orderID;
-  } catch (err) {
-    console.error('[PayPalCmp] createOrder error', err);
-    throw err;
-  }
-},
-
-
-          // 2) PayPal aprueba → tu front pide al Worker que capture
-          onApprove: async (data: any) => {
-            console.groupCollapsed('%c[PayPalCmp] onApprove', 'color:#6f6');
-            console.log('[PayPalCmp] onApprove data:', data);
-            try {
-              const token = await this.authService.getIdToken();
-              console.log('[PayPalCmp] onApprove → token?', !!token);
-
-              if (!token) {
-                this.error = 'Sesión caducada. Inicia sesión de nuevo.';
-                console.warn('[PayPalCmp] onApprove → sin token');
-                console.groupEnd();
-                return;
-              }
-
-              const url = `${environment.API_BASE}/paypal/capture-order`;
-              console.log('[PayPalCmp] onApprove → llamando a', url, 'con orderID', data.orderID);
-
-              const res = await fetch(url, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ orderID: data.orderID }),
-              });
-
-              console.log('[PayPalCmp] capture-order → status', res.status);
-              const json = await res.json().catch((e) => {
-                console.error('[PayPalCmp] capture-order → error parseando JSON', e);
-                throw e;
-              });
-
-              console.log('[PayPalCmp] capture-order response:', json);
-
-              if (!res.ok || !json.ok) {
-                this.error = 'No se pudo completar el pago.';
-                console.warn('[PayPalCmp] capture-order → respuesta no OK');
-                console.groupEnd();
-                return;
-              }
-
-              const newBalance = Number(json.drucoins ?? json.balance ?? 0);
-              console.log('[PayPalCmp] Nuevo saldo de DruCoins:', newBalance);
-
-              // Avisamos al front del nuevo saldo
-              this.authService.updateDrucoinBalance(newBalance);
-              this.sessionService.setDrucoins(newBalance);
-
-              console.log('[PayPalCmp] Balance actualizado, cerrando modal...');
-              this.close.emit();
-              console.groupEnd();
-            } catch (err) {
-              console.error('[PayPalCmp] onApprove error', err);
-              this.error = 'Ocurrió un error al procesar el pago.';
-              console.groupEnd();
-            }
-          },
-
-          onError: (err: any) => {
-            console.error('%c[PayPalCmp] Buttons onError', 'color:#f55', err);
-            this.error = 'PayPal ha devuelto un error. Intenta más tarde.';
-          },
-        })
-        .render(this.paypalButtonsRef.nativeElement);
-
-      console.log('[PayPalCmp] window.paypal.Buttons().render() llamado correctamente');
-    } catch (e) {
-      console.error('[PayPalCmp] Error al inicializar paypal.Buttons:', e);
-      this.error = 'No se pudieron inicializar los botones de PayPal.';
-    }
-
-    console.groupEnd();
   }
 }
