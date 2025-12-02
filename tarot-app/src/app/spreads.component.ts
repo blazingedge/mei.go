@@ -395,11 +395,11 @@ tutorialSteps: SpreadTutorialStep[] = this.tutorialStepsDesktop;
       this.cdr.markForCheck();
     });
 
-  const sessionStatus = await this.sessionService.validate(true);
+  const sessionStatus = await this.session.validate(true);
   console.debug('→ Session validate result:', sessionStatus);
 
   // ⭐ FIX: sincronizar DruCoins REALES tras validate()
-  const snap = this.sessionService.snapshot;
+  const snap = this.session.snapshot;
   console.debug('→ Synced drucoins from SessionService:', snap.drucoins);
 
   this.drucoinBalance = snap.drucoins;
@@ -1122,7 +1122,7 @@ tutorialSteps: SpreadTutorialStep[] = this.tutorialStepsDesktop;
       if (typeof data?.drucoins === 'number') {
         console.log('→ Actualizando DruCoins:', data.drucoins);
         this.authService.updateDrucoinBalance(data.drucoins);
-        this.sessionService.setDrucoins(data.drucoins);
+        this.session.setDrucoins(data.drucoins);
       }
 
       if (data.ok && data.interpretation) {
