@@ -58,6 +58,7 @@ TAROT_LIMIT: KVNamespace;
 
 type Env = Bindings;
 let paymentsTableReady = false;
+let termsTableReady = false;
 
 // Respuesta típica de Firebase Auth (signUp / signInWithPassword)
 type FirebaseAuthResponse = {
@@ -85,6 +86,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 type PlanId = 'luz' | 'sabiduria' | 'quantico';
 let readingsTableReady = false;
 let drucoinTableReady = false;
+const CURRENT_TERMS_VERSION = 1; 
 
 
 /**
@@ -1311,6 +1313,73 @@ y termina con la Síntesis final, siguiendo la estructura EXACTA y las instrucci
 });
 
 
+async function ensureTermsTable(env: Env) {
+  if (termsTableReady) return;
+
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS terms_acceptance (
+      uid TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      accepted_at TEXT NOT NULL
+    )
+  `).run();
+
+  termsTableReady = true;
+}
+
+async function getUserTermsState(
+  env: Env,
+  uid: string,
+  currentVersion: number
+): Promise<{ needsTerms: boolean; version: number | null }> {
+  await ensureTermsTable(env);
+
+  const row = await env.DB.prepare(
+    `SELECT version FROM terms_acceptance WHERE uid=?`
+  )
+    .bind(uid)
+    .first<{ version: number }>();
+
+  const acceptedVersion = row?.version ?? null;
+  const needsTerms = !acceptedVersion || acceptedVersion < currentVersion;
+
+  return { needsTerms, version: acceptedVersion };
+}
+
+
+async function getUserAcceptedTermsVersion(env: Env, uid: string): Promise<number | null> {
+  await ensureTermsTable(env);
+
+  const row = await env.DB.prepare(
+    `SELECT accepted_version FROM terms_acceptance WHERE uid = ? LIMIT 1`
+  )
+    .bind(uid)
+    .first<{ accepted_version: number }>();
+
+  return row?.accepted_version ?? null;
+}
+
+async function upsertTermsAcceptance(env: Env, uid: string, version: number) {
+  await ensureTermsTable(env);
+
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO terms_acceptance (uid, accepted_version, accepted_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(uid) DO UPDATE SET
+       accepted_version = excluded.accepted_version,
+       accepted_at      = excluded.accepted_at`
+  )
+    .bind(uid, version, now)
+    .run();
+}
+
+
+
+// ============================================================
+// SESSION — VALIDATE
+// ============================================================
 // ============================================================
 // SESSION — VALIDATE
 // ============================================================
@@ -1336,9 +1405,11 @@ app.get('/api/session/validate', async (c) => {
     const drucoins = await applyDailyDrucoin(c.env as Env, uid); // aplica bono diario si toca
     const quota = await getUserQuotaState(c.env as Env, uid);
 
-    // Por ahora: no obligamos términos desde backend
-    const currentTermsVersion = 1;
-    const needsTerms = false;
+    // 🔐 Términos: miramos qué versión aceptó este usuario
+    const acceptedVersion =
+      (await getUserAcceptedTermsVersion(c.env as Env, uid)) ?? 0;
+
+    const needsTerms = acceptedVersion < CURRENT_TERMS_VERSION;
 
     devLog(c.env as Env, '/session/validate OK', {
       uid,
@@ -1346,6 +1417,8 @@ app.get('/api/session/validate', async (c) => {
       role,
       plan,
       drucoins,
+      acceptedVersion,
+      needsTerms,
     });
 
     return c.json({
@@ -1357,7 +1430,7 @@ app.get('/api/session/validate', async (c) => {
       drucoins,
       quota,
       needsTerms,
-      termsVersion: currentTermsVersion,
+      termsVersion: CURRENT_TERMS_VERSION,
     });
   } catch (err) {
     console.error('💥 /api/session/validate ERROR:', err);
@@ -1367,6 +1440,8 @@ app.get('/api/session/validate', async (c) => {
     );
   }
 });
+
+
 
 
 
@@ -2397,14 +2472,16 @@ app.get('/api/terms/needs', async (c) => {
 
     devLog(c.env as Env, '/terms/needs', { uid });
 
-    // Por ahora siempre devolvemos que NO necesita aceptar términos.
-    // Si luego quieres guardar versión en D1, lo cambiamos.
-    const currentTermsVersion = 1;
+    const acceptedVersion =
+      (await getUserAcceptedTermsVersion(c.env as Env, uid)) ?? 0;
+
+    const needsTerms = acceptedVersion < CURRENT_TERMS_VERSION;
 
     return c.json({
       ok: true,
-      needsTerms: false,
-      currentVersion: currentTermsVersion,
+      needsTerms,
+      currentVersion: CURRENT_TERMS_VERSION,
+      acceptedVersion,
     });
   } catch (err) {
     console.error('💥 /api/terms/needs ERROR:', err);
@@ -2412,6 +2489,9 @@ app.get('/api/terms/needs', async (c) => {
   }
 });
 
+// ============================================================
+// TERMS — ACCEPT
+// ============================================================
 app.post('/api/terms/accept', async (c) => {
   try {
     const auth = c.req.header('Authorization') || '';
@@ -2426,12 +2506,12 @@ app.post('/api/terms/accept', async (c) => {
     const uid = user.uid;
 
     const body = await c.req.json().catch(() => ({} as any));
-    const version = body.version ?? 1;
+    const version: number = body.version ?? CURRENT_TERMS_VERSION;
 
     devLog(c.env as Env, '/terms/accept', { uid, version });
 
-    // Aquí podrías guardar en D1 algo como terms_acceptance.
-    // De momento solo respondemos OK.
+    // ✅ Guardamos en D1
+    await upsertTermsAcceptance(c.env as Env, uid, version);
 
     return c.json({
       ok: true,
@@ -2443,6 +2523,7 @@ app.post('/api/terms/accept', async (c) => {
     return c.json({ ok: false, error: 'internal_error' }, 500);
   }
 });
+
 
 // ============================================================
 // READINGS — HELPERS (tabla + insert)
@@ -2581,16 +2662,3 @@ async function insertPaymentRecord(
 }
 
 
-
-// ============================================================
-// 4. ROUTER DE HONO (Ejemplo de configuración del Worker)
-// ============================================================
-// (Asumiendo que has importado y configurado Hono en el inicio del Worker)
-
-// import { Hono } from 'hono';
-// const app = new Hono();
-
-// app.post('/api/paypal/create-order', handlePaypalCreateOrder);
-// app.post('/api/paypal/capture-order', handlePaypalCaptureOrder);
-
-// export default app;
