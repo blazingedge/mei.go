@@ -38,5 +38,9 @@ export class AppComponent implements OnInit {
       .subscribe((visible) => {
         this.termsVisible = visible;
       });
+
+        this.session.validate(true).then(result => {
+    console.log('[AppComponent] sesión validada:', result, this.session.snapshot);
+  });
   }
 }

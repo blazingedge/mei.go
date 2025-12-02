@@ -126,7 +126,7 @@
     private auth = inject(Auth);
     private breakpointObserver = inject(BreakpointObserver);
     private authService = inject(AuthService);
-    private sessionService = inject(SessionService);
+    
     private router = inject(Router);
     private destroyRef = inject(DestroyRef);
     private session = inject(SessionService);
@@ -204,25 +204,25 @@
     id: 'mobile-spread-select',
     title: 'Tablero de Tiradas',
     text: 'En móvil, el tablero se adapta a la pantalla. Usa el selector de tiradas en la parte superior para cambiar entre tiradas rápidas o la Cruz Celta.',
-    selector: '.mobile-spread-select',
+    selector: '.mobile-spread-select label',
   },
   {
     id: 'mazo',
     title: 'Tirada de cartas',
-    text: 'Toca el mazo central o el botón de “Hacer tirada” para repartir las cartas. Después podrás deslizar o tocar cada carta para verla mejor.',
+    text: 'Toca el mazo a travez del 1er boton del panel inferior para barajar las cartas, luego en “Hacer tirada” para repartir las cartas. Después podrás deslizar o tocar cada carta para verla mejor, incluso interpretar hasta dos significados segun contexto de alguna carta que te llame la atención',
     selector: '.deck-pile',
   },
   {
-    id: 'menulateral',
+    id: 'menuinferior',
     title: 'Acciones y menú',
-    text: 'Desde el menú lateral puedes barajar, ver tu historial y abrir tus lecturas guardadas. En móvil suele aparecer como panel deslizante o botón lateral.',
+    text: 'Desde el menú inferior puedes barajar, ver tu historial y abrir tus lecturas guardadas. También puedes acceder al menú de usuario desde el icono de la parte superior derecha (en construccion).',
     selector: '.rail',
   },
   {
     id: 'Interpretacion',
-    title: 'Interpretación con IA',
+    title: 'Interpretación',
     text: 'En móvil se abrirá un cuadro para que escribas tu contexto. Cada interpretación consume 1 DruCoin y puedes leerla en un panel cómodo para la pantalla pequeña.',
-    selector: '.interpret-container',
+    selector: '.interpret-containe',
   },
 ];
 
@@ -1101,7 +1101,7 @@ tutorialSteps: SpreadTutorialStep[] = this.tutorialStepsDesktop;
 
         // Sincronizamos todo con el balance real del servidor
         this.authService.updateDrucoinBalance(serverBalance);
-        this.sessionService.setDrucoins(serverBalance);
+        this.session.setDrucoins(serverBalance);
         this.drucoinBalance = serverBalance;
 
         // Abrimos el modal de donación en lugar de solo alert

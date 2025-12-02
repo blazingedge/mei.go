@@ -17,12 +17,18 @@ export class SessionService {
     needsTerms: true
   };
 
+  
   constructor(private terms: TermsCoordinatorService) {}
 
   get snapshot() {
     return this.state;
   }
 
+  // 👉 ESTE getter es el “get dru coins”
+  get drucoins() {
+    return this.state.drucoins;
+  }
+  
   // =========================================================================
   // PUBLIC VALIDATE WRAPPER
   // =========================================================================
@@ -57,7 +63,8 @@ export class SessionService {
           Authorization: `Bearer ${token ?? ''}`
         }
       });
-
+      console.log('[SessionService] Status /session/validate', res.status);
+      
       // Unauthorized
       if (res.status === 401) {
         this.state = { uid:null, email:null, drucoins:0, needsTerms:true };
@@ -68,7 +75,7 @@ export class SessionService {
       if (!type.includes('application/json')) return 'invalid';
 
       const data = await res.json();
-
+      console.log('[SessionService] Payload /session/validate', data);
       this.state = {
         uid: data.uid,
         email: data.email,

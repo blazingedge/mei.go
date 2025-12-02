@@ -1319,44 +1319,27 @@ async function ensureTermsTable(env: Env) {
   await env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS terms_acceptance (
       uid TEXT PRIMARY KEY,
+      accepted_at TEXT NOT NULL,
       version INTEGER NOT NULL,
-      accepted_at TEXT NOT NULL
+      ip_address TEXT,
+      user_agent TEXT
     )
   `).run();
 
   termsTableReady = true;
 }
 
-async function getUserTermsState(
-  env: Env,
-  uid: string,
-  currentVersion: number
-): Promise<{ needsTerms: boolean; version: number | null }> {
-  await ensureTermsTable(env);
-
-  const row = await env.DB.prepare(
-    `SELECT version FROM terms_acceptance WHERE uid=?`
-  )
-    .bind(uid)
-    .first<{ version: number }>();
-
-  const acceptedVersion = row?.version ?? null;
-  const needsTerms = !acceptedVersion || acceptedVersion < currentVersion;
-
-  return { needsTerms, version: acceptedVersion };
-}
-
-
+// Lee la versión aceptada por el usuario
 async function getUserAcceptedTermsVersion(env: Env, uid: string): Promise<number | null> {
   await ensureTermsTable(env);
 
   const row = await env.DB.prepare(
-    `SELECT accepted_version FROM terms_acceptance WHERE uid = ? LIMIT 1`
+    `SELECT version FROM terms_acceptance WHERE uid = ? LIMIT 1`
   )
     .bind(uid)
-    .first<{ accepted_version: number }>();
+    .first<{ version: number }>();
 
-  return row?.accepted_version ?? null;
+  return row?.version ?? null;
 }
 
 async function upsertTermsAcceptance(env: Env, uid: string, version: number) {
@@ -1365,21 +1348,17 @@ async function upsertTermsAcceptance(env: Env, uid: string, version: number) {
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO terms_acceptance (uid, accepted_version, accepted_at)
+    `INSERT INTO terms_acceptance (uid, version, accepted_at)
      VALUES (?, ?, ?)
      ON CONFLICT(uid) DO UPDATE SET
-       accepted_version = excluded.accepted_version,
-       accepted_at      = excluded.accepted_at`
+       version     = excluded.version,
+       accepted_at = excluded.accepted_at`
   )
     .bind(uid, version, now)
     .run();
 }
 
 
-
-// ============================================================
-// SESSION — VALIDATE
-// ============================================================
 // ============================================================
 // SESSION — VALIDATE
 // ============================================================
@@ -2492,6 +2471,7 @@ app.get('/api/terms/needs', async (c) => {
 // ============================================================
 // TERMS — ACCEPT
 // ============================================================
+
 app.post('/api/terms/accept', async (c) => {
   try {
     const auth = c.req.header('Authorization') || '';
@@ -2508,10 +2488,18 @@ app.post('/api/terms/accept', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const version: number = body.version ?? CURRENT_TERMS_VERSION;
 
+    const ip =
+      c.req.header('cf-connecting-ip') ??
+      c.req.header('x-real-ip') ??
+      null;
+    const ua = c.req.header('user-agent') ?? null;
+
     devLog(c.env as Env, '/terms/accept', { uid, version });
 
-    // ✅ Guardamos en D1
-    await upsertTermsAcceptance(c.env as Env, uid, version);
+    await upsertTermsAcceptance(c.env as Env, uid, version, {
+      ip,
+      userAgent: ua,
+    });
 
     return c.json({
       ok: true,
@@ -2519,7 +2507,7 @@ app.post('/api/terms/accept', async (c) => {
       currentVersion: version,
     });
   } catch (err) {
-    console.error('💥 /api/terms/accept ERROR:', err);
+    console.error('💥 /terms/accept ERROR:', err);
     return c.json({ ok: false, error: 'internal_error' }, 500);
   }
 });
